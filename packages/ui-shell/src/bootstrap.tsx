@@ -1,9 +1,9 @@
 import { createKernel, type MinexKernel } from "@minex/kernel";
 import { useEffect, useState } from "react";
 import { App } from "./App.js";
-import { bootPlugins } from "./boot.js";
+import { bootDrivers } from "./boot.js";
 import { KernelContext } from "./kernel-context.js";
-import { PLUGINS } from "./plugins.js";
+import { DRIVERS } from "./drivers.js";
 import { createLocalStorageStorage } from "./storage-local.js";
 
 interface BootState {
@@ -20,7 +20,7 @@ export function Bootstrap() {
     let cancelled = false;
 
     (async () => {
-      const problems = await bootPlugins(kernel, PLUGINS, () => cancelled);
+      const problems = await bootDrivers(kernel, DRIVERS, () => cancelled);
       if (!cancelled) setState({ kernel, problems });
     })();
 

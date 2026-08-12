@@ -1,13 +1,13 @@
 /**
- * @minex/kernel —— Minex 内核（领域无关的插件宿主）
+ * @minex/kernel —— Minex 内核（领域无关的驱动宿主）
  *
  * 提供四个原语：
- *   - 插件生命周期（lifecycle）
+ *   - 驱动生命周期（lifecycle）
  *   - 能力注册表（registry）
  *   - 事件总线（events）
  *   - 存储抽象（storage）
  *
- * 用法：createKernel() → kernel.plugins.register({ manifest, activate }) → activate。
+ * 用法：createKernel() → kernel.drivers.register({ manifest, activate }) → activate。
  */
 
 export { MINEX_KERNEL_VERSION } from "./constants.js";
@@ -18,17 +18,17 @@ export type {
   EventHandler,
   KVNamespace,
   Logger,
-  PluginContext,
-  PluginManifest,
-  PluginModule,
-  PluginState,
+  DriverContext,
+  DriverManifest,
+  DriverModule,
+  DriverState,
   QueryFilter,
   StorageProvider,
 } from "./types.js";
 
 export { createEventBus, type EventBus } from "./events.js";
 export { createLifecycle, type Lifecycle } from "./lifecycle.js";
-export { loadPluginsFromDir, registerStaticContributions, type LoadResult, type PluginLoaderHost } from "./loader.js";
+export { loadDriversFromDir, registerStaticContributions, type LoadResult, type DriverLoaderHost } from "./loader.js";
 export { parseManifest } from "./manifest.js";
 export {
   createRegistry,

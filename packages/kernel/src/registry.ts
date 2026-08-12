@@ -4,7 +4,7 @@ import type { Contribution, ContributionOrigin, QueryFilter } from "./types.js";
 export type RegistryChange = {
   type: string;
   id: string;
-  pluginId: string;
+  driverId: string;
   action: "registered" | "unregistered";
 };
 
@@ -13,28 +13,28 @@ export type RegistryChange = {
  * 内核只管理「按 type 注册 + 按 type 查询」，不认识任何 type 的语义。
  *
  * 分层模型：每个 (type, id) 可有 static 与 runtime 两层。
- * - static：manifest 声明，随插件注册存活（激活前可见、停用/reload 不消失）
+ * - static：manifest 声明，随驱动注册存活（激活前可见、停用/reload 不消失）
  * - runtime：activate 注册，随停用/失败清除
  * - 有效值（effective）= runtime ?? static：激活时运行时贡献「阴影」静态声明；
  *   停用后揭掉阴影，露出静态层（如命令的 label 存活、handler 随停用消失）
  * - 注意（U5）：跨层优先级不可比——runtime 层总是遮蔽 static 层（与 priority 无关）。
- *   多插件在同一 (type,id) 的 static 与 runtime 分属不同插件时，runtime 胜。
+ *   多驱动在同一 (type,id) 的 static 与 runtime 分属不同驱动时，runtime 胜。
  */
 export interface CapabilityRegistry {
   /**
    * 注册一个能力（写入对应 origin 层）。层内冲突语义：priority 高者胜；
-   * 同优先级不同插件先到者胜；同插件重注册 = 更新（允许任意优先级，含降级）。
+   * 同优先级不同驱动先到者胜；同驱动重注册 = 更新（允许任意优先级，含降级）。
    */
   register(
     type: string,
     id: string,
     value: unknown,
-    opts?: { pluginId?: string; priority?: number; origin?: ContributionOrigin },
+    opts?: { driverId?: string; priority?: number; origin?: ContributionOrigin },
   ): void;
   unregister(type: string, id: string): void;
-  /** 注销某插件某层贡献。origin 省略 = 清两层；指定则只清该层（停用只清 runtime，静态保留） */
-  unregisterByPlugin(pluginId: string, origin?: ContributionOrigin): void;
-  /** 查询某类型的能力列表（有效值 = runtime ?? static），按 priority 降序；可用 { plugin } 过滤 */
+  /** 注销某驱动某层贡献。origin 省略 = 清两层；指定则只清该层（停用只清 runtime，静态保留） */
+  unregisterByDriver(driverId: string, origin?: ContributionOrigin): void;
+  /** 查询某类型的能力列表（有效值 = runtime ?? static），按 priority 降序；可用 { driver } 过滤 */
   query<T = unknown>(type: string, filter?: QueryFilter): Contribution<string, T>[];
   /** 精确取一个能力的有效值 */
   get<T = unknown>(type: string, id: string): Contribution<string, T> | undefined;
@@ -82,7 +82,7 @@ export function createRegistry(): CapabilityRegistry {
   return {
     register(type, id, value, opts = {}) {
       if (!type || !id) throw new Error(`registry: type and id must be non-empty (got type="${type}", id="${id}")`);
-      const pluginId = opts.pluginId ?? "kernel";
+      const driverId = opts.driverId ?? "kernel";
       const raw = opts.priority ?? 0;
       const priority = Number.isFinite(raw) ? raw : 0; // NaN/Infinity 防呆
       const origin: ContributionOrigin = opts.origin ?? "runtime";
@@ -90,39 +90,39 @@ export function createRegistry(): CapabilityRegistry {
       const entry = b.get(id) ?? {};
       const existing = entry[origin];
       if (existing) {
-        const samePlugin = existing.pluginId === pluginId;
-        // 不同插件：高优先级胜 / 同优先级先到者胜；同插件：任意优先级都允许更新（含降级）
-        if (!samePlugin && priority < existing.priority) return;
-        if (!samePlugin && priority === existing.priority) return;
+        const sameDriver = existing.driverId === driverId;
+        // 不同驱动：高优先级胜 / 同优先级先到者胜；同驱动：任意优先级都允许更新（含降级）
+        if (!sameDriver && priority < existing.priority) return;
+        if (!sameDriver && priority === existing.priority) return;
       }
-      entry[origin] = { type, id, value, pluginId, priority, origin };
+      entry[origin] = { type, id, value, driverId, priority, origin };
       b.set(id, entry);
-      fire(type, { type, id, pluginId, action: "registered" });
+      fire(type, { type, id, driverId, action: "registered" });
     },
-    // U6：unregister 只移除 runtime 层（活动贡献），静态声明保留到插件卸载。
+    // U6：unregister 只移除 runtime 层（活动贡献），静态声明保留到驱动卸载。
     unregister(type, id) {
       const entry = store.get(type)?.get(id);
       if (!entry) return;
       const removed = entry.runtime;
       delete entry.runtime;
       if (!entry.static && !entry.runtime) bucket(type).delete(id);
-      if (removed) fire(type, { type, id, pluginId: removed.pluginId, action: "unregistered" });
+      if (removed) fire(type, { type, id, driverId: removed.driverId, action: "unregistered" });
     },
-    unregisterByPlugin(pluginId, origin) {
+    unregisterByDriver(driverId, origin) {
       const fired: RegistryChange[] = [];
       for (const [type, b] of store) {
         for (const [id, entry] of [...b]) {
           if (origin === undefined) {
-            const hadStatic = entry.static?.pluginId === pluginId;
-            const hadRuntime = entry.runtime?.pluginId === pluginId;
+            const hadStatic = entry.static?.driverId === driverId;
+            const hadRuntime = entry.runtime?.driverId === driverId;
             if (hadStatic) delete entry.static;
             if (hadRuntime) delete entry.runtime;
-            if (hadStatic || hadRuntime) fired.push({ type, id, pluginId, action: "unregistered" });
+            if (hadStatic || hadRuntime) fired.push({ type, id, driverId, action: "unregistered" });
           } else {
             const layer = entry[origin];
-            if (layer?.pluginId === pluginId) {
+            if (layer?.driverId === driverId) {
               delete entry[origin];
-              fired.push({ type, id, pluginId, action: "unregistered" });
+              fired.push({ type, id, driverId, action: "unregistered" });
             }
           }
           if (!entry.static && !entry.runtime) b.delete(id);
@@ -138,7 +138,7 @@ export function createRegistry(): CapabilityRegistry {
         const eff = effective(entry);
         if (eff) items.push(eff);
       }
-      if (filter?.plugin) items = items.filter((c) => c.pluginId === filter.plugin);
+      if (filter?.driver) items = items.filter((c) => c.driverId === filter.driver);
       return items.sort((x, y) => y.priority - x.priority) as unknown as Contribution<string, T>[];
     },
     get<T = unknown>(type: string, id: string): Contribution<string, T> | undefined {

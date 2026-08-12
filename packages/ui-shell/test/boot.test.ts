@@ -1,13 +1,13 @@
 import { createInMemoryStorage, createKernel } from "@minex/kernel";
 import { describe, expect, it } from "vitest";
-import { bootPlugins } from "../src/boot.js";
+import { bootDrivers } from "../src/boot.js";
 
 function testKernel() {
   return createKernel({ storage: createInMemoryStorage() });
 }
 
-describe("bootPlugins", () => {
-  it("boots a plugin: static contributions registered, activated, no problems", async () => {
+describe("bootDrivers", () => {
+  it("boots a driver: static contributions registered, activated, no problems", async () => {
     const kernel = testKernel();
     const p = {
       manifest: {
@@ -20,9 +20,9 @@ describe("bootPlugins", () => {
         ctx.register("command", "ok.x", { id: "ok.x", label: "X", handler: () => "hi" });
       },
     };
-    const problems = await bootPlugins(kernel, [p]);
+    const problems = await bootDrivers(kernel, [p]);
     expect(problems).toEqual([]);
-    expect(kernel.plugins.getState("ok.demo")).toBe("activated");
+    expect(kernel.drivers.getState("ok.demo")).toBe("activated");
     expect(kernel.registry.get<{ handler: () => string }>("command", "ok.x")?.value.handler()).toBe("hi");
   });
 
@@ -37,8 +37,8 @@ describe("bootPlugins", () => {
       },
       activate: () => {},
     };
-    kernel.plugins.register(dup); // 先占位，让第二次 register 抛 already registered
-    const problems = await bootPlugins(kernel, [dup]);
+    kernel.drivers.register(dup); // 先占位，让第二次 register 抛 already registered
+    const problems = await bootDrivers(kernel, [dup]);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatch(/already registered/);
     expect(kernel.registry.get("ui", "dup-ui")).toBeUndefined(); // 静态贡献已回滚
@@ -48,7 +48,7 @@ describe("bootPlugins", () => {
     const kernel = testKernel();
     let cancelled = false;
     const p = { manifest: { id: "c.demo", name: "C", version: "1.0.0" }, activate: () => {} };
-    const problems = await bootPlugins(kernel, [p], () => cancelled);
+    const problems = await bootDrivers(kernel, [p], () => cancelled);
     cancelled = true;
     expect(problems).toEqual([]);
   });

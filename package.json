@@ -2,17 +2,17 @@
   "name": "minex",
   "version": "0.0.1",
   "private": true,
-  "description": "Minex — 领域无关的插件宿主内核（微内核架构）",
+  "description": "Minex — 领域无关的驱动宿主内核（微内核架构）",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @minex/kernel && npm run build -w minex-demo-plugin && npm run build -w @minex/cli && npm run build -w @minex/ui-shell",
-    "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-demo-plugin && npm run typecheck -w @minex/cli && npm run typecheck -w @minex/ui-shell",
+    "build": "npm run build -w @minex/kernel && npm run build -w minex-demo-driver && npm run build -w @minex/cli && npm run build -w @minex/ui-shell",
+    "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-demo-driver && npm run typecheck -w @minex/cli && npm run typecheck -w @minex/ui-shell",
     "test": "vitest run",
     "cli": "npm run build -w @minex/cli && node packages/cli/dist/cli.js",
     "ui": "npm run build -w @minex/kernel && npm run dev -w @minex/ui-shell",
-    "plugins:sync": "npm run build -w minex-demo-plugin && node scripts/sync-plugins.mjs"
+    "drivers:sync": "npm run build -w minex-demo-driver && node scripts/sync-drivers.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

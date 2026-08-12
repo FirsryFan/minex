@@ -14,14 +14,14 @@ interface SettingsSchema {
 /** 通用 JSON Schema 表单（v1：string / number / boolean / 单层 object） */
 export function SettingsForm() {
   const kernel = useKernel();
-  const plugin = kernel.plugins.list().find((p) => p.manifest.settingsSchema);
-  const schema = (plugin?.manifest.settingsSchema ?? {}) as unknown as SettingsSchema;
+  const driver = kernel.drivers.list().find((p) => p.manifest.settingsSchema);
+  const schema = (driver?.manifest.settingsSchema ?? {}) as unknown as SettingsSchema;
   const props = schema.properties ?? {};
 
   const [values, setValues] = useState<Record<string, unknown>>(() => {
-    // U3：plugin 可能为 undefined，用可选链，先构造空表再守卫
-    const current = plugin
-      ? kernel.storage.namespace(plugin.manifest.id).get<Record<string, unknown>>("config")
+    // U3：driver 可能为 undefined，用可选链，先构造空表再守卫
+    const current = driver
+      ? kernel.storage.namespace(driver.manifest.id).get<Record<string, unknown>>("config")
       : undefined;
     const initial: Record<string, unknown> = {};
     for (const [k, p] of Object.entries(props)) {
@@ -30,8 +30,8 @@ export function SettingsForm() {
     return initial;
   });
 
-  if (!plugin || Object.keys(props).length === 0) {
-    return <div className="muted">当前没有可配置的插件。</div>;
+  if (!driver || Object.keys(props).length === 0) {
+    return <div className="muted">当前没有可配置的驱动。</div>;
   }
 
   function setField(key: string, value: unknown): void {
@@ -39,14 +39,14 @@ export function SettingsForm() {
   }
 
   function save(): void {
-    kernel.storage.namespace(plugin!.manifest.id).set("config", values);
-    kernel.events.emit("minex:dataChanged", { pluginId: plugin!.manifest.id });
+    kernel.storage.namespace(driver!.manifest.id).set("config", values);
+    kernel.events.emit("minex:dataChanged", { driverId: driver!.manifest.id });
   }
 
   return (
     <div>
       <div className="muted" style={{ marginBottom: 12 }}>
-        插件：{plugin.manifest.id}
+        驱动：{driver.manifest.id}
       </div>
       {Object.entries(props).map(([key, p]) => (
         <div className="field" key={key}>

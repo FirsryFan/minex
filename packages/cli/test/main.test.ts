@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createInMemoryStorage, createKernel } from "@minex/kernel";
-import { configCmd, main, pluginsCmd, runCommand } from "../src/main.js";
+import { configCmd, main, driversCmd, runCommand } from "../src/main.js";
 
 function testKernel() {
   return createKernel({ storage: createInMemoryStorage() });
@@ -19,7 +19,7 @@ function silence() {
 describe("cli commands", () => {
   it("run executes a command handler with args", async () => {
     const kernel = testKernel();
-    kernel.plugins.register({
+    kernel.drivers.register({
       manifest: { id: "t.demo", name: "T", version: "1.0.0" },
       activate(ctx) {
         ctx.register<{ id: string; handler: (name: string) => string }>("command", "t.greet", {
@@ -28,7 +28,7 @@ describe("cli commands", () => {
         });
       },
     });
-    await kernel.plugins.activate("t.demo");
+    await kernel.drivers.activate("t.demo");
 
     const { logs, restore } = silence();
     const code = await runCommand(kernel, ["t.greet", "minex"]);
@@ -48,13 +48,13 @@ describe("cli commands", () => {
 
   it("run reports handler-less command (declared but no handler)", async () => {
     const kernel = testKernel();
-    kernel.plugins.register({
+    kernel.drivers.register({
       manifest: { id: "s.demo", name: "S", version: "1.0.0" },
       activate(ctx) {
         ctx.register<{ id: string; label: string }>("command", "s.x", { id: "s.x", label: "X" }); // 只有 label，无 handler
       },
     });
-    await kernel.plugins.activate("s.demo");
+    await kernel.drivers.activate("s.demo");
     const { logs, restore } = silence();
     const code = await runCommand(kernel, ["s.x"]);
     expect(code).toBe(1);
@@ -81,17 +81,17 @@ describe("cli commands", () => {
     restore();
   });
 
-  it("plugins list shows id, version, state", async () => {
+  it("drivers list shows id, version, state", async () => {
     const kernel = testKernel();
-    kernel.plugins.register({ manifest: { id: "p.demo", name: "P", version: "1.0.0" }, activate: () => {} });
-    await kernel.plugins.activate("p.demo");
+    kernel.drivers.register({ manifest: { id: "p.demo", name: "P", version: "1.0.0" }, activate: () => {} });
+    await kernel.drivers.activate("p.demo");
     const { logs, restore } = silence();
-    await pluginsCmd(kernel, ["list"]);
+    await driversCmd(kernel, ["list"]);
     expect(logs).toContainEqual(["p.demo\t1.0.0\tactivated"]);
     restore();
   });
 
-  it("C1: main survives one plugin activation failure, read-only command still works", async () => {
+  it("C1: main survives one driver activation failure, read-only command still works", async () => {
     const dir = path.join(tmpdir(), `minex-main-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const dataDir = path.join(tmpdir(), `minex-main-data-${Date.now()}`);
     try {
@@ -113,11 +113,11 @@ describe("cli commands", () => {
       fs.writeFileSync(goodDir + "/index.mjs", `export default { activate: () => {} };`);
 
       const { logs, restore } = silence();
-      const code = await main(["plugins", "list"], { pluginsDir: dir, storageDir: dataDir });
+      const code = await main(["drivers", "list"], { driversDir: dir, storageDir: dataDir });
       expect(code).toBe(0);
       expect(logs).toContainEqual(["good.demo\t1.0.0\tactivated"]);
       const joined = logs.map((l) => String(l[0])).join("\n");
-      expect(joined).toMatch(/\[plugin unavailable\] bad\.demo: boom/);
+      expect(joined).toMatch(/\[driver unavailable\] bad\.demo: boom/);
       expect(joined).not.toMatch(/ at /); // 无 stack trace
       restore();
     } finally {
@@ -127,15 +127,15 @@ describe("cli commands", () => {
   });
 
   it("C3: main catches dispatch errors with friendly message", async () => {
-    const dir = path.join(tmpdir(), `minex-plugins-empty-${Date.now()}`);
+    const dir = path.join(tmpdir(), `minex-drivers-empty-${Date.now()}`);
     const dataDir = path.join(tmpdir(), `minex-main-c3-${Date.now()}`);
     try {
       fs.mkdirSync(dir, { recursive: true }); // 空目录
       const { logs, restore } = silence();
-      const code = await main(["plugins", "activate", "ghost"], { pluginsDir: dir, storageDir: dataDir });
+      const code = await main(["drivers", "activate", "ghost"], { driversDir: dir, storageDir: dataDir });
       expect(code).toBe(1);
       const joined = logs.map((l) => String(l[0])).join("\n");
-      expect(joined).toMatch(/错误: Unknown plugin: ghost/);
+      expect(joined).toMatch(/错误: Unknown driver: ghost/);
       expect(joined).not.toMatch(/ at /); // 无 stack trace
       restore();
     } finally {

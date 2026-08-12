@@ -25,7 +25,7 @@ coverage
 # nyc test coverage
 .nyc_output
 
-# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+# Grunt intermediate storage (https://gruntjs.com/creating-drivers#storing-task-files)
 .grunt
 
 # Bower dependency directory (https://bower.io/)
@@ -132,7 +132,7 @@ dist
 .pnp.*
 .yarn/*
 !.yarn/patches
-!.yarn/plugins
+!.yarn/drivers
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
@@ -145,8 +145,8 @@ vite.config.ts.timestamp-*
 # Vite cache
 .vite/
 
-# 运行时插件产物（从 packages/*/ 同步生成）
-plugins/
+# 运行时驱动产物（从 packages/*/ 同步生成）
+drivers/
 
 # 运行时数据目录
 .minex-data/

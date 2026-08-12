@@ -8,9 +8,9 @@ import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
 
 /**
- * 通用外壳（非插件内容）：
- * 布局 + 槽位（Sidebar 列出插件的 ui 贡献）+ schema 设置表单。
- * 具体视图（画布 / 命令面板 / 面板内容）属于插件，不在外壳内实现。
+ * 通用外壳（非驱动内容）：
+ * 布局 + 槽位（Sidebar 列出驱动的 ui 贡献）+ schema 设置表单。
+ * 具体视图（画布 / 命令面板 / 面板内容）属于驱动，不在外壳内实现。
  */
 export function App({ problems }: { problems: string[] }) {
   const kernel = useKernel();
@@ -31,7 +31,7 @@ export function App({ problems }: { problems: string[] }) {
 
   return (
     <div className={shellClass}>
-      <TopBar pluginCount={kernel.plugins.list().length} onOpenSettings={() => setSettingsOpen(true)} />
+      <TopBar driverCount={kernel.drivers.list().length} onOpenSettings={() => setSettingsOpen(true)} />
       <Sidebar
         selectedPanelId={selectedPanelId}
         onSelect={setSelectedPanelId}
@@ -45,7 +45,7 @@ export function App({ problems }: { problems: string[] }) {
       />
       <RightBar />
       {settingsOpen && (
-        <FloatingWindow title="插件设置" onClose={() => setSettingsOpen(false)}>
+        <FloatingWindow title="驱动设置" onClose={() => setSettingsOpen(false)}>
           <SettingsForm />
         </FloatingWindow>
       )}

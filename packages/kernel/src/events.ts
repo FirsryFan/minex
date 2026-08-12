@@ -1,6 +1,6 @@
 import type { EventHandler } from "./types.js";
 
-/** 事件总线：插件间、插件与 UI 间的消息通道（主题精确匹配） */
+/** 事件总线：驱动间、驱动与 UI 间的消息通道（主题精确匹配） */
 export interface EventBus {
   emit(topic: string, payload?: unknown): void;
   /** 订阅事件，返回取消订阅函数 */

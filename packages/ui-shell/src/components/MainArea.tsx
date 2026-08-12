@@ -7,7 +7,7 @@ interface UiContribution {
 }
 
 /**
- * 主区 = 视图槽位。具体视图（画布 / 对话 / 面板内容）属于插件，
+ * 主区 = 视图槽位。具体视图（画布 / 对话 / 面板内容）属于驱动，
  * 外壳只显示占位，不实现任何特定视图。
  */
 export function MainArea({
@@ -42,8 +42,8 @@ export function MainArea({
       <div className="main-content">
         <div className="card muted">
           {panel
-            ? `已选择视图：${panel.value.title ?? panel.value.id} —— 视图渲染由插件贡献，外壳不实现具体视图。`
-            : "Minex 通用外壳 —— 主区是视图槽位，画布/对话等插件视图将在此渲染。"}
+            ? `已选择视图：${panel.value.title ?? panel.value.id} —— 视图渲染由驱动贡献，外壳不实现具体视图。`
+            : "Minex 通用外壳 —— 主区是视图槽位，画布/对话等驱动视图将在此渲染。"}
         </div>
       </div>
     </main>

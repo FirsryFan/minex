@@ -1,41 +1,41 @@
 /**
  * 内核公共类型（领域无关）。
- * 这里没有 Tool / Stage / Conversation 等任何领域概念——它们由插件在各自的领域里定义。
+ * 这里没有 Tool / Stage / Conversation 等任何领域概念——它们由驱动在各自的领域里定义。
  */
 
-/** 插件 manifest —— 插件在清单里声明自己的元信息与静态贡献。 */
-export interface PluginManifest {
-  /** 全局唯一插件 id，如 "minex.demo" */
+/** 驱动 manifest —— 驱动在清单里声明自己的元信息与静态贡献。 */
+export interface DriverManifest {
+  /** 全局唯一驱动 id，如 "minex.demo" */
   id: string;
   name: string;
   version: string;
   /** 要求内核版本 >= 此值，过低则拒绝激活 */
   minKernelVersion?: string;
-  /** 依赖的其他插件 id（激活顺序保证，阶段 2 细化） */
+  /** 依赖的其他驱动 id（激活顺序保证，阶段 2 细化） */
   dependencies?: string[];
-  /** 插件的设置 schema（JSON Schema）。UI 据此渲染表单，存储据此校验 */
+  /** 驱动的设置 schema（JSON Schema）。UI 据此渲染表单，存储据此校验 */
   settingsSchema?: Record<string, unknown>;
   /** 是否允许热重载（停用→激活）。默认 true */
   reloadable?: boolean;
   /** 静态贡献声明（manifest 声明的）。激活前即可用 */
   contributes?: Record<string, unknown>;
-  /** 插件入口文件（相对插件目录）。loader 动态 import 它取 activate */
+  /** 驱动入口文件（相对驱动目录）。loader 动态 import 它取 activate */
   entry?: string;
 }
 
-/** 插件生命周期状态 */
-export type PluginState = "discovered" | "loaded" | "activated" | "deactivated" | "failed";
+/** 驱动生命周期状态 */
+export type DriverState = "discovered" | "loaded" | "activated" | "deactivated" | "failed";
 
-/** 插件激活时返回的清理函数（停用时调用） */
+/** 驱动激活时返回的清理函数（停用时调用） */
 export type CleanupFn = () => void | Promise<void>;
 
-/** 插件入口：manifest + activate。阶段 2 改为从文件加载。 */
-export interface PluginModule {
-  manifest: PluginManifest;
-  activate: (ctx: PluginContext) => CleanupFn | void | Promise<CleanupFn | void>;
+/** 驱动入口：manifest + activate。阶段 2 改为从文件加载。 */
+export interface DriverModule {
+  manifest: DriverManifest;
+  activate: (ctx: DriverContext) => CleanupFn | void | Promise<CleanupFn | void>;
 }
 
-/** 贡献的来源：manifest 静态声明（存活到插件被卸载）或 activate 运行时注册（随停用清除） */
+/** 贡献的来源：manifest 静态声明（存活到驱动被卸载）或 activate 运行时注册（随停用清除） */
 export type ContributionOrigin = "static" | "runtime";
 
 /** 能力注册表里的一个贡献项 */
@@ -43,19 +43,19 @@ export interface Contribution<Id extends string = string, T = unknown> {
   type: string;
   id: Id;
   value: T;
-  pluginId: string;
+  driverId: string;
   priority: number;
-  /** 静态贡献随插件注册存活（reload/停用不清除）；运行时贡献随停用/失败清除 */
+  /** 静态贡献随驱动注册存活（reload/停用不清除）；运行时贡献随停用/失败清除 */
   origin: ContributionOrigin;
 }
 
 /** 注册表查询过滤条件 */
 export interface QueryFilter {
-  /** 只返回指定插件贡献的项 */
-  plugin?: string;
+  /** 只返回指定驱动贡献的项 */
+  driver?: string;
 }
 
-/** 日志器（插件视角） */
+/** 日志器（驱动视角） */
 export interface Logger {
   info(msg: string, ...args: unknown[]): void;
   warn(msg: string, ...args: unknown[]): void;
@@ -66,20 +66,20 @@ export interface Logger {
 export type EventHandler = (payload: unknown, topic: string) => void;
 
 /**
- * PluginContext —— 内核暴露给单个插件实例的「接口把手」。
+ * DriverContext —— 内核暴露给单个驱动实例的「接口把手」。
  *
- * 插件不 import 内核；它只收到这一个对象，对内核的全部操作都从它进去。
+ * 驱动不 import 内核；它只收到这一个对象，对内核的全部操作都从它进去。
  * - 受限视图：只能操作跟自己有关的部分（自己的存储、盖上自己 id 的注册）
- * - 依赖注入：内核把接口「递」给插件，插件不需要主动找内核
- * - 按实例隔离：同一份插件代码可收到不同 ctx（未来多 agent 各一个）
+ * - 依赖注入：内核把接口「递」给驱动，驱动不需要主动找内核
+ * - 按实例隔离：同一份驱动代码可收到不同 ctx（未来多 agent 各一个）
  */
-export interface PluginContext {
-  readonly manifest: PluginManifest;
-  /** 注册一个能力（自动盖上本插件 id）。冲突语义：priority 高者胜；同优先级先到者胜；同插件重注册 = 更新 */
+export interface DriverContext {
+  readonly manifest: DriverManifest;
+  /** 注册一个能力（自动盖上本驱动 id）。冲突语义：priority 高者胜；同优先级先到者胜；同驱动重注册 = 更新 */
   register<T = unknown>(type: string, id: string, value: T, opts?: { priority?: number }): void;
   /** 注销一个能力 */
   unregister(type: string, id: string): void;
-  /** 查询某类型的所有能力值（默认全部，可按插件过滤） */
+  /** 查询某类型的所有能力值（默认全部，可按驱动过滤） */
   query<T = unknown>(type: string, filter?: QueryFilter): T[];
   /** 精确取一个能力值 */
   get<T = unknown>(type: string, id: string): T | undefined;

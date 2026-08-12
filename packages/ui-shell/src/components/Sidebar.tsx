@@ -16,15 +16,15 @@ export function Sidebar({
   problems: string[];
 }) {
   const kernel = useKernel();
-  const plugins = kernel.plugins.list();
+  const drivers = kernel.drivers.list();
   const leftItems = kernel.registry
     .query<UiContribution>("ui")
     .filter((c) => c.value.location === "leftPanel");
 
   return (
     <aside className="sidebar">
-      <div className="section-title">插件</div>
-      {plugins.map((p) => (
+      <div className="section-title">驱动</div>
+      {drivers.map((p) => (
         <div key={p.manifest.id} className="list-item">
           <span>{p.manifest.name}</span>
           <span className="muted">{p.manifest.version}</span>

@@ -1,7 +1,7 @@
-import type { PluginManifest } from "./types.js";
+import type { DriverManifest } from "./types.js";
 
 /**
- * 插件 id 校验：点号分隔的段，每段以字母数字开头、可含字母数字/下划线/连字符。
+ * 驱动 id 校验：点号分隔的段，每段以字母数字开头、可含字母数字/下划线/连字符。
  * 拒绝空段、首尾分隔符、连续分隔符（".."、"-x"、"a."、"a..b" 均非法）。
  */
 function isValidId(id: string): boolean {
@@ -9,7 +9,7 @@ function isValidId(id: string): boolean {
 }
 
 /** 解析并校验 manifest。非法输入抛带明确信息的错误（错误早暴露）。 */
-export function parseManifest(raw: unknown): PluginManifest {
+export function parseManifest(raw: unknown): DriverManifest {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error(`Manifest: must be a JSON object`);
   }
@@ -21,37 +21,37 @@ export function parseManifest(raw: unknown): PluginManifest {
     );
   }
   if (typeof m.name !== "string" || !m.name) {
-    throw new Error(`Manifest: "name" must be a non-empty string (plugin "${m.id ?? "?"}")`);
+    throw new Error(`Manifest: "name" must be a non-empty string (driver "${m.id ?? "?"}")`);
   }
   if (typeof m.version !== "string" || !m.version) {
-    throw new Error(`Manifest: "version" must be a non-empty string (plugin "${m.id ?? "?"}")`);
+    throw new Error(`Manifest: "version" must be a non-empty string (driver "${m.id ?? "?"}")`);
   }
   if (m.minKernelVersion !== undefined && typeof m.minKernelVersion !== "string") {
-    throw new Error(`Manifest: "minKernelVersion" must be a string (plugin "${m.id}")`);
+    throw new Error(`Manifest: "minKernelVersion" must be a string (driver "${m.id}")`);
   }
   if (
     m.dependencies !== undefined &&
     !(Array.isArray(m.dependencies) && m.dependencies.every((d) => typeof d === "string"))
   ) {
-    throw new Error(`Manifest: "dependencies" must be an array of strings (plugin "${m.id}")`);
+    throw new Error(`Manifest: "dependencies" must be an array of strings (driver "${m.id}")`);
   }
   if (
     m.settingsSchema !== undefined &&
     (typeof m.settingsSchema !== "object" || m.settingsSchema === null || Array.isArray(m.settingsSchema))
   ) {
-    throw new Error(`Manifest: "settingsSchema" must be an object (plugin "${m.id}")`);
+    throw new Error(`Manifest: "settingsSchema" must be an object (driver "${m.id}")`);
   }
   if (m.reloadable !== undefined && typeof m.reloadable !== "boolean") {
-    throw new Error(`Manifest: "reloadable" must be a boolean (plugin "${m.id}")`);
+    throw new Error(`Manifest: "reloadable" must be a boolean (driver "${m.id}")`);
   }
   if (
     m.contributes !== undefined &&
     (typeof m.contributes !== "object" || m.contributes === null || Array.isArray(m.contributes))
   ) {
-    throw new Error(`Manifest: "contributes" must be an object (plugin "${m.id}")`);
+    throw new Error(`Manifest: "contributes" must be an object (driver "${m.id}")`);
   }
   if (m.entry !== undefined && typeof m.entry !== "string") {
-    throw new Error(`Manifest: "entry" must be a string (plugin "${m.id}")`);
+    throw new Error(`Manifest: "entry" must be a string (driver "${m.id}")`);
   }
 
   return {
