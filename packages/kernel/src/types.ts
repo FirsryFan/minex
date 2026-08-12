@@ -10,6 +10,12 @@ export interface DriverManifest {
   name: string;
   /** 驱动图标（v1 为 emoji 字符串，后续可扩展为图片/CSS 类） */
   icon?: string;
+  /** 是否有主界面（工作区）。无主界面的驱动（如外观/纯设置）不出现在顶栏驱动选择器 */
+  hasWorkspace?: boolean;
+  /** 来源（如 "本地" / 作者 / 仓库） */
+  source?: string;
+  /** 简介 */
+  description?: string;
   version: string;
   /** 要求内核版本 >= 此值，过低则拒绝激活 */
   minKernelVersion?: string;

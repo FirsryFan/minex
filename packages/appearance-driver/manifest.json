@@ -8,27 +8,131 @@
   "reloadable": true,
   "settingsSchema": {
     "type": "object",
-    "properties": {
-      "primaryColor": {
-        "type": "string",
-        "default": "#2563eb",
-        "description": "主题色（CSS 颜色值）"
+    "groups": [
+      {
+        "title": "颜色设置",
+        "properties": {
+          "primaryColor": {
+            "type": "color",
+            "default": "#2563eb",
+            "description": "主题色"
+          },
+          "backgroundColor": {
+            "type": "color",
+            "default": "#f3f6fb",
+            "description": "背景色"
+          },
+          "unfinishedColor": {
+            "type": "color",
+            "default": "#f59e0b",
+            "description": "未完成标记（提示色）"
+          },
+          "errorColor": {
+            "type": "color",
+            "default": "#ef4444",
+            "description": "报错（提示色）"
+          }
+        }
       },
-      "uiFont": {
-        "type": "string",
-        "default": "",
-        "description": "UI 字体（留空用系统默认）"
+      {
+        "title": "字体设置",
+        "properties": {
+          "uiEnFont": {
+            "type": "string",
+            "enum": [
+              "Arial",
+              "Helvetica",
+              "Georgia",
+              "Times New Roman",
+              "Verdana",
+              "Tahoma",
+              "Trebuchet MS",
+              "Courier New"
+            ],
+            "default": "",
+            "description": "UI 英文字体（留空用默认）"
+          },
+          "uiZhFont": {
+            "type": "string",
+            "enum": [
+              "PingFang SC",
+              "Microsoft YaHei",
+              "SimHei",
+              "SimSun",
+              "Songti SC",
+              "Noto Sans CJK SC"
+            ],
+            "default": "",
+            "description": "UI 中文字体"
+          },
+          "contentEnFont": {
+            "type": "string",
+            "enum": [
+              "Arial",
+              "Helvetica",
+              "Georgia",
+              "Times New Roman",
+              "Verdana",
+              "Tahoma",
+              "Trebuchet MS",
+              "Courier New"
+            ],
+            "default": "",
+            "description": "内容英文字体"
+          },
+          "contentZhFont": {
+            "type": "string",
+            "enum": [
+              "PingFang SC",
+              "Microsoft YaHei",
+              "SimHei",
+              "SimSun",
+              "Songti SC",
+              "Noto Sans CJK SC"
+            ],
+            "default": "",
+            "description": "内容中文字体"
+          },
+          "codeFont": {
+            "type": "string",
+            "enum": [
+              "Cascadia Code",
+              "JetBrains Mono",
+              "Consolas",
+              "Courier New",
+              "Fira Code"
+            ],
+            "default": "",
+            "description": "代码字体"
+          }
+        }
       },
-      "contentFont": {
-        "type": "string",
-        "default": "",
-        "description": "内容字体（留空用系统默认）"
+      {
+        "title": "UI 图标设置",
+        "properties": {
+          "iconTheme": {
+            "type": "string",
+            "enum": [
+              "默认",
+              "简约"
+            ],
+            "default": "默认",
+            "description": "图标体系（仅下拉选择，不做逐项设置）"
+          }
+        }
       },
-      "codeFont": {
-        "type": "string",
-        "default": "",
-        "description": "代码字体（留空用系统默认）"
+      {
+        "title": "代码块设置",
+        "properties": {
+          "customCss": {
+            "type": "textarea",
+            "default": "",
+            "description": "自定义 CSS（追加到主题覆盖之后，可定义任意变量）"
+          }
+        }
       }
-    }
-  }
+    ]
+  },
+  "source": "本地",
+  "description": "外观驱动：主题色/字体/图标/代码块设置，贡献 theme 给外壳"
 }

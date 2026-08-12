@@ -55,11 +55,15 @@ export function App({ problems }: { problems: string[] }) {
     }
   }
 
-  const drivers = kernel.drivers.list().map((m) => ({
-    id: m.manifest.id,
-    name: m.manifest.name,
-    icon: m.manifest.icon,
-  }));
+  // 顶栏驱动选择器只列有主界面的驱动（hasWorkspace）；纯设置驱动（外观/hello）不出现
+  const drivers = kernel.drivers
+    .list()
+    .filter((m) => m.manifest.hasWorkspace)
+    .map((m) => ({
+      id: m.manifest.id,
+      name: m.manifest.name,
+      icon: m.manifest.icon,
+    }));
 
   if (view === "settings") {
     // T1：ThemeManager 常驻（两种视图都挂载），设置页改主题即时生效

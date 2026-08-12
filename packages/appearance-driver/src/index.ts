@@ -2,30 +2,36 @@ import type { DriverContext } from "@minex/kernel";
 
 interface AppearanceSettings {
   primaryColor?: string;
-  uiFont?: string;
-  contentFont?: string;
+  backgroundColor?: string;
+  unfinishedColor?: string;
+  errorColor?: string;
+  uiEnFont?: string;
+  uiZhFont?: string;
+  contentEnFont?: string;
+  contentZhFont?: string;
   codeFont?: string;
+  iconTheme?: string;
+  customCss?: string;
 }
 
-const DEFAULTS: Required<AppearanceSettings> = {
-  primaryColor: "#2563eb",
-  uiFont: "",
-  contentFont: "",
-  codeFont: "",
-};
-
-function cssLine(value: string, prop: string): string {
-  return value ? `  ${prop}: ${value};\n` : "";
-}
-
-/** 由设置生成主题 CSS 覆盖块（深/浅各一份）。浅色 :root，深色 [data-theme="dark"]。 */
+/** 由设置生成主题 CSS 覆盖块（浅/深各一份）+ 追加自定义 CSS。 */
 function buildCss(mode: "dark" | "light", s: AppearanceSettings): string {
   const sel = mode === "dark" ? '[data-theme="dark"]' : ":root";
-  const v = { ...DEFAULTS, ...s };
-  return `${sel} {\n${cssLine(v.primaryColor, "--color-primary")}${cssLine(
-    v.uiFont,
-    "--font-ui",
-  )}${cssLine(v.contentFont, "--font-content")}${cssLine(v.codeFont, "--font-code")}}`;
+  const lines: string[] = [];
+  if (s.primaryColor) lines.push(`  --color-primary: ${s.primaryColor};`);
+  if (s.backgroundColor) lines.push(`  --color-bg: ${s.backgroundColor};`);
+  if (s.unfinishedColor) lines.push(`  --color-unfinished: ${s.unfinishedColor};`);
+  if (s.errorColor) lines.push(`  --color-error: ${s.errorColor};`);
+
+  const uiFont = [s.uiEnFont, s.uiZhFont].filter(Boolean).join(", ");
+  if (uiFont) lines.push(`  --font-ui: ${uiFont}, system-ui, sans-serif;`);
+  const contentFont = [s.contentEnFont, s.contentZhFont].filter(Boolean).join(", ");
+  if (contentFont) lines.push(`  --font-content: ${contentFont}, system-ui, sans-serif;`);
+  if (s.codeFont) lines.push(`  --font-code: ${s.codeFont}, ui-monospace, monospace;`);
+
+  let css = `${sel} {\n${lines.join("\n")}\n}`;
+  if (s.customCss) css += `\n${s.customCss}`;
+  return css;
 }
 
 /**

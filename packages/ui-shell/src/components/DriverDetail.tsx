@@ -5,7 +5,10 @@ import { SettingsForm } from "./SettingsForm.js";
 
 type Tab = "about" | "settings";
 
-/** 驱动详情页：信息 + 选项卡（介绍 / 设置）。返回按钮在左上角。 */
+/**
+ * 驱动详情页：头部（大图标居左 + 介绍居右）+ 选项卡（介绍 / 设置）。
+ * 图片大小恒定（足够大的值），不随介绍内容宽度变化。
+ */
 export function DriverDetail({
   kernel,
   driverId,
@@ -22,6 +25,7 @@ export function DriverDetail({
     return <div className="card muted">驱动不存在：{driverId}</div>;
   }
   const m = driver.manifest;
+  const state = kernel.drivers.getState(m.id);
 
   return (
     <div>
@@ -29,9 +33,25 @@ export function DriverDetail({
         <button className="icon-btn" onClick={onBack}>
           ← 返回
         </button>
-        <DriverIcon icon={m.icon} size={24} />
-        <strong>{m.name}</strong>
-        <span className="muted">v{m.version}</span>
+      </div>
+
+      {/* 头部：固定大图 + 右侧介绍 */}
+      <div className="driver-header">
+        <div className="driver-header-icon">
+          <DriverIcon icon={m.icon} size={72} />
+        </div>
+        <div className="driver-header-info">
+          <div className="driver-header-name">
+            {m.name}
+            <span className="muted"> v{m.version}</span>
+          </div>
+          <div className="driver-header-meta">
+            <span>来源：{m.source ?? "本地"}</span>
+            <span>最小内核：{m.minKernelVersion ?? "-"}</span>
+            <span>状态：{state}</span>
+          </div>
+          <div className="driver-header-desc">{m.description ?? "（无简介）"}</div>
+        </div>
       </div>
 
       <div className="detail-tabs">
@@ -49,10 +69,6 @@ export function DriverDetail({
             <span className="muted">id：</span>
             {m.id}
           </p>
-          <p>
-            <span className="muted">版本：</span>
-            {m.version}
-          </p>
           {m.dependencies && m.dependencies.length > 0 && (
             <p>
               <span className="muted">依赖：</span>
@@ -60,8 +76,8 @@ export function DriverDetail({
             </p>
           )}
           <p>
-            <span className="muted">状态：</span>
-            {kernel.drivers.getState(m.id)}
+            <span className="muted">可热重载：</span>
+            {m.reloadable === false ? "否" : "是"}
           </p>
         </div>
       ) : (

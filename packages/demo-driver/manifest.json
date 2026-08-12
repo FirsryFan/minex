@@ -8,10 +8,17 @@
   "reloadable": true,
   "contributes": {
     "ui": [
-      { "id": "demo-panel", "location": "leftPanel", "title": "Demo Panel" }
+      {
+        "id": "demo-panel",
+        "location": "leftPanel",
+        "title": "Demo Panel"
+      }
     ],
     "command": [
-      { "id": "demo.sayHello", "label": "Say Hello" }
+      {
+        "id": "demo.sayHello",
+        "label": "Say Hello"
+      }
     ]
   },
   "settingsSchema": {
@@ -23,5 +30,7 @@
         "description": "打招呼的文案"
       }
     }
-  }
+  },
+  "source": "本地",
+  "description": "演示驱动：验证 UI 贡献 / 命令 / 工具三条通道"
 }

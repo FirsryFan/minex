@@ -39,13 +39,32 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         </div>
         {folderOpen && (
           <div className="folder-children">
-            <div className={`folder-item${section === "download" ? " active" : ""}`} onClick={() => setSection("download")}>
+            {/* 点左栏导航 → 切区并退出驱动详情（若开着） */}
+            <div
+              className={`folder-item${section === "download" ? " active" : ""}`}
+              onClick={() => {
+                setSection("download");
+                setSelectedDriverId(null);
+              }}
+            >
               驱动下载
             </div>
-            <div className={`folder-item${section === "manage" ? " active" : ""}`} onClick={() => setSection("manage")}>
+            <div
+              className={`folder-item${section === "manage" ? " active" : ""}`}
+              onClick={() => {
+                setSection("manage");
+                setSelectedDriverId(null);
+              }}
+            >
               驱动管理
             </div>
-            <div className={`folder-item${section === "overview" ? " active" : ""}`} onClick={() => setSection("overview")}>
+            <div
+              className={`folder-item${section === "overview" ? " active" : ""}`}
+              onClick={() => {
+                setSection("overview");
+                setSelectedDriverId(null);
+              }}
+            >
               驱动总览
             </div>
           </div>

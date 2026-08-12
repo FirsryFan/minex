@@ -26,6 +26,15 @@ export function parseManifest(raw: unknown): DriverManifest {
   if (m.icon !== undefined && typeof m.icon !== "string") {
     throw new Error(`Manifest: "icon" must be a string (driver "${m.id}")`);
   }
+  if (m.hasWorkspace !== undefined && typeof m.hasWorkspace !== "boolean") {
+    throw new Error(`Manifest: "hasWorkspace" must be a boolean (driver "${m.id}")`);
+  }
+  if (m.source !== undefined && typeof m.source !== "string") {
+    throw new Error(`Manifest: "source" must be a string (driver "${m.id}")`);
+  }
+  if (m.description !== undefined && typeof m.description !== "string") {
+    throw new Error(`Manifest: "description" must be a string (driver "${m.id}")`);
+  }
   if (typeof m.version !== "string" || !m.version) {
     throw new Error(`Manifest: "version" must be a non-empty string (driver "${m.id ?? "?"}")`);
   }
@@ -61,6 +70,9 @@ export function parseManifest(raw: unknown): DriverManifest {
     id: m.id,
     name: m.name,
     ...(m.icon !== undefined && { icon: m.icon as string }),
+    ...(m.hasWorkspace !== undefined && { hasWorkspace: m.hasWorkspace as boolean }),
+    ...(m.source !== undefined && { source: m.source as string }),
+    ...(m.description !== undefined && { description: m.description as string }),
     version: m.version,
     ...(m.minKernelVersion !== undefined && { minKernelVersion: m.minKernelVersion as string }),
     ...(m.dependencies !== undefined && { dependencies: m.dependencies as string[] }),
