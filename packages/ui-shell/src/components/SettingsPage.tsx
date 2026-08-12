@@ -8,7 +8,7 @@ type Section = "download" | "manage" | "overview";
 
 /**
  * 主设置页：全屏大界面（无顶栏）。左栏文件夹式导航，主体为对应设置。
- * v1：驱动管理（搜索 + 表格 + 启用/禁用）；下载/总览为占位。
+ * v1：驱动管理（暂存式启用/禁用 + 依赖警告）；下载/总览为占位。
  */
 export function SettingsPage({ onBack }: { onBack: () => void }) {
   const kernel = useKernel();
@@ -18,7 +18,6 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
-  // 注册表/数据变化 → 重渲染（启用开关状态同步）
   useEffect(() => {
     const offs: Array<() => void> = [];
     offs.push(kernel.registry.onChange("*", () => setTick((t) => t + 1)));
@@ -61,7 +60,13 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             onBack={() => setSelectedDriverId(null)}
           />
         ) : section === "manage" ? (
-          <ManageView kernel={kernel} search={search} onSearch={setSearch} onOpenDetail={setSelectedDriverId} />
+          <ManageView
+            kernel={kernel}
+            search={search}
+            onSearch={setSearch}
+            onOpenDetail={setSelectedDriverId}
+            onApplied={() => setTick((t) => t + 1)}
+          />
         ) : section === "download" ? (
           <div className="card muted">驱动下载（暂未实现，留待后续）</div>
         ) : (
@@ -72,17 +77,36 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   );
 }
 
+/**
+ * 驱动管理（暂存式）：
+ * 点击启用/禁用只「标记待变更」（不立即生效），点「重新加载」统一应用。
+ * 禁用被其他已激活驱动依赖的驱动时弹警告。
+ */
 function ManageView({
   kernel,
   search,
   onSearch,
   onOpenDetail,
+  onApplied,
 }: {
   kernel: MinexKernel;
   search: string;
   onSearch: (s: string) => void;
   onOpenDetail: (id: string) => void;
+  onApplied: () => void;
 }) {
+  // pending: driverId → 期望的启用状态（true=启用，false=禁用）；undefined=无待变更
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const offs: Array<() => void> = [];
+    offs.push(kernel.registry.onChange("*", () => setTick((t) => t + 1)));
+    offs.push(kernel.events.on("minex:dataChanged", () => setTick((t) => t + 1)));
+    return () => offs.forEach((off) => off());
+  }, [kernel]);
+
   const drivers = kernel.drivers.list();
   const q = search.trim().toLowerCase();
   const filtered = q
@@ -91,31 +115,61 @@ function ManageView({
       )
     : drivers;
 
-  // D1：deactivated 态必须走 reload（activate 对 deactivated 抛错）；单个 toggle 容错。
-  async function setDriverState(id: string, enabled: boolean): Promise<void> {
-    const state = kernel.drivers.getState(id);
-    try {
-      if (enabled) {
-        if (state === "activated") return;
-        if (state === "deactivated") await kernel.drivers.reload(id);
-        else await kernel.drivers.activate(id);
-      } else {
-        if (state === "activated") await kernel.drivers.deactivate(id);
-      }
-    } catch (err) {
-      console.error(`驱动状态切换失败 ${id}:`, err);
-    }
+  const pendingCount = Object.keys(pending).length;
+
+  /** 当前已激活且直接依赖 driverId 的驱动 */
+  function dependents(driverId: string): string[] {
+    return kernel.drivers
+      .list()
+      .filter(
+        (d) =>
+          d.manifest.dependencies?.includes(driverId) &&
+          kernel.drivers.getState(d.manifest.id) === "activated",
+      )
+      .map((d) => d.manifest.id);
   }
 
-  async function toggle(id: string): Promise<void> {
-    const enabled = kernel.drivers.getState(id) === "activated";
-    await setDriverState(id, !enabled);
+  /** 标记待变更。禁用方向且被依赖 → 弹警告确认。 */
+  function mark(id: string, enabled: boolean): void {
+    if (!enabled && dependents(id).length > 0) {
+      setConfirmTarget(id);
+      return;
+    }
+    setPending((p) => ({ ...p, [id]: enabled }));
   }
 
-  async function setAll(enabled: boolean): Promise<void> {
-    for (const d of kernel.drivers.list()) {
-      await setDriverState(d.manifest.id, enabled); // 内部已逐驱动容错
+  function confirmDisable(): void {
+    if (confirmTarget) setPending((p) => ({ ...p, [confirmTarget]: false }));
+    setConfirmTarget(null);
+  }
+
+  /** 点击切换：有 pending 则撤销；否则标记当前状态的相反 */
+  function toggle(id: string): void {
+    if (pending[id] !== undefined) {
+      setPending((p) => {
+        const next = { ...p };
+        delete next[id];
+        return next;
+      });
+      return;
     }
+    const current = kernel.drivers.getState(id) === "activated";
+    mark(id, !current);
+  }
+
+  function setAll(enabled: boolean): void {
+    const next: Record<string, boolean> = { ...pending };
+    for (const d of kernel.drivers.list()) next[d.manifest.id] = enabled;
+    setPending(next);
+  }
+
+  /** 统一应用所有待变更（应用后清空，onApplied 强制刷新） */
+  async function applyAll(): Promise<void> {
+    for (const [id, enabled] of Object.entries(pending)) {
+      await applyDriverState(kernel, id, enabled);
+    }
+    setPending({});
+    onApplied();
   }
 
   return (
@@ -127,11 +181,14 @@ function ManageView({
           value={search}
           onChange={(e) => onSearch(e.target.value)}
         />
-        <button className="btn-ghost" onClick={() => void setAll(true)}>
+        <button className="btn-ghost" onClick={() => setAll(true)}>
           全部启用
         </button>
-        <button className="btn-ghost" onClick={() => void setAll(false)}>
+        <button className="btn-ghost" onClick={() => setAll(false)}>
           全部禁用
+        </button>
+        <button className="btn" onClick={() => void applyAll()} disabled={pendingCount === 0}>
+          重新加载{pendingCount > 0 ? `（${pendingCount}）` : ""}
         </button>
       </div>
 
@@ -152,6 +209,10 @@ function ManageView({
           )}
           {filtered.map((d) => {
             const enabled = kernel.drivers.getState(d.manifest.id) === "activated";
+            const target = pending[d.manifest.id];
+            const pendingLabel =
+              target !== undefined ? (target ? "待启用" : "待禁用") : null;
+            const actionLabel = pendingLabel ?? (enabled ? "禁用" : "启用");
             return (
               <tr key={d.manifest.id}>
                 <td>
@@ -160,11 +221,15 @@ function ManageView({
                     <span>{d.manifest.name}</span>
                     <span className="muted">v{d.manifest.version}</span>
                     <span className="muted">{enabled ? "● 已启用" : "○ 已禁用"}</span>
+                    {pendingLabel && <span className="pending-badge">{pendingLabel}</span>}
                   </span>
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  <button className="icon-btn" onClick={() => void toggle(d.manifest.id)}>
-                    {enabled ? "禁用" : "启用"}
+                  <button
+                    className={`icon-btn${pendingLabel ? " btn-primary" : ""}`}
+                    onClick={() => toggle(d.manifest.id)}
+                  >
+                    {actionLabel}
                   </button>
                   <button className="icon-btn" title="驱动设置" onClick={() => onOpenDetail(d.manifest.id)}>
                     …
@@ -175,6 +240,56 @@ function ManageView({
           })}
         </tbody>
       </table>
+
+      {confirmTarget && (
+        <ConfirmModal
+          message={`驱动 "${confirmTarget}" 被 ${dependents(confirmTarget).length} 个已激活驱动依赖，确定禁用？`}
+          onConfirm={confirmDisable}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
     </div>
   );
+}
+
+function ConfirmModal({
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="floating-mask" onClick={onCancel}>
+      <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+        <p>{message}</p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+          <button className="btn-ghost" onClick={onCancel}>
+            取消
+          </button>
+          <button className="btn" onClick={onConfirm}>
+            确定禁用
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 对称应用驱动状态：启用（deactivated→reload）与禁用统一，逐驱动容错 */
+async function applyDriverState(kernel: MinexKernel, id: string, enabled: boolean): Promise<void> {
+  const state = kernel.drivers.getState(id);
+  try {
+    if (enabled) {
+      if (state === "activated") return;
+      if (state === "deactivated") await kernel.drivers.reload(id);
+      else await kernel.drivers.activate(id);
+    } else {
+      if (state === "activated") await kernel.drivers.deactivate(id);
+    }
+  } catch (err) {
+    console.error(`应用驱动状态失败 ${id}:`, err);
+  }
 }
