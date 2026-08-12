@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import { useKernel } from "../kernel-context.js";
+import { DriverIcon } from "./DriverIcon.js";
 
 type Section = "download" | "manage" | "overview";
 
@@ -78,21 +79,30 @@ function ManageView({
       )
     : drivers;
 
-  async function toggle(id: string): Promise<void> {
+  // D1：deactivated 态必须走 reload（activate 对 deactivated 抛错）；单个 toggle 容错。
+  async function setDriverState(id: string, enabled: boolean): Promise<void> {
     const state = kernel.drivers.getState(id);
-    if (state === "activated") await kernel.drivers.deactivate(id);
-    else await kernel.drivers.activate(id);
+    try {
+      if (enabled) {
+        if (state === "activated") return;
+        if (state === "deactivated") await kernel.drivers.reload(id);
+        else await kernel.drivers.activate(id);
+      } else {
+        if (state === "activated") await kernel.drivers.deactivate(id);
+      }
+    } catch (err) {
+      console.error(`驱动状态切换失败 ${id}:`, err);
+    }
+  }
+
+  async function toggle(id: string): Promise<void> {
+    const enabled = kernel.drivers.getState(id) === "activated";
+    await setDriverState(id, !enabled);
   }
 
   async function setAll(enabled: boolean): Promise<void> {
     for (const d of kernel.drivers.list()) {
-      const state = kernel.drivers.getState(d.manifest.id);
-      try {
-        if (enabled && state !== "activated") await kernel.drivers.activate(d.manifest.id);
-        if (!enabled && state === "activated") await kernel.drivers.deactivate(d.manifest.id);
-      } catch {
-        /* 单个失败不阻断其余 */
-      }
+      await setDriverState(d.manifest.id, enabled); // 内部已逐驱动容错
     }
   }
 
@@ -134,7 +144,7 @@ function ManageView({
               <tr key={d.manifest.id}>
                 <td>
                   <span className="row-name">
-                    <span className="driver-icon">{d.manifest.icon ?? "📦"}</span>
+                    <DriverIcon icon={d.manifest.icon} />
                     <span>{d.manifest.name}</span>
                     <span className="muted">v{d.manifest.version}</span>
                     <span className="muted">{enabled ? "● 已启用" : "○ 已禁用"}</span>

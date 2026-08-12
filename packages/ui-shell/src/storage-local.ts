@@ -19,8 +19,16 @@ export function createLocalStorageStorage(prefix = "minex:"): StorageProvider {
     }
   }
 
+  /**
+   * D2：localStorage key = prefix + name + ":" + encodeURIComponent(key)。
+   * name 经 assertName 限制为 A-Za-z0-9_.-（不含 ":"），key 中任何 ":" 都会被编码——
+   * 分隔符 ":" 无歧义，namespace 与 key 含点不再串扰。
+   */
   function keyOf(name: string, key: string): string {
-    return `${prefix}${name}.${key}`;
+    return `${prefix}${name}:${encodeURIComponent(key)}`;
+  }
+  function listPrefix(name: string): string {
+    return `${prefix}${name}:`;
   }
 
   return {
@@ -29,9 +37,18 @@ export function createLocalStorageStorage(prefix = "minex:"): StorageProvider {
       return {
         get<T = unknown>(key: string): T | undefined {
           const raw = ls().getItem(keyOf(name, key));
-          return raw === null ? undefined : (JSON.parse(raw) as T);
+          if (raw === null) return undefined;
+          try {
+            return JSON.parse(raw) as T; // D5：损坏值容错，返回 undefined
+          } catch {
+            return undefined;
+          }
         },
         set<T = unknown>(key: string, value: T): void {
+          if (value === undefined) {
+            ls().removeItem(keyOf(name, key)); // D4：undefined 视为删除，不存 "undefined"
+            return;
+          }
           ls().setItem(keyOf(name, key), JSON.stringify(value));
         },
         delete(key: string): void {
@@ -39,10 +56,17 @@ export function createLocalStorageStorage(prefix = "minex:"): StorageProvider {
         },
         list(): string[] {
           const out: string[] = [];
-          const p = `${prefix}${name}.`;
+          const p = listPrefix(name);
           for (let i = 0; i < ls().length; i++) {
             const k = ls().key(i);
-            if (k && k.startsWith(p)) out.push(k.slice(p.length));
+            if (k && k.startsWith(p)) {
+              const raw = k.slice(p.length);
+              try {
+                out.push(decodeURIComponent(raw));
+              } catch {
+                /* 跳过损坏 key */
+              }
+            }
           }
           return out;
         },

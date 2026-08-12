@@ -40,4 +40,43 @@ describe("createLocalStorageStorage", () => {
     const s = createLocalStorageStorage();
     expect(() => s.namespace("a/b")).toThrow(/invalid namespace/);
   });
+
+  it("D2: namespace and key with dots do not collide", () => {
+    installFake();
+    const s = createLocalStorageStorage();
+    s.namespace("a").set("b.c", "A");     // key 含点
+    s.namespace("a.b").set("c", "B");     // namespace 含点
+    expect(s.namespace("a").get("b.c")).toBe("A");
+    expect(s.namespace("a.b").get("c")).toBe("B");
+    // list 不串扰：ns("a") 只列自己的 key
+    expect(s.namespace("a").list()).toEqual(["b.c"]);
+    expect(s.namespace("a.b").list()).toEqual(["c"]);
+  });
+
+  it("D2: key containing colon does not collide", () => {
+    installFake();
+    const s = createLocalStorageStorage();
+    s.namespace("a").set("b:c", "X");
+    expect(s.namespace("a").get("b:c")).toBe("X");
+    expect(s.namespace("a").list()).toEqual(["b:c"]);
+  });
+
+  it("D4: set undefined removes the key", () => {
+    installFake();
+    const s = createLocalStorageStorage();
+    const ns = s.namespace("n");
+    ns.set("k", 1);
+    ns.set("k", undefined as unknown as number);
+    expect(ns.get("k")).toBeUndefined();
+    expect(ns.list()).toEqual([]);
+  });
+
+  it("D5: corrupted stored value returns undefined", () => {
+    installFake();
+    const s = createLocalStorageStorage();
+    // 直接写坏值到 localStorage
+    const ls = (globalThis as { localStorage?: { setItem: (k: string, v: string) => void } }).localStorage!;
+    ls.setItem("minex:n:k", "{ not json");
+    expect(s.namespace("n").get("k")).toBeUndefined();
+  });
 });

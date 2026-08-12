@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { DriverIcon } from "./DriverIcon.js";
 
 interface DriverOption {
   id: string;
@@ -68,7 +69,7 @@ export function DriverSelector({
                   setQuery("");
                 }}
               >
-                <span className="driver-icon">{d.icon ?? "📦"}</span>
+                <DriverIcon icon={d.icon} />
                 <span>{d.name}</span>
                 <span className="muted">{d.id}</span>
               </div>

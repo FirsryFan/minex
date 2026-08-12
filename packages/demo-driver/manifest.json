@@ -1,7 +1,7 @@
 {
   "id": "minex.demo",
   "name": "Demo Driver",
-  "icon": "🧪",
+  "icon": "./assets/icon.svg",
   "version": "0.1.0",
   "minKernelVersion": "0.2.3",
   "entry": "./dist/index.js",

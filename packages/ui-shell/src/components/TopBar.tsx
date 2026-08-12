@@ -1,3 +1,4 @@
+import { DriverIcon } from "./DriverIcon.js";
 import { DriverSelector } from "./DriverSelector.js";
 import { ThemeToggle } from "./ThemeToggle.js";
 
@@ -29,7 +30,7 @@ export function TopBar({
       <DriverSelector drivers={drivers} activeDriverId={activeDriverId} onSelect={onSelectDriver} />
       {active && (
         <span className="topbar-active-driver">
-          <span className="driver-icon">{active.icon ?? "📦"}</span>
+          <DriverIcon icon={active.icon} />
           <span>{active.name}</span>
         </span>
       )}
