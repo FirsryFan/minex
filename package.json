@@ -1,0 +1,16 @@
+{
+  "name": "minex",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Minex — 领域无关的插件宿主内核（微内核架构）",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @minex/kernel",
+    "typecheck": "npm run typecheck -w @minex/kernel"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}
