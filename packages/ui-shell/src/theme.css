@@ -44,6 +44,11 @@
   --main-strip-h: 44px;
   --main-gap: 10px;                  /* 主区相对三栏的抬升间距 */
   --floating-max-width: 61.8vw;      /* 浮窗最大宽度 = 黄金比例屏宽 */
+
+  /* 字体（外观驱动可覆盖） */
+  --font-ui: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-content: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-code: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 }
 
 /**

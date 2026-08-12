@@ -1,0 +1,14 @@
+{
+  "name": "minex-appearance-driver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minex 外观驱动：主题色/字体配置，贡献 theme 给外壳注入 CSS",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.2.3"
+  }
+}

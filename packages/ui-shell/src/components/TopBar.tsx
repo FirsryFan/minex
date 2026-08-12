@@ -16,11 +16,15 @@ export function TopBar({
   drivers,
   activeDriverId,
   onSelectDriver,
+  dark,
+  onToggleTheme,
   onOpenSettings,
 }: {
   drivers: DriverOption[];
   activeDriverId: string | null;
   onSelectDriver: (id: string) => void;
+  dark: boolean;
+  onToggleTheme: () => void;
   onOpenSettings: () => void;
 }) {
   const active = drivers.find((d) => d.id === activeDriverId);
@@ -35,7 +39,7 @@ export function TopBar({
         </span>
       )}
       <span style={{ flex: 1 }} />
-      <ThemeToggle />
+      <ThemeToggle dark={dark} onToggle={onToggleTheme} />
       <button className="btn-ghost" onClick={onOpenSettings}>
         设置
       </button>

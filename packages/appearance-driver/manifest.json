@@ -1,0 +1,34 @@
+{
+  "id": "minex.appearance",
+  "name": "Appearance Driver",
+  "icon": "./assets/icon.svg",
+  "version": "0.1.0",
+  "minKernelVersion": "0.2.3",
+  "entry": "./dist/index.js",
+  "reloadable": true,
+  "settingsSchema": {
+    "type": "object",
+    "properties": {
+      "primaryColor": {
+        "type": "string",
+        "default": "#2563eb",
+        "description": "主题色（CSS 颜色值）"
+      },
+      "uiFont": {
+        "type": "string",
+        "default": "",
+        "description": "UI 字体（留空用系统默认）"
+      },
+      "contentFont": {
+        "type": "string",
+        "default": "",
+        "description": "内容字体（留空用系统默认）"
+      },
+      "codeFont": {
+        "type": "string",
+        "default": "",
+        "description": "代码字体（留空用系统默认）"
+      }
+    }
+  }
+}

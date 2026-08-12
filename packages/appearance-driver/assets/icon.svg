@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- 调色盘 -->
+  <path d="M12 3a9 9 0 0 0 0 18c1.5 0 2-1 2-2 0-.6-.3-1-.7-1.4-.4-.4-.6-.8-.6-1.3 0-.8.6-1.3 1.4-1.3H17A4 4 0 0 0 21 11C21 6.6 17 3 12 3z"
+        fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="7.5" cy="12" r="1.2" fill="#2563eb"/>
+  <circle cx="9.5" cy="7.5" r="1.2" fill="#2563eb"/>
+  <circle cx="14" cy="6.5" r="1.2" fill="#2563eb"/>
+</svg>
