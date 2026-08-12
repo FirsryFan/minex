@@ -8,9 +8,12 @@
   ],
   "scripts": {
     "build": "npm run build -w @minex/kernel",
-    "typecheck": "npm run typecheck -w @minex/kernel"
+    "typecheck": "npm run typecheck -w @minex/kernel",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }
