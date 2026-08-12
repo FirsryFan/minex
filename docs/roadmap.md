@@ -10,7 +10,9 @@
 - [x] 阶段 1 内核核心（2026-08-12，tag v0.1.0）：registry/events/storage/lifecycle + PluginContext + 19 测试全绿
 - [x] 阶段 1 检阅修复（2026-08-12，v0.1.1）：B1激活回滚/B2同优先级先到/M1 destroy容错/M2 reload实现/M3版本比较/M4原子写/M5依赖回滚/M6并发去重；37 测试全绿
 - [x] 阶段 2 插件契约 + demo（2026-08-12，tag v0.2.0）：manifest 解析校验 + loadPluginsFromDir（静态贡献自动注册）+ reload + demo 插件三通道 + 48 测试全绿
-- [ ] 阶段 3 CLI 宿主（进行中 → 下一目标）
+- [x] 阶段 2 检阅修复（2026-08-12，v0.2.1）：L1 失败回滚静态贡献/L2 静态-运行时分离生命周期/L3 深层依赖回滚/L4 幂等/L5 逐个容错 + m1-m4/m7/m8；57 测试全绿
+- [x] 阶段 3 CLI 宿主（2026-08-12，tag v0.3.0）：@minex/cli（run/config/plugins 三组命令）+ 63 测试全绿 + 端到端通
+- [ ] 阶段 4 UI 壳（进行中 → 下一目标）
 - [ ] 阶段 2 插件契约 + demo
 - [ ] 阶段 3 CLI 宿主
 - [ ] 阶段 4 UI 壳

@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # 运行时插件产物（从 packages/*/ 同步生成）
 plugins/
+
+# 运行时数据目录
+.minex-data/

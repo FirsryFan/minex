@@ -9,6 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@minex/kernel": "^0.1.1"
+    "@minex/kernel": "^0.2.1"
   }
 }

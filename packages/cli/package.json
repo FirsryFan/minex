@@ -1,0 +1,17 @@
+{
+  "name": "@minex/cli",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Minex CLI 宿主：无 UI 也能用内核（加载插件 / 执行命令 / 读写设置）",
+  "type": "module",
+  "bin": {
+    "minex": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.2.1"
+  }
+}
