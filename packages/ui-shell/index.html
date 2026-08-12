@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Minex</title>
+    <script>
+      // 提前应用主题，避免首帧闪烁（默认浅色）
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("minex.theme") === "dark" ? "dark" : "light";
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

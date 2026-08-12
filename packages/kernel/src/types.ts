@@ -8,6 +8,8 @@ export interface DriverManifest {
   /** 全局唯一驱动 id，如 "minex.demo" */
   id: string;
   name: string;
+  /** 驱动图标（v1 为 emoji 字符串，后续可扩展为图片/CSS 类） */
+  icon?: string;
   version: string;
   /** 要求内核版本 >= 此值，过低则拒绝激活 */
   minKernelVersion?: string;

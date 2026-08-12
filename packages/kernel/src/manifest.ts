@@ -23,6 +23,9 @@ export function parseManifest(raw: unknown): DriverManifest {
   if (typeof m.name !== "string" || !m.name) {
     throw new Error(`Manifest: "name" must be a non-empty string (driver "${m.id ?? "?"}")`);
   }
+  if (m.icon !== undefined && typeof m.icon !== "string") {
+    throw new Error(`Manifest: "icon" must be a string (driver "${m.id}")`);
+  }
   if (typeof m.version !== "string" || !m.version) {
     throw new Error(`Manifest: "version" must be a non-empty string (driver "${m.id ?? "?"}")`);
   }
@@ -57,6 +60,7 @@ export function parseManifest(raw: unknown): DriverManifest {
   return {
     id: m.id,
     name: m.name,
+    ...(m.icon !== undefined && { icon: m.icon as string }),
     version: m.version,
     ...(m.minKernelVersion !== undefined && { minKernelVersion: m.minKernelVersion as string }),
     ...(m.dependencies !== undefined && { dependencies: m.dependencies as string[] }),

@@ -14,7 +14,10 @@
 - [x] 阶段 3 CLI 宿主（2026-08-12，tag v0.3.0）：@minex/cli（run/config/drivers 三组命令）+ 63 测试全绿 + 端到端通
 - [x] 阶段 3 检阅修复（2026-08-12，v0.2.2）：C1 main 激活容错/C2 registry 分层存储（static/runtime）/C3-C5 统一错误捕获；66 测试全绿
 - [x] 阶段 4 UI 壳（2026-08-12，tag v0.4.0）：React 布局（顶/左/右/主区/浮窗）+ 槽位 + schema 设置表单 + 命令按钮；浅色蓝主题；vite build + dev 验证通过
-- [ ] 阶段 5 测试 + 定稿（进行中 → 下一目标）
+- [x] 改名 plugin→driver（2026-08-12）：DriverManifest/DriverContext/kernel.drivers/demo-driver/sync-drivers；39 文件；`docs/driver-architecture.md` 定稿
+- [x] ①外壳重设计 v1（2026-08-12）：顶栏（驱动选择器+主题切换+设置）+ 视图切换（工作区/设置页）+ 主设置页（文件夹树导航+驱动管理）+ 主题系统基础（[data-theme=dark]）
+- [ ] ①外壳重设计 后续：命令面板（/）、侧栏面板系统（切换位置/隐藏）、驱动详情选项卡、驱动下载
+- [ ] 阶段 5 测试 + 定稿
 - [ ] 阶段 2 驱动契约 + demo
 - [ ] 阶段 3 CLI 宿主
 - [ ] 阶段 4 UI 壳

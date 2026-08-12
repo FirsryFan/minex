@@ -1,25 +1,28 @@
 import { useEffect, useState } from "react";
-import { FloatingWindow } from "./components/FloatingWindow.js";
 import { MainArea } from "./components/MainArea.js";
 import { RightBar } from "./components/RightBar.js";
-import { SettingsForm } from "./components/SettingsForm.js";
+import { SettingsPage } from "./components/SettingsPage.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
 
+const ACTIVE_DRIVER_KEY = "minex.activeDriver";
+
 /**
- * 通用外壳（非驱动内容）：
- * 布局 + 槽位（Sidebar 列出驱动的 ui 贡献）+ schema 设置表单。
- * 具体视图（画布 / 命令面板 / 面板内容）属于驱动，不在外壳内实现。
+ * 外壳：view = workspace（顶栏 + 工作区）| settings（全屏设置页）。
+ * 活动驱动决定工作区内容（v1 为默认通用结构；驱动工作区贡献留待后续）。
  */
 export function App({ problems }: { problems: string[] }) {
   const kernel = useKernel();
+  const [view, setView] = useState<"workspace" | "settings">("workspace");
+  const [activeDriverId, setActiveDriverId] = useState<string | null>(() =>
+    typeof localStorage !== "undefined" ? localStorage.getItem(ACTIVE_DRIVER_KEY) : null,
+  );
   const [collapsed, setCollapsed] = useState({ left: false, right: false });
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [, setTick] = useState(0); // 事件驱动重渲染
+  const [, setTick] = useState(0);
 
-  // 订阅注册表变更 + data:changed，触发重查询（简单版响应式，无状态管理库）
+  // 事件驱动重渲染（驱动列表/状态/贡献变化）
   useEffect(() => {
     const offs: Array<() => void> = [];
     offs.push(kernel.registry.onChange("*", () => setTick((t) => t + 1)));
@@ -27,16 +30,36 @@ export function App({ problems }: { problems: string[] }) {
     return () => offs.forEach((off) => off());
   }, [kernel]);
 
+  function selectDriver(id: string): void {
+    setActiveDriverId(id);
+    try {
+      localStorage.setItem(ACTIVE_DRIVER_KEY, id);
+    } catch {
+      /* 忽略 localStorage 不可用 */
+    }
+  }
+
+  if (view === "settings") {
+    return <SettingsPage onBack={() => setView("workspace")} />;
+  }
+
+  const drivers = kernel.drivers.list().map((m) => ({
+    id: m.manifest.id,
+    name: m.manifest.name,
+    icon: m.manifest.icon,
+  }));
+
   const shellClass = `shell${collapsed.left ? " left-collapsed" : ""}${collapsed.right ? " right-collapsed" : ""}`;
 
   return (
     <div className={shellClass}>
-      <TopBar driverCount={kernel.drivers.list().length} onOpenSettings={() => setSettingsOpen(true)} />
-      <Sidebar
-        selectedPanelId={selectedPanelId}
-        onSelect={setSelectedPanelId}
-        problems={problems}
+      <TopBar
+        drivers={drivers}
+        activeDriverId={activeDriverId}
+        onSelectDriver={selectDriver}
+        onOpenSettings={() => setView("settings")}
       />
+      <Sidebar selectedPanelId={selectedPanelId} onSelect={setSelectedPanelId} problems={problems} />
       <MainArea
         collapsed={collapsed}
         onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
@@ -44,11 +67,6 @@ export function App({ problems }: { problems: string[] }) {
         selectedPanelId={selectedPanelId}
       />
       <RightBar />
-      {settingsOpen && (
-        <FloatingWindow title="驱动设置" onClose={() => setSettingsOpen(false)}>
-          <SettingsForm />
-        </FloatingWindow>
-      )}
     </div>
   );
 }

@@ -45,3 +45,28 @@
   --main-gap: 10px;                  /* 主区相对三栏的抬升间距 */
   --floating-max-width: 61.8vw;      /* 浮窗最大宽度 = 黄金比例屏宽 */
 }
+
+/**
+ * 深色模式：一键切换（document.documentElement.dataset.theme = "dark"）。
+ * 组件全用 var()，这里只覆盖令牌值，无需改任何组件。
+ */
+[data-theme="dark"] {
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-primary-soft: #1e3a5f;
+  --color-on-primary: #ffffff;
+  --mask-bg: rgba(0, 0, 0, 0.6);
+
+  --color-bg: #0f172a;
+  --color-bars: #1e293b;
+  --color-main: #1e293b;
+  --color-card: #253244;
+
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-border: #334155;
+  --color-hover: #2d3a4f;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-floating: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
