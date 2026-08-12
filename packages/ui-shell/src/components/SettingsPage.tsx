@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import { useKernel } from "../kernel-context.js";
+import { DriverDetail } from "./DriverDetail.js";
 import { DriverIcon } from "./DriverIcon.js";
 
 type Section = "download" | "manage" | "overview";
@@ -14,6 +15,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   const [folderOpen, setFolderOpen] = useState(true);
   const [section, setSection] = useState<Section>("manage");
   const [search, setSearch] = useState("");
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
   // 注册表/数据变化 → 重渲染（启用开关状态同步）
@@ -52,11 +54,19 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       </nav>
 
       <div className="settings-main">
-        {section === "manage" && (
-          <ManageView kernel={kernel} search={search} onSearch={setSearch} />
+        {selectedDriverId ? (
+          <DriverDetail
+            kernel={kernel}
+            driverId={selectedDriverId}
+            onBack={() => setSelectedDriverId(null)}
+          />
+        ) : section === "manage" ? (
+          <ManageView kernel={kernel} search={search} onSearch={setSearch} onOpenDetail={setSelectedDriverId} />
+        ) : section === "download" ? (
+          <div className="card muted">驱动下载（暂未实现，留待后续）</div>
+        ) : (
+          <div className="card muted">驱动总览（暂未实现，留待后续）</div>
         )}
-        {section === "download" && <div className="card muted">驱动下载（暂未实现，留待后续）</div>}
-        {section === "overview" && <div className="card muted">驱动总览（暂未实现，留待后续）</div>}
       </div>
     </div>
   );
@@ -66,10 +76,12 @@ function ManageView({
   kernel,
   search,
   onSearch,
+  onOpenDetail,
 }: {
   kernel: MinexKernel;
   search: string;
   onSearch: (s: string) => void;
+  onOpenDetail: (id: string) => void;
 }) {
   const drivers = kernel.drivers.list();
   const q = search.trim().toLowerCase();
@@ -154,7 +166,7 @@ function ManageView({
                   <button className="icon-btn" onClick={() => void toggle(d.manifest.id)}>
                     {enabled ? "禁用" : "启用"}
                   </button>
-                  <button className="icon-btn" title="驱动设置（详情页留待后续）">
+                  <button className="icon-btn" title="驱动设置" onClick={() => onOpenDetail(d.manifest.id)}>
                     …
                   </button>
                 </td>
