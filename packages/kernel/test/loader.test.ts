@@ -183,6 +183,47 @@ describe("loadPluginsFromDir", () => {
     }
   });
 
+  it("C2: static label survives deactivate after runtime upgrade (layered shadow)", async () => {
+    const dir = tempDir("upgrade");
+    try {
+      const pluginDir = makeFixturePlugin(dir, "up.demo", {
+        id: "up.demo",
+        name: "Up",
+        version: "1.0.0",
+        entry: "./index.mjs",
+        contributes: { command: [{ id: "up.hello", label: "Hello" }] },
+      });
+      makeEntry(
+        pluginDir,
+        `export default {
+          activate(ctx) {
+            ctx.register("command", "up.hello", { id: "up.hello", label: "Hello", handler: () => "hi" });
+          },
+        };`,
+      );
+
+      const kernel = testKernel();
+      await kernel.plugins.loadFromDir(dir);
+      // 激活前：静态 label 可见，无 handler
+      const before = kernel.registry.get<{ handler?: unknown; label: string }>("command", "up.hello");
+      expect(before?.value.label).toBe("Hello");
+      expect(before?.value.handler).toBeUndefined();
+
+      await kernel.plugins.activate("up.demo");
+      // 激活时：有效值 = runtime（带 handler）
+      expect(kernel.registry.get<{ handler: () => string }>("command", "up.hello")?.value.handler()).toBe("hi");
+
+      await kernel.plugins.deactivate("up.demo");
+      // 停用后：runtime 被揭掉，静态 label 露出，handler 消失
+      const after = kernel.registry.get<{ handler?: unknown; label: string }>("command", "up.hello");
+      expect(after).toBeDefined();
+      expect(after?.value.label).toBe("Hello");
+      expect(after?.value.handler).toBeUndefined();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("reports skipped non-plugin directories", async () => {
     const dir = tempDir("skip");
     try {

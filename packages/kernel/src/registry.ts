@@ -11,11 +11,17 @@ export type RegistryChange = {
 /**
  * 能力注册表 —— 内核的核心原语。
  * 内核只管理「按 type 注册 + 按 type 查询」，不认识任何 type 的语义。
+ *
+ * 分层模型：每个 (type, id) 可有 static 与 runtime 两层。
+ * - static：manifest 声明，随插件注册存活（激活前可见、停用/reload 不消失）
+ * - runtime：activate 注册，随停用/失败清除
+ * - 有效值（effective）= runtime ?? static：激活时运行时贡献「阴影」静态声明；
+ *   停用后揭掉阴影，露出静态层（如命令的 label 存活、handler 随停用消失）
  */
 export interface CapabilityRegistry {
   /**
-   * 注册一个能力。冲突语义：priority 高者胜；同优先级不同插件先到者胜；
-   * 同插件重注册 = 更新（允许任意优先级，含降级）。origin 标记来源。
+   * 注册一个能力（写入对应 origin 层）。层内冲突语义：priority 高者胜；
+   * 同优先级不同插件先到者胜；同插件重注册 = 更新（允许任意优先级，含降级）。
    */
   register(
     type: string,
@@ -24,21 +30,30 @@ export interface CapabilityRegistry {
     opts?: { pluginId?: string; priority?: number; origin?: ContributionOrigin },
   ): void;
   unregister(type: string, id: string): void;
-  /** 注销某插件贡献的能力。origin 省略 = 全部；指定则只清该来源（停用只清 runtime，静态保留） */
+  /** 注销某插件某层贡献。origin 省略 = 清两层；指定则只清该层（停用只清 runtime，静态保留） */
   unregisterByPlugin(pluginId: string, origin?: ContributionOrigin): void;
-  /** 查询某类型的能力列表，按 priority 降序；可用 { plugin } 过滤 */
+  /** 查询某类型的能力列表（有效值 = runtime ?? static），按 priority 降序；可用 { plugin } 过滤 */
   query<T = unknown>(type: string, filter?: QueryFilter): Contribution<string, T>[];
-  /** 精确取一个能力 */
+  /** 精确取一个能力的有效值 */
   get<T = unknown>(type: string, id: string): Contribution<string, T> | undefined;
   /** 订阅某类型的注册/注销事件，返回取消订阅函数 */
   onChange(type: string, cb: (change: RegistryChange) => void): () => void;
 }
 
+interface LayerEntry {
+  static?: Contribution;
+  runtime?: Contribution;
+}
+
+function effective(entry: LayerEntry | undefined): Contribution | undefined {
+  return entry?.runtime ?? entry?.static;
+}
+
 export function createRegistry(): CapabilityRegistry {
-  const store = new Map<string, Map<string, Contribution>>();
+  const store = new Map<string, Map<string, LayerEntry>>();
   const listeners = new Map<string, Set<(change: RegistryChange) => void>>();
 
-  function bucket(type: string): Map<string, Contribution> {
+  function bucket(type: string): Map<string, LayerEntry> {
     let b = store.get(type);
     if (!b) {
       b = new Map();
@@ -68,19 +83,23 @@ export function createRegistry(): CapabilityRegistry {
       const pluginId = opts.pluginId ?? "kernel";
       const raw = opts.priority ?? 0;
       const priority = Number.isFinite(raw) ? raw : 0; // NaN/Infinity 防呆
-      const origin = opts.origin ?? "runtime";
-      const existing = store.get(type)?.get(id);
+      const origin: ContributionOrigin = opts.origin ?? "runtime";
+      const b = bucket(type);
+      const entry = b.get(id) ?? {};
+      const existing = entry[origin];
       if (existing) {
         const samePlugin = existing.pluginId === pluginId;
         // 不同插件：高优先级胜 / 同优先级先到者胜；同插件：任意优先级都允许更新（含降级）
         if (!samePlugin && priority < existing.priority) return;
         if (!samePlugin && priority === existing.priority) return;
       }
-      bucket(type).set(id, { type, id, value, pluginId, priority, origin });
+      entry[origin] = { type, id, value, pluginId, priority, origin };
+      b.set(id, entry);
       fire(type, { type, id, pluginId, action: "registered" });
     },
     unregister(type, id) {
-      const existing = store.get(type)?.get(id);
+      const entry = store.get(type)?.get(id);
+      const existing = effective(entry);
       if (!existing) return;
       bucket(type).delete(id);
       fire(type, { type, id, pluginId: existing.pluginId, action: "unregistered" });
@@ -88,11 +107,21 @@ export function createRegistry(): CapabilityRegistry {
     unregisterByPlugin(pluginId, origin) {
       const fired: RegistryChange[] = [];
       for (const [type, b] of store) {
-        for (const [id, c] of [...b]) {
-          if (c.pluginId === pluginId && (origin === undefined || c.origin === origin)) {
-            b.delete(id);
-            fired.push({ type, id, pluginId, action: "unregistered" });
+        for (const [id, entry] of [...b]) {
+          if (origin === undefined) {
+            const hadStatic = entry.static?.pluginId === pluginId;
+            const hadRuntime = entry.runtime?.pluginId === pluginId;
+            if (hadStatic) delete entry.static;
+            if (hadRuntime) delete entry.runtime;
+            if (hadStatic || hadRuntime) fired.push({ type, id, pluginId, action: "unregistered" });
+          } else {
+            const layer = entry[origin];
+            if (layer?.pluginId === pluginId) {
+              delete entry[origin];
+              fired.push({ type, id, pluginId, action: "unregistered" });
+            }
           }
+          if (!entry.static && !entry.runtime) b.delete(id);
         }
       }
       for (const change of fired) fire(change.type, change);
@@ -100,12 +129,16 @@ export function createRegistry(): CapabilityRegistry {
     query<T = unknown>(type: string, filter?: QueryFilter): Contribution<string, T>[] {
       const b = store.get(type);
       if (!b) return [];
-      let items = [...b.values()];
+      let items: Contribution[] = [];
+      for (const entry of b.values()) {
+        const eff = effective(entry);
+        if (eff) items.push(eff);
+      }
       if (filter?.plugin) items = items.filter((c) => c.pluginId === filter.plugin);
       return items.sort((x, y) => y.priority - x.priority) as unknown as Contribution<string, T>[];
     },
     get<T = unknown>(type: string, id: string): Contribution<string, T> | undefined {
-      return store.get(type)?.get(id) as unknown as Contribution<string, T> | undefined;
+      return effective(store.get(type)?.get(id)) as unknown as Contribution<string, T> | undefined;
     },
     onChange(type, cb) {
       let set = listeners.get(type);

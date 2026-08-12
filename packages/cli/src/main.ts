@@ -15,6 +15,10 @@ const HELP = `Minex CLI — 无 UI 使用内核
   minex config set minex.demo config '{"greeting":"Hi"}'
 `;
 
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export async function main(
   argv: string[],
   opts?: { pluginsDir?: string; storageDir?: string },
@@ -29,10 +33,16 @@ export async function main(
       console.log(HELP);
       return 0;
     }
-    // 加载并激活全部插件（命令 handler 由 activate 提供）
+    // 加载并激活全部插件（逐个容错，C1：一个失败不影响其余，只读命令仍可用）
     const { manifests, failed } = await kernel.plugins.loadFromDir(pluginsDir);
-    for (const m of manifests) await kernel.plugins.activate(m.id);
-    for (const f of failed) console.error(`[load failed] ${f.id}: ${f.error}`);
+    for (const m of manifests) {
+      try {
+        await kernel.plugins.activate(m.id);
+      } catch (err) {
+        failed.push({ id: m.id, error: errMsg(err) });
+      }
+    }
+    for (const f of failed) console.error(`[plugin unavailable] ${f.id}: ${f.error}`);
 
     switch (cmd) {
       case "run":
@@ -46,6 +56,10 @@ export async function main(
         console.log(HELP);
         return 1;
     }
+  } catch (err) {
+    // C3/C4/C5：顶层统一捕获，输出用户可读错误而非 stack trace
+    console.error(`错误: ${errMsg(err)}`);
+    return 1;
   } finally {
     await kernel.destroy();
   }

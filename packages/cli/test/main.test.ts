@@ -1,6 +1,9 @@
+import * as fs from "node:fs";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createInMemoryStorage, createKernel } from "@minex/kernel";
-import { configCmd, pluginsCmd, runCommand } from "../src/main.js";
+import { configCmd, main, pluginsCmd, runCommand } from "../src/main.js";
 
 function testKernel() {
   return createKernel({ storage: createInMemoryStorage() });
@@ -86,5 +89,58 @@ describe("cli commands", () => {
     await pluginsCmd(kernel, ["list"]);
     expect(logs).toContainEqual(["p.demo\t1.0.0\tactivated"]);
     restore();
+  });
+
+  it("C1: main survives one plugin activation failure, read-only command still works", async () => {
+    const dir = path.join(tmpdir(), `minex-main-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const dataDir = path.join(tmpdir(), `minex-main-data-${Date.now()}`);
+    try {
+      // bad：activate 抛错
+      const badDir = path.join(dir, "bad.demo");
+      fs.mkdirSync(badDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(badDir, "manifest.json"),
+        JSON.stringify({ id: "bad.demo", name: "Bad", version: "1.0.0", entry: "./index.mjs" }),
+      );
+      fs.writeFileSync(badDir + "/index.mjs", `export default { activate: () => { throw new Error("boom"); } };`);
+      // good：正常激活
+      const goodDir = path.join(dir, "good.demo");
+      fs.mkdirSync(goodDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(goodDir, "manifest.json"),
+        JSON.stringify({ id: "good.demo", name: "Good", version: "1.0.0", entry: "./index.mjs" }),
+      );
+      fs.writeFileSync(goodDir + "/index.mjs", `export default { activate: () => {} };`);
+
+      const { logs, restore } = silence();
+      const code = await main(["plugins", "list"], { pluginsDir: dir, storageDir: dataDir });
+      expect(code).toBe(0);
+      expect(logs).toContainEqual(["good.demo\t1.0.0\tactivated"]);
+      const joined = logs.map((l) => String(l[0])).join("\n");
+      expect(joined).toMatch(/\[plugin unavailable\] bad\.demo: boom/);
+      expect(joined).not.toMatch(/ at /); // 无 stack trace
+      restore();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("C3: main catches dispatch errors with friendly message", async () => {
+    const dir = path.join(tmpdir(), `minex-plugins-empty-${Date.now()}`);
+    const dataDir = path.join(tmpdir(), `minex-main-c3-${Date.now()}`);
+    try {
+      fs.mkdirSync(dir, { recursive: true }); // 空目录
+      const { logs, restore } = silence();
+      const code = await main(["plugins", "activate", "ghost"], { pluginsDir: dir, storageDir: dataDir });
+      expect(code).toBe(1);
+      const joined = logs.map((l) => String(l[0])).join("\n");
+      expect(joined).toMatch(/错误: Unknown plugin: ghost/);
+      expect(joined).not.toMatch(/ at /); // 无 stack trace
+      restore();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });
