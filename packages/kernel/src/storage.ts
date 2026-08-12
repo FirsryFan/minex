@@ -38,9 +38,15 @@ export function createJsonFileStorage(baseDir: string): StorageProvider {
   fs.mkdirSync(baseDir, { recursive: true });
   const cache = new Map<string, Map<string, unknown>>();
 
+  function assertValidName(name: string): void {
+    if (!/^[A-Za-z0-9_.-]+$/.test(name)) {
+      throw new Error(`Storage: invalid namespace name "${name}" (allowed: A-Za-z0-9_.-). ` +
+        `拒绝非法字符而非替换，避免 "a/b" 与 "a_b" 映射到同一文件`);
+    }
+  }
+
   function fileOf(name: string): string {
-    const safe = name.replace(/[^A-Za-z0-9_.-]/g, "_");
-    return path.join(baseDir, `${safe}.json`);
+    return path.join(baseDir, `${name}.json`);
   }
 
   function load(name: string): Map<string, unknown> {
@@ -61,11 +67,23 @@ export function createJsonFileStorage(baseDir: string): StorageProvider {
   function persist(name: string, ns: Map<string, unknown>): void {
     const obj: Record<string, unknown> = {};
     for (const [k, v] of ns) obj[k] = v;
-    fs.writeFileSync(fileOf(name), JSON.stringify(obj, null, 2), "utf8");
+    let json: string;
+    try {
+      json = JSON.stringify(obj, null, 2);
+    } catch (err) {
+      throw new Error(
+        `Storage: value in namespace "${name}" is not JSON-serializable (${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+    // 原子写：先写临时文件再 rename，崩溃窗口不损坏原文件
+    const tmp = `${fileOf(name)}.tmp`;
+    fs.writeFileSync(tmp, json, "utf8");
+    fs.renameSync(tmp, fileOf(name));
   }
 
   return {
     namespace(name) {
+      assertValidName(name); // 校验必须在入口，不能放进 load（其 try/catch 会吞掉错误）
       const ns = load(name);
       return {
         get<T = unknown>(key: string): T | undefined {

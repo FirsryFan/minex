@@ -14,7 +14,15 @@ export function createEventBus(): EventBus {
   return {
     emit(topic, payload) {
       const set = handlers.get(topic);
-      if (set) for (const h of [...set]) h(payload, topic); // 复制迭代：允许 handler 在回调中退订
+      if (!set) return;
+      for (const h of [...set]) {
+        // 复制迭代：允许 handler 在回调中退订；异常不阻断其余分发
+        try {
+          h(payload, topic);
+        } catch (err) {
+          console.error(`[events] handler for "${topic}" threw:`, err);
+        }
+      }
     },
     on(topic, handler) {
       let set = handlers.get(topic);

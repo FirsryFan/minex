@@ -41,17 +41,31 @@ export function createRegistry(): CapabilityRegistry {
 
   function fire(type: string, change: RegistryChange): void {
     const set = listeners.get(type);
-    if (set) for (const cb of [...set]) cb(change);
+    if (set) for (const cb of [...set]) safeCall(cb, change);
     const all = listeners.get("*");
-    if (all) for (const cb of [...all]) cb(change);
+    if (all) for (const cb of [...all]) safeCall(cb, change);
+  }
+
+  function safeCall(cb: (change: RegistryChange) => void, change: RegistryChange): void {
+    try {
+      cb(change);
+    } catch (err) {
+      console.error(`[registry] onChange handler threw:`, err); // 一个坏监听不阻断其余分发
+    }
   }
 
   return {
     register(type, id, value, opts = {}) {
+      if (!type || !id) throw new Error(`registry: type and id must be non-empty (got type="${type}", id="${id}")`);
       const pluginId = opts.pluginId ?? "kernel";
-      const priority = opts.priority ?? 0;
+      const raw = opts.priority ?? 0;
+      const priority = Number.isFinite(raw) ? raw : 0; // NaN/Infinity 防呆
       const existing = store.get(type)?.get(id);
-      if (existing && priority < existing.priority) return; // 低优先级不覆盖高优先级
+      if (existing) {
+        // 高优先级胜；同优先级不同插件 → 先到者胜；同插件重注册 → 更新
+        if (priority < existing.priority) return;
+        if (priority === existing.priority && existing.pluginId !== pluginId) return;
+      }
       bucket(type).set(id, { type, id, value, pluginId, priority });
       fire(type, { type, id, pluginId, action: "registered" });
     },

@@ -20,6 +20,7 @@ export interface MinexKernel {
     register(module: PluginModule): void;
     activate(pluginId: string): Promise<void>;
     deactivate(pluginId: string): Promise<void>;
+    reload(pluginId: string): Promise<void>;
     getState(pluginId: string): PluginState | undefined;
     list(): PluginModule[];
   };
@@ -48,8 +49,9 @@ export function createKernel(opts: KernelOptions = {}): MinexKernel {
   const events = createEventBus();
   const log = opts.log ?? consoleLogger;
 
-  function createContext(manifest: PluginManifest): PluginContext {
-    return {
+  function createContext(manifest: PluginManifest): { context: PluginContext; dispose(): void } {
+    const subscriptions: Array<() => void> = [];
+    const context: PluginContext = {
       manifest,
       register(type: string, id: string, value: unknown, o?: { priority?: number }): void {
         registry.register(type, id, value, { pluginId: manifest.id, priority: o?.priority ?? 0 });
@@ -64,13 +66,22 @@ export function createKernel(opts: KernelOptions = {}): MinexKernel {
         return registry.get<T>(type, id)?.value;
       },
       on(topic: string, handler: (payload: unknown, topic: string) => void): () => void {
-        return events.on(topic, handler);
+        const off = events.on(topic, handler);
+        subscriptions.push(off); // 内核代管订阅：停用/失败时统一退订
+        return off;
       },
-      emit(topic, payload) {
+      emit(topic: string, payload?: unknown): void {
         events.emit(topic, payload);
       },
       storage: storage.namespace(manifest.id),
       log: pluginLogger(log, manifest.id),
+    };
+    return {
+      context,
+      dispose() {
+        for (const off of subscriptions) off();
+        subscriptions.length = 0;
+      },
     };
   }
 
@@ -89,13 +100,17 @@ export function createKernel(opts: KernelOptions = {}): MinexKernel {
       register: (module) => lifecycle.register(module),
       activate: (id) => lifecycle.activate(id),
       deactivate: (id) => lifecycle.deactivate(id),
+      reload: (id) => lifecycle.reload(id),
       getState: (id) => lifecycle.getState(id),
       list: () => lifecycle.list(),
     },
     async destroy() {
       for (const module of lifecycle.list()) {
-        if (lifecycle.getState(module.manifest.id) === "activated") {
+        if (lifecycle.getState(module.manifest.id) !== "activated") continue;
+        try {
           await lifecycle.deactivate(module.manifest.id);
+        } catch (err) {
+          log.warn(`Failed to deactivate plugin "${module.manifest.id}":`, err); // 一个失败不跳过其余
         }
       }
     },

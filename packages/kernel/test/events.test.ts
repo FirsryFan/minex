@@ -42,4 +42,26 @@ describe("event bus", () => {
     expect(a).toBe(1);
     expect(b).toBe(0);
   });
+
+  it("explicit off stops delivery", () => {
+    const bus = createEventBus();
+    let count = 0;
+    const handler = () => count++;
+    bus.on("t", handler);
+    bus.emit("t");
+    bus.off("t", handler);
+    bus.emit("t");
+    expect(count).toBe(1);
+  });
+
+  it("a throwing handler does not block others", () => {
+    const bus = createEventBus();
+    const received: number[] = [];
+    bus.on("t", () => {
+      throw new Error("boom");
+    });
+    bus.on("t", (p) => received.push(p as number));
+    expect(() => bus.emit("t", 1)).not.toThrow();
+    expect(received).toEqual([1]);
+  });
 });

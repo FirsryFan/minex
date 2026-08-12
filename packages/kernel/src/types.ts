@@ -22,7 +22,7 @@ export interface PluginManifest {
 }
 
 /** 插件生命周期状态 */
-export type PluginState = "discovered" | "loaded" | "activated" | "deactivated";
+export type PluginState = "discovered" | "loaded" | "activated" | "deactivated" | "failed";
 
 /** 插件激活时返回的清理函数（停用时调用） */
 export type CleanupFn = () => void | Promise<void>;
@@ -68,7 +68,7 @@ export type EventHandler = (payload: unknown, topic: string) => void;
  */
 export interface PluginContext {
   readonly manifest: PluginManifest;
-  /** 注册一个能力（自动盖上本插件 id；priority 高者胜） */
+  /** 注册一个能力（自动盖上本插件 id）。冲突语义：priority 高者胜；同优先级先到者胜；同插件重注册 = 更新 */
   register<T = unknown>(type: string, id: string, value: T, opts?: { priority?: number }): void;
   /** 注销一个能力 */
   unregister(type: string, id: string): void;
