@@ -7,10 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @minex/kernel && npm run build -w minex-demo-plugin && npm run build -w @minex/cli",
-    "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-demo-plugin && npm run typecheck -w @minex/cli",
+    "build": "npm run build -w @minex/kernel && npm run build -w minex-demo-plugin && npm run build -w @minex/cli && npm run build -w @minex/ui-shell",
+    "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-demo-plugin && npm run typecheck -w @minex/cli && npm run typecheck -w @minex/ui-shell",
     "test": "vitest run",
     "cli": "npm run build -w @minex/cli && node packages/cli/dist/cli.js",
+    "ui": "npm run build -w @minex/kernel && npm run dev -w @minex/ui-shell",
     "plugins:sync": "npm run build -w minex-demo-plugin && node scripts/sync-plugins.mjs"
   },
   "devDependencies": {

@@ -1,0 +1,45 @@
+/**
+ * Minex 默认主题 —— 浅色 + 蓝色为主色。
+ * 结构层只使用这些令牌（var(--xxx)），换肤只需替换本文件。
+ */
+:root {
+  /* 主色（蓝） */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-soft: #eff6ff;
+
+  /* 背景分层：顶/左/右栏同底色（最底层），主区在其上（--color-main） */
+  --color-bg: #f3f6fb;      /* 应用外层底色 */
+  --color-bars: #ffffff;    /* 顶/左/右栏 */
+  --color-main: #ffffff;    /* 主区 */
+  --color-card: #ffffff;
+
+  /* 文本 / 边框 */
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-border: #e2e8f0;
+  --color-hover: #f8fafc;
+
+  /* 圆角（内部所有区块都是圆角卡片） */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* 间距 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+
+  /* 阴影 */
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-floating: 0 12px 32px rgba(15, 23, 42, 0.18);
+
+  /* 布局尺寸 */
+  --topbar-h: 48px;
+  --sidebar-w: 220px;
+  --main-strip-h: 44px;
+  --main-gap: 10px;                  /* 主区相对三栏的抬升间距 */
+  --floating-max-width: 61.8vw;      /* 浮窗最大宽度 = 黄金比例屏宽 */
+}

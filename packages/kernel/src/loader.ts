@@ -92,8 +92,8 @@ export async function loadPluginsFromDir(dir: string, host: PluginLoaderHost): P
   return result;
 }
 
-/** manifest.contributes → 注册表静态贡献（value = 完整描述符，UI 激活前即可读） */
-function registerStaticContributions(host: PluginLoaderHost, manifest: PluginManifest): void {
+/** manifest.contributes → 注册表静态贡献（value = 完整描述符，UI 激活前即可读）。浏览器宿主直接注册插件时复用。 */
+export function registerStaticContributions(host: PluginLoaderHost, manifest: PluginManifest): void {
   const contributes = manifest.contributes;
   if (!contributes) return;
   for (const [type, items] of Object.entries(contributes)) {
