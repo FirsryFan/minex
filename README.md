@@ -31,16 +31,19 @@ npm run build          # 构建 kernel + demo + cli
 npm run plugins:sync   # 把 demo 同步到 plugins/minex.demo
 ```
 
-然后测试（两种方式等价）：
+然后测试。**注意一个 Windows 坑**：`npm run cli --` 会经 `cmd.exe` 中转，参数里的 JSON 引号会被转义成 `^"` 乱码。规则：
+
+- **不带 JSON 引号的命令**（`run` / `plugins`）→ `npm run cli --` 或直接 node 都行；
+- **带 JSON 引号的命令**（`config set`）→ 必须用直接 node（跳过 cmd 中转）。
 
 ```bash
-# 方式一：npm 脚本（每次自动重新构建 cli，最稳）
+# 不带引号：两种方式都行
 npm run cli -- run demo.sayHello Minex
-npm run cli -- config set minex.demo config '{"greeting":"你好"}'
-npm run cli -- plugins list
-
-# 方式二：直接 node（构建后更快）
 node packages/cli/dist/cli.js run demo.sayHello Minex
+
+# 带 JSON：只能用直接 node
+node packages/cli/dist/cli.js config set minex.demo config '{"greeting":"你好"}'
+node packages/cli/dist/cli.js plugins list
 ```
 
 **注意**：必须在项目根目录运行（CLI 默认加载 `./plugins`、数据存 `./.minex-data`）。设置文件在 `E:\Minex\.minex-data\minex.demo.json`，可手动查看。
