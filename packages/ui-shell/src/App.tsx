@@ -7,11 +7,15 @@ import { Sidebar } from "./components/Sidebar.js";
 import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
 
+/**
+ * 通用外壳（非插件内容）：
+ * 布局 + 槽位（Sidebar 列出插件的 ui 贡献）+ schema 设置表单。
+ * 具体视图（画布 / 命令面板 / 面板内容）属于插件，不在外壳内实现。
+ */
 export function App({ problems }: { problems: string[] }) {
   const kernel = useKernel();
   const [collapsed, setCollapsed] = useState({ left: false, right: false });
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
-  const [commandResult, setCommandResult] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [, setTick] = useState(0); // 事件驱动重渲染
 
@@ -30,7 +34,7 @@ export function App({ problems }: { problems: string[] }) {
       <TopBar pluginCount={kernel.plugins.list().length} onOpenSettings={() => setSettingsOpen(true)} />
       <Sidebar
         selectedPanelId={selectedPanelId}
-        onSelect={(id) => setSelectedPanelId(id)}
+        onSelect={setSelectedPanelId}
         problems={problems}
       />
       <MainArea
@@ -38,9 +42,8 @@ export function App({ problems }: { problems: string[] }) {
         onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
         onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
         selectedPanelId={selectedPanelId}
-        commandResult={commandResult}
       />
-      <RightBar onRun={setCommandResult} />
+      <RightBar />
       {settingsOpen && (
         <FloatingWindow title="插件设置" onClose={() => setSettingsOpen(false)}>
           <SettingsForm />

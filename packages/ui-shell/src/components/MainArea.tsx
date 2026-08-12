@@ -6,18 +6,20 @@ interface UiContribution {
   title?: string;
 }
 
+/**
+ * 主区 = 视图槽位。具体视图（画布 / 对话 / 面板内容）属于插件，
+ * 外壳只显示占位，不实现任何特定视图。
+ */
 export function MainArea({
   collapsed,
   onToggleLeft,
   onToggleRight,
   selectedPanelId,
-  commandResult,
 }: {
   collapsed: { left: boolean; right: boolean };
   onToggleLeft: () => void;
   onToggleRight: () => void;
   selectedPanelId: string | null;
-  commandResult: string | null;
 }) {
   const kernel = useKernel();
   const panel = selectedPanelId
@@ -38,26 +40,11 @@ export function MainArea({
       </div>
 
       <div className="main-content">
-        {panel ? (
-          <div className="card">
-            <h3>{panel.value.title}</h3>
-            <p className="muted">
-              id: {panel.value.id} · location: {panel.value.location}
-            </p>
-            <p style={{ marginTop: 8 }}>
-              来自插件的 UI 贡献已渲染到主区。具体的插件组件渲染将在后续版本支持。
-            </p>
-          </div>
-        ) : commandResult ? (
-          <div className="card">
-            <div className="section-title">命令结果</div>
-            <pre style={{ whiteSpace: "pre-wrap" }}>{commandResult}</pre>
-          </div>
-        ) : (
-          <div className="card muted">
-            Minex UI 壳 —— 从左侧选择面板，或从右侧运行命令。
-          </div>
-        )}
+        <div className="card muted">
+          {panel
+            ? `已选择视图：${panel.value.title ?? panel.value.id} —— 视图渲染由插件贡献，外壳不实现具体视图。`
+            : "Minex 通用外壳 —— 主区是视图槽位，画布/对话等插件视图将在此渲染。"}
+        </div>
       </div>
     </main>
   );
