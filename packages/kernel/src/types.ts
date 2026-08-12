@@ -17,8 +17,10 @@ export interface PluginManifest {
   settingsSchema?: Record<string, unknown>;
   /** 是否允许热重载（停用→激活）。默认 true */
   reloadable?: boolean;
-  /** 静态贡献声明（阶段 2 细化）。激活前即可用 */
+  /** 静态贡献声明（manifest 声明的）。激活前即可用 */
   contributes?: Record<string, unknown>;
+  /** 插件入口文件（相对插件目录）。loader 动态 import 它取 activate */
+  entry?: string;
 }
 
 /** 插件生命周期状态 */

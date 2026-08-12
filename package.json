@@ -7,9 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @minex/kernel",
-    "typecheck": "npm run typecheck -w @minex/kernel",
-    "test": "vitest run"
+    "build": "npm run build -w @minex/kernel && npm run build -w minex-demo-plugin",
+    "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-demo-plugin",
+    "test": "vitest run",
+    "plugins:sync": "node scripts/sync-plugins.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

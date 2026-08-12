@@ -1,0 +1,14 @@
+{
+  "name": "minex-demo-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minex demo 插件：验证 UI 贡献 / 命令 / 工具三条通道 + 设置读取",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.1.1"
+  }
+}

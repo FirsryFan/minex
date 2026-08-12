@@ -28,6 +28,8 @@ export type {
 
 export { createEventBus, type EventBus } from "./events.js";
 export { createLifecycle, type Lifecycle } from "./lifecycle.js";
+export { loadPluginsFromDir, type LoadResult, type PluginLoaderHost } from "./loader.js";
+export { parseManifest } from "./manifest.js";
 export {
   createRegistry,
   type CapabilityRegistry,

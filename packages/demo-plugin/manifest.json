@@ -1,0 +1,26 @@
+{
+  "id": "minex.demo",
+  "name": "Demo Plugin",
+  "version": "0.1.0",
+  "minKernelVersion": "0.1.1",
+  "entry": "./dist/index.js",
+  "reloadable": true,
+  "contributes": {
+    "ui": [
+      { "id": "demo-panel", "location": "leftPanel", "title": "Demo Panel" }
+    ],
+    "command": [
+      { "id": "demo.sayHello", "label": "Say Hello" }
+    ]
+  },
+  "settingsSchema": {
+    "type": "object",
+    "properties": {
+      "greeting": {
+        "type": "string",
+        "default": "Hello from Minex",
+        "description": "打招呼的文案"
+      }
+    }
+  }
+}

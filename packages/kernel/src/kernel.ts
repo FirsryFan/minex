@@ -1,5 +1,6 @@
 import { createEventBus, type EventBus } from "./events.js";
 import { createLifecycle, type Lifecycle } from "./lifecycle.js";
+import { loadPluginsFromDir, type LoadResult } from "./loader.js";
 import { createRegistry, type CapabilityRegistry } from "./registry.js";
 import { createInMemoryStorage, createJsonFileStorage } from "./storage.js";
 import type { Logger, PluginContext, PluginManifest, PluginModule, PluginState, QueryFilter, StorageProvider } from "./types.js";
@@ -18,6 +19,8 @@ export interface MinexKernel {
   readonly storage: StorageProvider;
   readonly plugins: {
     register(module: PluginModule): void;
+    /** 从目录发现并注册插件（静态贡献自动注册；不自动激活） */
+    loadFromDir(dir: string): Promise<LoadResult>;
     activate(pluginId: string): Promise<void>;
     deactivate(pluginId: string): Promise<void>;
     reload(pluginId: string): Promise<void>;
@@ -98,6 +101,11 @@ export function createKernel(opts: KernelOptions = {}): MinexKernel {
     storage,
     plugins: {
       register: (module) => lifecycle.register(module),
+      loadFromDir: (dir) =>
+        loadPluginsFromDir(dir, {
+          register: (module) => lifecycle.register(module),
+          registerStatic: (type, id, value, pluginId) => registry.register(type, id, value, { pluginId }),
+        }),
       activate: (id) => lifecycle.activate(id),
       deactivate: (id) => lifecycle.deactivate(id),
       reload: (id) => lifecycle.reload(id),
