@@ -7,6 +7,8 @@
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-soft: #eff6ff;
+  --color-on-primary: #ffffff;         /* 主色按钮上的文字 */
+  --mask-bg: rgba(15, 23, 42, 0.45);   /* 浮窗遮罩 */
 
   /* 背景分层：顶/左/右栏同底色（最底层），主区在其上（--color-main） */
   --color-bg: #f3f6fb;      /* 应用外层底色 */

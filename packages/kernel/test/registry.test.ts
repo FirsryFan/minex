@@ -89,6 +89,17 @@ describe("capability registry", () => {
     expect(() => r.register("tool", "", 1)).toThrow();
   });
 
+  it("U6: unregister removes runtime layer only, static survives", () => {
+    const r = createRegistry();
+    r.register("command", "c", { label: "static" }, { pluginId: "p1", origin: "static" });
+    r.register("command", "c", { label: "runtime", handler: () => {} }, { pluginId: "p1" });
+    r.unregister("command", "c");
+    expect(r.get("command", "c")?.value).toEqual({ label: "static" });
+    // 无 runtime 时再次 unregister → no-op，static 仍在
+    r.unregister("command", "c");
+    expect(r.get("command", "c")?.value).toEqual({ label: "static" });
+  });
+
   it("a throwing onChange handler does not block others", () => {
     const r = createRegistry();
     const events: string[] = [];

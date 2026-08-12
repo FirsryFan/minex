@@ -17,6 +17,8 @@ export type RegistryChange = {
  * - runtime：activate 注册，随停用/失败清除
  * - 有效值（effective）= runtime ?? static：激活时运行时贡献「阴影」静态声明；
  *   停用后揭掉阴影，露出静态层（如命令的 label 存活、handler 随停用消失）
+ * - 注意（U5）：跨层优先级不可比——runtime 层总是遮蔽 static 层（与 priority 无关）。
+ *   多插件在同一 (type,id) 的 static 与 runtime 分属不同插件时，runtime 胜。
  */
 export interface CapabilityRegistry {
   /**
@@ -97,12 +99,14 @@ export function createRegistry(): CapabilityRegistry {
       b.set(id, entry);
       fire(type, { type, id, pluginId, action: "registered" });
     },
+    // U6：unregister 只移除 runtime 层（活动贡献），静态声明保留到插件卸载。
     unregister(type, id) {
       const entry = store.get(type)?.get(id);
-      const existing = effective(entry);
-      if (!existing) return;
-      bucket(type).delete(id);
-      fire(type, { type, id, pluginId: existing.pluginId, action: "unregistered" });
+      if (!entry) return;
+      const removed = entry.runtime;
+      delete entry.runtime;
+      if (!entry.static && !entry.runtime) bucket(type).delete(id);
+      if (removed) fire(type, { type, id, pluginId: removed.pluginId, action: "unregistered" });
     },
     unregisterByPlugin(pluginId, origin) {
       const fired: RegistryChange[] = [];

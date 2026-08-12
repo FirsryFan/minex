@@ -19,7 +19,10 @@ export function SettingsForm() {
   const props = schema.properties ?? {};
 
   const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const current = kernel.storage.namespace(plugin!.manifest.id).get<Record<string, unknown>>("config");
+    // U3：plugin 可能为 undefined，用可选链，先构造空表再守卫
+    const current = plugin
+      ? kernel.storage.namespace(plugin.manifest.id).get<Record<string, unknown>>("config")
+      : undefined;
     const initial: Record<string, unknown> = {};
     for (const [k, p] of Object.entries(props)) {
       initial[k] = current?.[k] ?? p.default ?? (p.type === "boolean" ? false : "");
@@ -59,7 +62,11 @@ export function SettingsForm() {
               type={p.type === "number" ? "number" : "text"}
               value={String(values[key] ?? "")}
               onChange={(e) =>
-                setField(key, p.type === "number" ? Number(e.target.value) : e.target.value)
+                setField(
+                  key,
+                  // U8：number 空输入不覆盖为 0，保留原值
+                  p.type === "number" ? (e.target.value === "" ? values[key] : Number(e.target.value)) : e.target.value,
+                )
               }
             />
           )}

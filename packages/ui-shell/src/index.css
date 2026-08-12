@@ -104,7 +104,7 @@ body {
 /* 按钮 */
 .btn {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary);
   border: none;
   border-radius: var(--radius-sm);
   padding: 6px 14px;
@@ -201,7 +201,7 @@ body {
 .floating-mask {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--mask-bg);
   z-index: 100;
   display: flex;
   justify-content: center;

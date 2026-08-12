@@ -1,42 +1,26 @@
-import { createInMemoryStorage, createKernel, registerStaticContributions, type MinexKernel } from "@minex/kernel";
+import { createKernel, type MinexKernel } from "@minex/kernel";
 import { useEffect, useState } from "react";
 import { App } from "./App.js";
+import { bootPlugins } from "./boot.js";
 import { KernelContext } from "./kernel-context.js";
 import { PLUGINS } from "./plugins.js";
+import { createLocalStorageStorage } from "./storage-local.js";
 
 interface BootState {
   kernel?: MinexKernel;
   problems: string[];
 }
 
-/** 启动：建内核（内存存储）→ 注册静态贡献 → 注册插件 → 逐个激活（容错，C1 语义）→ 渲染 */
+/** 启动：建内核（localStorage 持久化）→ 注册+激活（容错回滚）→ 渲染 */
 export function Bootstrap() {
   const [state, setState] = useState<BootState>({ problems: [] });
 
   useEffect(() => {
-    const kernel = createKernel({ storage: createInMemoryStorage() });
-    const problems: string[] = [];
+    const kernel = createKernel({ storage: createLocalStorageStorage() });
     let cancelled = false;
 
     (async () => {
-      for (const p of PLUGINS) {
-        try {
-          registerStaticContributions(
-            {
-              register: (m) => kernel.plugins.register(m),
-              registerStatic: (type, id, value, pluginId) =>
-                kernel.registry.register(type, id, value, { pluginId, origin: "static" }),
-              unregisterByPlugin: (pid) => kernel.registry.unregisterByPlugin(pid),
-              isRegistered: (pid) => kernel.plugins.getState(pid) !== undefined,
-            },
-            p.manifest,
-          );
-          kernel.plugins.register(p);
-          await kernel.plugins.activate(p.manifest.id);
-        } catch (err) {
-          problems.push(`${p.manifest.id}: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
+      const problems = await bootPlugins(kernel, PLUGINS, () => cancelled);
       if (!cancelled) setState({ kernel, problems });
     })();
 

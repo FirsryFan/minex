@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
-/** 浮窗：遮罩变暗 + 内容高层显示，宽最多 61.8vw，非全屏时左右留白 */
+/** 浮窗：遮罩变暗 + 内容高层显示，宽最多 61.8vw，非全屏时左右留白；Esc 关闭（U9） */
 export function FloatingWindow({
   title,
   onClose,
@@ -10,6 +10,14 @@ export function FloatingWindow({
   onClose: () => void;
   children: ReactNode;
 }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div className="floating-mask" onClick={onClose}>
       <div className="floating" onClick={(e) => e.stopPropagation()}>
