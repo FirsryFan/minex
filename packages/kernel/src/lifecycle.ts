@@ -5,8 +5,10 @@ import { compareVersions } from "./version.js";
 export interface LifecycleOptions {
   /** 为插件构建 PluginContext；返回 context 与其 dispose（退订等清理） */
   createContext(manifest: PluginManifest): { context: PluginContext; dispose(): void };
-  /** 插件被停用 / 激活失败时回调（内核用它清理注册表贡献） */
+  /** 插件被停用 / 激活失败时回调（内核用它清理该插件的运行时贡献；静态贡献保留） */
   onDeactivated?(pluginId: string): void;
+  /** 插件被卸载（unregister）时回调（内核用它清理全部贡献，含静态） */
+  onUnregistered?(pluginId: string): void;
 }
 
 export interface Lifecycle {
@@ -30,7 +32,8 @@ interface Record {
 /**
  * 插件状态机：discovered → activated → deactivated | failed。
  * - failed 后副作用已回滚，可重试（activate）或转为 deactivated。
- * - 并发激活用 in-flight Promise 去重；环检测用调用链（chain），二者分离不混淆。
+ * - 并发激活用 in-flight Promise 去重；环检测用调用链（chain）。
+ * - 失败回滚用「激活 session」：整棵激活树新激活的插件全部逆序回滚（深层依赖不残留）。
  */
 export function createLifecycle(opts: LifecycleOptions): Lifecycle {
   const records = new Map<string, Record>();
@@ -53,7 +56,19 @@ export function createLifecycle(opts: LifecycleOptions): Lifecycle {
     }
   }
 
-  async function doActivate(pluginId: string, chain: Set<string>): Promise<void> {
+  /** 回滚一个激活 session：逆序停用本次树新激活的全部插件 */
+  async function rollbackSession(session: Set<string>, except: string): Promise<void> {
+    for (const pid of [...session].reverse()) {
+      if (pid === except) continue;
+      try {
+        await deactivate(pid);
+      } catch {
+        /* 回滚失败不阻断主错误 */
+      }
+    }
+  }
+
+  async function doActivate(pluginId: string, chain: Set<string>, session: Set<string>): Promise<void> {
     if (chain.has(pluginId)) {
       throw new Error(`Circular dependency detected at plugin "${pluginId}"`);
     }
@@ -65,14 +80,11 @@ export function createLifecycle(opts: LifecycleOptions): Lifecycle {
     }
     // discovered / loaded / failed 均可执行激活（failed = 重试）
 
-    const depsActivated: string[] = []; // 本次调用新激活的依赖（失败时逆序回滚）
     try {
       for (const dep of r.module.manifest.dependencies ?? []) {
         const d = records.get(dep);
         if (!d) throw new Error(`Plugin "${pluginId}" depends on missing plugin "${dep}"`);
-        const before = d.state;
-        await activateViaChain(dep, nextChain); // 链感知：环检测 + 并发去重
-        if (before !== "activated") depsActivated.push(dep);
+        await activateViaChain(dep, nextChain, session); // 链感知：环检测 + 并发去重
       }
 
       const { context, dispose } = opts.createContext(r.module.manifest);
@@ -80,16 +92,9 @@ export function createLifecycle(opts: LifecycleOptions): Lifecycle {
       const result = await r.module.activate(context);
       r.cleanup = typeof result === "function" ? result : null;
       r.state = "activated";
+      session.add(pluginId); // 只记录真正激活成功的，供失败时回滚
     } catch (err) {
-      // 回滚：逆序停用本次新激活的依赖（全激活或全不激活）
-      for (const dep of depsActivated.reverse()) {
-        try {
-          await deactivate(dep);
-        } catch {
-          /* 回滚失败不阻断主错误 */
-        }
-      }
-      // 清理本插件已产生的副作用：订阅（dispose）+ 注册贡献（onDeactivated）
+      await rollbackSession(session, pluginId); // 深层依赖一起逆序回滚
       r.dispose?.();
       r.dispose = null;
       r.cleanup = null;
@@ -102,9 +107,9 @@ export function createLifecycle(opts: LifecycleOptions): Lifecycle {
   /**
    * 链感知激活：
    * - 已在激活中：当前链含该插件 → 环；否则 → 复用 in-flight Promise（并发去重）
-   * - 未在激活中：启动 doActivate，把当前链传下去（环检测不因递归丢失）
+   * - 未在激活中：启动 doActivate，把当前链与激活 session 传下去
    */
-  async function activateViaChain(pluginId: string, chain: Set<string>): Promise<void> {
+  async function activateViaChain(pluginId: string, chain: Set<string>, session: Set<string>): Promise<void> {
     const existing = inFlight.get(pluginId);
     if (existing) {
       if (chain.has(pluginId)) {
@@ -112,13 +117,13 @@ export function createLifecycle(opts: LifecycleOptions): Lifecycle {
       }
       return existing;
     }
-    const p = doActivate(pluginId, chain).finally(() => inFlight.delete(pluginId));
+    const p = doActivate(pluginId, chain, session).finally(() => inFlight.delete(pluginId));
     inFlight.set(pluginId, p);
     return p;
   }
 
   function activate(pluginId: string): Promise<void> {
-    return activateViaChain(pluginId, new Set());
+    return activateViaChain(pluginId, new Set(), new Set());
   }
 
   async function deactivate(pluginId: string): Promise<void> {
@@ -166,7 +171,7 @@ export function createLifecycle(opts: LifecycleOptions): Lifecycle {
       if (r.state === "activated") {
         throw new Error(`Cannot unregister "${pluginId}" while activated; deactivate first`);
       }
-      opts.onDeactivated?.(pluginId); // 防御：清理可能残留的贡献
+      opts.onUnregistered?.(pluginId); // 全量清理（含静态贡献）
       records.delete(pluginId);
     },
     activate,

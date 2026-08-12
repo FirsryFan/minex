@@ -35,6 +35,9 @@ export interface PluginModule {
   activate: (ctx: PluginContext) => CleanupFn | void | Promise<CleanupFn | void>;
 }
 
+/** 贡献的来源：manifest 静态声明（存活到插件被卸载）或 activate 运行时注册（随停用清除） */
+export type ContributionOrigin = "static" | "runtime";
+
 /** 能力注册表里的一个贡献项 */
 export interface Contribution<Id extends string = string, T = unknown> {
   type: string;
@@ -42,6 +45,8 @@ export interface Contribution<Id extends string = string, T = unknown> {
   value: T;
   pluginId: string;
   priority: number;
+  /** 静态贡献随插件注册存活（reload/停用不清除）；运行时贡献随停用/失败清除 */
+  origin: ContributionOrigin;
 }
 
 /** 注册表查询过滤条件 */

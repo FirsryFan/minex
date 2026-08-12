@@ -1,4 +1,4 @@
-import type { Contribution, QueryFilter } from "./types.js";
+import type { Contribution, ContributionOrigin, QueryFilter } from "./types.js";
 
 /** 注册表变更事件（onChange 通知） */
 export type RegistryChange = {
@@ -13,11 +13,19 @@ export type RegistryChange = {
  * 内核只管理「按 type 注册 + 按 type 查询」，不认识任何 type 的语义。
  */
 export interface CapabilityRegistry {
-  /** 注册一个能力。同 type+id 冲突时 priority 高者胜；同优先级先到者胜。 */
-  register(type: string, id: string, value: unknown, opts?: { pluginId?: string; priority?: number }): void;
+  /**
+   * 注册一个能力。冲突语义：priority 高者胜；同优先级不同插件先到者胜；
+   * 同插件重注册 = 更新（允许任意优先级，含降级）。origin 标记来源。
+   */
+  register(
+    type: string,
+    id: string,
+    value: unknown,
+    opts?: { pluginId?: string; priority?: number; origin?: ContributionOrigin },
+  ): void;
   unregister(type: string, id: string): void;
-  /** 注销某个插件贡献的全部能力（停用/重载时用） */
-  unregisterByPlugin(pluginId: string): void;
+  /** 注销某插件贡献的能力。origin 省略 = 全部；指定则只清该来源（停用只清 runtime，静态保留） */
+  unregisterByPlugin(pluginId: string, origin?: ContributionOrigin): void;
   /** 查询某类型的能力列表，按 priority 降序；可用 { plugin } 过滤 */
   query<T = unknown>(type: string, filter?: QueryFilter): Contribution<string, T>[];
   /** 精确取一个能力 */
@@ -60,13 +68,15 @@ export function createRegistry(): CapabilityRegistry {
       const pluginId = opts.pluginId ?? "kernel";
       const raw = opts.priority ?? 0;
       const priority = Number.isFinite(raw) ? raw : 0; // NaN/Infinity 防呆
+      const origin = opts.origin ?? "runtime";
       const existing = store.get(type)?.get(id);
       if (existing) {
-        // 高优先级胜；同优先级不同插件 → 先到者胜；同插件重注册 → 更新
-        if (priority < existing.priority) return;
-        if (priority === existing.priority && existing.pluginId !== pluginId) return;
+        const samePlugin = existing.pluginId === pluginId;
+        // 不同插件：高优先级胜 / 同优先级先到者胜；同插件：任意优先级都允许更新（含降级）
+        if (!samePlugin && priority < existing.priority) return;
+        if (!samePlugin && priority === existing.priority) return;
       }
-      bucket(type).set(id, { type, id, value, pluginId, priority });
+      bucket(type).set(id, { type, id, value, pluginId, priority, origin });
       fire(type, { type, id, pluginId, action: "registered" });
     },
     unregister(type, id) {
@@ -75,11 +85,11 @@ export function createRegistry(): CapabilityRegistry {
       bucket(type).delete(id);
       fire(type, { type, id, pluginId: existing.pluginId, action: "unregistered" });
     },
-    unregisterByPlugin(pluginId) {
+    unregisterByPlugin(pluginId, origin) {
       const fired: RegistryChange[] = [];
       for (const [type, b] of store) {
         for (const [id, c] of [...b]) {
-          if (c.pluginId === pluginId) {
+          if (c.pluginId === pluginId && (origin === undefined || c.origin === origin)) {
             b.delete(id);
             fired.push({ type, id, pluginId, action: "unregistered" });
           }

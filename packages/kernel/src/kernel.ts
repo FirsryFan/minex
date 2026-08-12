@@ -90,7 +90,12 @@ export function createKernel(opts: KernelOptions = {}): MinexKernel {
 
   const lifecycle = createLifecycle({
     createContext,
+    // 停用/失败：只清运行时贡献，静态贡献（manifest 声明）随插件注册存活
     onDeactivated(pluginId) {
+      registry.unregisterByPlugin(pluginId, "runtime");
+    },
+    // 插件被卸载（unregister）：静态 + 运行时全清
+    onUnregistered(pluginId) {
       registry.unregisterByPlugin(pluginId);
     },
   });
@@ -104,7 +109,10 @@ export function createKernel(opts: KernelOptions = {}): MinexKernel {
       loadFromDir: (dir) =>
         loadPluginsFromDir(dir, {
           register: (module) => lifecycle.register(module),
-          registerStatic: (type, id, value, pluginId) => registry.register(type, id, value, { pluginId }),
+          registerStatic: (type, id, value, pluginId) =>
+            registry.register(type, id, value, { pluginId, origin: "static" }),
+          unregisterByPlugin: (pluginId) => registry.unregisterByPlugin(pluginId),
+          isRegistered: (pluginId) => lifecycle.getState(pluginId) !== undefined,
         }),
       activate: (id) => lifecycle.activate(id),
       deactivate: (id) => lifecycle.deactivate(id),

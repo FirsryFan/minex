@@ -1,7 +1,12 @@
 import type { PluginManifest } from "./types.js";
 
-/** 插件 id 允许的字符：字母数字 + 点号（反向域名风格）*/
-const ID_RE = /^[A-Za-z0-9._-]+$/;
+/**
+ * 插件 id 校验：点号分隔的段，每段以字母数字开头、可含字母数字/下划线/连字符。
+ * 拒绝空段、首尾分隔符、连续分隔符（".."、"-x"、"a."、"a..b" 均非法）。
+ */
+function isValidId(id: string): boolean {
+  return id.split(".").every((seg) => /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(seg));
+}
 
 /** 解析并校验 manifest。非法输入抛带明确信息的错误（错误早暴露）。 */
 export function parseManifest(raw: unknown): PluginManifest {
@@ -10,8 +15,10 @@ export function parseManifest(raw: unknown): PluginManifest {
   }
   const m = raw as Record<string, unknown>;
 
-  if (typeof m.id !== "string" || !ID_RE.test(m.id)) {
-    throw new Error(`Manifest: "id" must be a non-empty string matching ${ID_RE} (got ${JSON.stringify(m.id)})`);
+  if (typeof m.id !== "string" || !isValidId(m.id)) {
+    throw new Error(
+      `Manifest: "id" must be dotted-segments each starting with an alphanumeric (got ${JSON.stringify(m.id)})`,
+    );
   }
   if (typeof m.name !== "string" || !m.name) {
     throw new Error(`Manifest: "name" must be a non-empty string (plugin "${m.id ?? "?"}")`);

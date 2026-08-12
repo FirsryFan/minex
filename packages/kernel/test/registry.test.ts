@@ -60,6 +60,14 @@ describe("capability registry", () => {
     expect(r.get("tool", "x")?.value).toBe(2);
   });
 
+  it("m1: same-plugin priority downgrade is allowed", () => {
+    const r = createRegistry();
+    r.register("tool", "x", "high", { pluginId: "p1", priority: 10 });
+    r.register("tool", "x", "low", { pluginId: "p1", priority: 0 }); // 同插件降级
+    expect(r.get("tool", "x")?.value).toBe("low");
+    expect(r.get("tool", "x")?.priority).toBe(0);
+  });
+
   it("same priority + different plugin: first registrant wins", () => {
     const r = createRegistry();
     r.register("tool", "x", "first", { pluginId: "p1" });

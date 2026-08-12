@@ -48,4 +48,15 @@ describe("parseManifest", () => {
     expect(() => parseManifest({ id: "a.b", name: "x", version: "1", reloadable: "yes" })).toThrow(/reloadable/);
     expect(() => parseManifest({ id: "a.b", name: "x", version: "1", contributes: 5 })).toThrow(/contributes/);
   });
+
+  it("m4: rejects boundary ids", () => {
+    expect(() => parseManifest({ id: "..", name: "x", version: "1" })).toThrow(/id/);
+    expect(() => parseManifest({ id: "-x", name: "x", version: "1" })).toThrow(/id/);
+    expect(() => parseManifest({ id: "a.", name: "x", version: "1" })).toThrow(/id/);
+    expect(() => parseManifest({ id: "a..b", name: "x", version: "1" })).toThrow(/id/);
+    expect(() => parseManifest({ id: "a.-b", name: "x", version: "1" })).toThrow(/id/);
+    // 合法：段内可用连字符/下划线
+    expect(() => parseManifest({ id: "minex.demo2", name: "x", version: "1" })).not.toThrow();
+    expect(() => parseManifest({ id: "minex.demo_panel", name: "x", version: "1" })).not.toThrow();
+  });
 });

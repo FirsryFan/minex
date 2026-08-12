@@ -266,4 +266,26 @@ describe("kernel lifecycle", () => {
     await kernel.plugins.reload("d");
     expect(kernel.plugins.getState("d")).toBe("activated");
   });
+
+  it("L3: deep dependency failure rolls back the whole chain (no orphan)", async () => {
+    const kernel = testKernel();
+    kernel.plugins.register({
+      manifest: { id: "d", name: "D", version: "1.0.0" },
+      activate: () => {},
+    });
+    kernel.plugins.register({
+      manifest: { id: "b", name: "B", version: "1.0.0", dependencies: ["d"] },
+      activate: () => {},
+    });
+    kernel.plugins.register({
+      manifest: { id: "a", name: "A", version: "1.0.0", dependencies: ["b"] },
+      activate() {
+        throw new Error("a boom");
+      },
+    });
+    await expect(kernel.plugins.activate("a")).rejects.toThrow("a boom");
+    expect(kernel.plugins.getState("a")).toBe("failed");
+    expect(kernel.plugins.getState("b")).toBe("deactivated");
+    expect(kernel.plugins.getState("d")).toBe("deactivated"); // 深层依赖不残留
+  });
 });

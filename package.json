@@ -10,7 +10,7 @@
     "build": "npm run build -w @minex/kernel && npm run build -w minex-demo-plugin",
     "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-demo-plugin",
     "test": "vitest run",
-    "plugins:sync": "node scripts/sync-plugins.mjs"
+    "plugins:sync": "npm run build -w minex-demo-plugin && node scripts/sync-plugins.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
