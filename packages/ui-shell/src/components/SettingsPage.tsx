@@ -97,7 +97,8 @@ function ManageView({
 }) {
   // pending: driverId → 期望的启用状态（true=启用，false=禁用）；undefined=无待变更
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
+  // confirm: 依赖警告确认（pending = 确认后要合并的待变更；message = 警告文案）
+  const [confirm, setConfirm] = useState<{ pending: Record<string, boolean>; message: string } | null>(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -117,30 +118,36 @@ function ManageView({
 
   const pendingCount = Object.keys(pending).length;
 
-  /** 当前已激活且直接依赖 driverId 的驱动 */
+  /** 直接依赖 driverId 的驱动：已激活 OR 待启用（S4：含传递警告的场景按直接依赖，含 pending） */
   function dependents(driverId: string): string[] {
     return kernel.drivers
       .list()
       .filter(
         (d) =>
           d.manifest.dependencies?.includes(driverId) &&
-          kernel.drivers.getState(d.manifest.id) === "activated",
+          (kernel.drivers.getState(d.manifest.id) === "activated" || pending[d.manifest.id] === true),
       )
       .map((d) => d.manifest.id);
   }
 
   /** 标记待变更。禁用方向且被依赖 → 弹警告确认。 */
   function mark(id: string, enabled: boolean): void {
-    if (!enabled && dependents(id).length > 0) {
-      setConfirmTarget(id);
-      return;
+    if (!enabled) {
+      const deps = dependents(id);
+      if (deps.length > 0) {
+        setConfirm({
+          pending: { [id]: false },
+          message: `驱动 "${id}" 被 ${deps.length} 个驱动依赖（${deps.join("、")}），确定禁用？`,
+        });
+        return;
+      }
     }
     setPending((p) => ({ ...p, [id]: enabled }));
   }
 
-  function confirmDisable(): void {
-    if (confirmTarget) setPending((p) => ({ ...p, [confirmTarget]: false }));
-    setConfirmTarget(null);
+  function confirmApply(): void {
+    if (confirm) setPending((p) => ({ ...p, ...confirm.pending }));
+    setConfirm(null);
   }
 
   /** 点击切换：有 pending 则撤销；否则标记当前状态的相反 */
@@ -157,18 +164,42 @@ function ManageView({
     mark(id, !current);
   }
 
+  /** S2：全部禁用涉及被依赖驱动 → 弹确认 */
   function setAll(enabled: boolean): void {
     const next: Record<string, boolean> = { ...pending };
     for (const d of kernel.drivers.list()) next[d.manifest.id] = enabled;
+    if (!enabled) {
+      const affected = kernel.drivers.list().filter((d) => dependents(d.manifest.id).length > 0);
+      if (affected.length > 0) {
+        setConfirm({
+          pending: next,
+          message: `「全部禁用」涉及 ${affected.length} 个被依赖驱动（${affected
+            .map((d) => d.manifest.id)
+            .join("、")}），确定？`,
+        });
+        return;
+      }
+    }
     setPending(next);
   }
 
-  /** 统一应用所有待变更（应用后清空，onApplied 强制刷新） */
+  /** S1：统一应用（先启用[依赖先于依赖者]，后禁用[依赖者先于依赖]；失败项保留并汇报） */
   async function applyAll(): Promise<void> {
-    for (const [id, enabled] of Object.entries(pending)) {
-      await applyDriverState(kernel, id, enabled);
+    const entries = Object.entries(pending);
+    const enables = entries.filter(([, e]) => e);
+    const disables = entries.filter(([, e]) => !e);
+    const failures: string[] = [];
+    for (const [id] of enables) {
+      if (!(await applyDriverState(kernel, id, true))) failures.push(id);
     }
-    setPending({});
+    for (const [id] of disables) {
+      if (!(await applyDriverState(kernel, id, false))) failures.push(id);
+    }
+    const failedSet = new Set(failures);
+    const remaining: Record<string, boolean> = {};
+    for (const [id, e] of entries) if (failedSet.has(id)) remaining[id] = e;
+    setPending(remaining);
+    if (failures.length > 0) console.error(`驱动状态应用失败：${failures.join(", ")}`);
     onApplied();
   }
 
@@ -241,11 +272,11 @@ function ManageView({
         </tbody>
       </table>
 
-      {confirmTarget && (
+      {confirm && (
         <ConfirmModal
-          message={`驱动 "${confirmTarget}" 被 ${dependents(confirmTarget).length} 个已激活驱动依赖，确定禁用？`}
-          onConfirm={confirmDisable}
-          onCancel={() => setConfirmTarget(null)}
+          message={confirm.message}
+          onConfirm={confirmApply}
+          onCancel={() => setConfirm(null)}
         />
       )}
     </div>
@@ -278,18 +309,20 @@ function ConfirmModal({
   );
 }
 
-/** 对称应用驱动状态：启用（deactivated→reload）与禁用统一，逐驱动容错 */
-async function applyDriverState(kernel: MinexKernel, id: string, enabled: boolean): Promise<void> {
+/** 对称应用驱动状态：启用（deactivated→reload）与禁用统一，逐驱动容错。返回是否成功。 */
+async function applyDriverState(kernel: MinexKernel, id: string, enabled: boolean): Promise<boolean> {
   const state = kernel.drivers.getState(id);
   try {
     if (enabled) {
-      if (state === "activated") return;
+      if (state === "activated") return true;
       if (state === "deactivated") await kernel.drivers.reload(id);
       else await kernel.drivers.activate(id);
     } else {
       if (state === "activated") await kernel.drivers.deactivate(id);
     }
+    return true;
   } catch (err) {
     console.error(`应用驱动状态失败 ${id}:`, err);
+    return false;
   }
 }

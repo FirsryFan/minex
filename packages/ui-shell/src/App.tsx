@@ -55,15 +55,21 @@ export function App({ problems }: { problems: string[] }) {
     }
   }
 
-  if (view === "settings") {
-    return <SettingsPage onBack={() => setView("workspace")} />;
-  }
-
   const drivers = kernel.drivers.list().map((m) => ({
     id: m.manifest.id,
     name: m.manifest.name,
     icon: m.manifest.icon,
   }));
+
+  if (view === "settings") {
+    // T1：ThemeManager 常驻（两种视图都挂载），设置页改主题即时生效
+    return (
+      <>
+        <ThemeManager dark={dark} />
+        <SettingsPage onBack={() => setView("workspace")} />
+      </>
+    );
+  }
 
   const shellClass = `shell${collapsed.left ? " left-collapsed" : ""}${collapsed.right ? " right-collapsed" : ""}`;
 

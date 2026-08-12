@@ -4,7 +4,13 @@
  */
 export function DriverIcon({ icon, size = 18 }: { icon?: string; size?: number }) {
   if (!icon) return <span className="driver-icon">📦</span>;
-  const isImage = icon.startsWith("data:") || icon.startsWith("http") || icon.startsWith("/");
+  const isImage =
+    icon.startsWith("data:") ||
+    icon.startsWith("http") ||
+    icon.startsWith("/") ||
+    icon.startsWith("./") || // I1：相对路径（文件加载场景 manifest.icon）
+    icon.endsWith(".svg") ||
+    icon.endsWith(".png");
   if (isImage) {
     return (
       <img

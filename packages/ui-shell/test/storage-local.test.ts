@@ -9,7 +9,10 @@ function fakeLocalStorage() {
     setItem: (k: string, v: string) => void map.set(k, v),
     removeItem: (k: string) => void map.delete(k),
     key: (i: number) => [...map.keys()][i] ?? null,
-    length: 0,
+    // T0：length 必须是 getter（list() 用 ls().length 遍历；静态 0 会让循环永不执行）
+    get length() {
+      return map.size;
+    },
     clear: () => map.clear(),
   };
 }
