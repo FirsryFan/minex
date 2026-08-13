@@ -68,6 +68,13 @@ export function App({ problems }: { problems: string[] }) {
       icon: m.manifest.icon,
     }));
 
+  // 活动驱动的工作区贡献（有则渲染驱动工作区，否则默认布局）。
+  // 注意：useMemo 必须在条件 return 之前（Hooks 规则，否则切设置视图时 hooks 数量变化导致崩溃）
+  const workspaceView = activeDriverId
+    ? kernel.registry.get<{ load: () => Promise<{ default: ComponentType<{ kernel: typeof kernel }> }> }>("workspace", activeDriverId)
+    : undefined;
+  const WorkspaceView = useMemo(() => (workspaceView ? lazy(workspaceView.value.load) : null), [workspaceView, activeDriverId]);
+
   if (view === "settings") {
     // T1：ThemeManager 常驻（两种视图都挂载），设置页改主题即时生效
     return (
@@ -77,12 +84,6 @@ export function App({ problems }: { problems: string[] }) {
       </>
     );
   }
-
-  // 活动驱动的工作区贡献（有则渲染驱动工作区，否则默认布局）
-  const workspaceView = activeDriverId
-    ? kernel.registry.get<{ load: () => Promise<{ default: ComponentType<{ kernel: typeof kernel }> }> }>("workspace", activeDriverId)
-    : undefined;
-  const WorkspaceView = useMemo(() => (workspaceView ? lazy(workspaceView.value.load) : null), [workspaceView, activeDriverId]);
 
   return (
     <div className="shell">
