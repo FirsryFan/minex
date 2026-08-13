@@ -908,3 +908,17 @@ button {
   background: var(--color-hover);
   color: var(--color-text-muted);
 }
+
+/* 即时渲染（所见即所得）编辑区 */
+.md-wysiwyg {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  outline: none;
+  cursor: text;
+  min-height: 100%;
+}
+.md-wysiwyg:focus {
+  box-shadow: inset 0 0 0 1px var(--color-primary-soft);
+}
