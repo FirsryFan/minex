@@ -10,15 +10,14 @@ interface AppearanceSettings {
   enFont?: string;
   iconTheme?: string;
   customCss?: string;
-  /** 全局缩放（百分比，100 = 不缩放） */
+}
+
+/** 全局外观设置（不随主题深浅，独立存储于 "globalSettings"） */
+interface GlobalSettings {
   zoom?: number;
-  /** 是否启用动画 */
   animations?: boolean;
-  /** 是否启用亚克力效果 */
   acrylic?: boolean;
-  /** 亚克力透明度（0-100，100 = 不透明） */
   acrylicOpacity?: number;
-  /** 背景图片 URL */
   backgroundImage?: string;
 }
 
@@ -55,7 +54,7 @@ export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string 
  * 全局设置 CSS（两种模式都适用，与深浅无关）：缩放 / 动画 / 亚克力 / 背景图。
  * 纯函数可测。
  */
-export function buildGlobalCss(s: AppearanceSettings): string {
+export function buildGlobalCss(s: GlobalSettings): string {
   const parts: string[] = [];
   if (s.zoom && s.zoom !== 100) {
     parts.push(`:root { zoom: ${s.zoom / 100}; }`);
@@ -109,11 +108,12 @@ export default {
         mode: "dark" as const,
         css: buildCss("dark", darkSettings),
       });
-      // 全局设置（缩放/动画/亚克力/背景图）——mode 缺省，两种模式都注入（用浅色主题的全局设置）
+      // 全局设置（缩放/动画/亚克力/背景图）——独立存储，与主题深浅无关，两种模式都注入
+      const globalSettings = (ctx.storage.get("globalSettings") ?? {}) as GlobalSettings;
       ctx.register("theme", "minex.appearance.global", {
         id: "minex.appearance.global",
         name: "Appearance Global",
-        css: buildGlobalCss(lightSettings),
+        css: buildGlobalCss(globalSettings),
       });
     };
 

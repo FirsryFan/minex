@@ -20,9 +20,7 @@ describe("renderMarkdown", () => {
     expect(html).toContain("<code>");
   });
   it("renders highlighted code with language", () => {
-    const html = renderMarkdown("```ts
-const a = 1;
-```", { codeHighlight: true });
+    const html = renderMarkdown("```ts\nconst a = 1;\n```", { codeHighlight: true });
     expect(html).toContain("hljs");
   });
   it("renders KaTeX math when enabled", () => {

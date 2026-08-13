@@ -82,7 +82,12 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
       </div>
 
       {activeTab === "about" && <AboutView kernel={kernel} />}
-      {activeTab === "manage" && <ThemeGrid themes={themes} onOpen={openTheme} />}
+      {activeTab === "manage" && (
+        <>
+          <ThemeGrid themes={themes} onOpen={openTheme} />
+          <GlobalSettingsPanel kernel={kernel} />
+        </>
+      )}
       {activeTheme && (
         <ThemeSettings
           key={activeTheme.id}
@@ -190,38 +195,6 @@ function ThemeSettings({
             value={String(settings.customCss ?? "")}
             onChange={(e) => setField("customCss", e.target.value)}
           />
-        </div>
-      </div>
-
-      <div className="section-title">全局设置</div>
-      <div className="field">
-        <label>全局缩放</label>
-        <div className="field-control">
-          <input type="number" min={50} max={200} disabled={readonly} value={Number(settings.zoom ?? 100)} onChange={(e) => setField("zoom", Number(e.target.value) || 100)} />
-        </div>
-      </div>
-      <div className="field">
-        <label>动画效果</label>
-        <div className="field-control">
-          <input type="checkbox" disabled={readonly} checked={settings.animations !== false} onChange={(e) => setField("animations", e.target.checked)} />
-        </div>
-      </div>
-      <div className="field">
-        <label>亚克力效果</label>
-        <div className="field-control">
-          <input type="checkbox" disabled={readonly} checked={settings.acrylic === true} onChange={(e) => setField("acrylic", e.target.checked)} />
-        </div>
-      </div>
-      <div className="field">
-        <label>亚克力透明度</label>
-        <div className="field-control">
-          <input type="number" min={0} max={100} disabled={readonly} value={Number(settings.acrylicOpacity ?? 80)} onChange={(e) => setField("acrylicOpacity", Number(e.target.value) || 80)} />
-        </div>
-      </div>
-      <div className="field">
-        <label>背景图片 URL</label>
-        <div className="field-control">
-          <input type="text" disabled={readonly} value={String(settings.backgroundImage ?? "")} onChange={(e) => setField("backgroundImage", e.target.value)} />
         </div>
       </div>
 
@@ -444,4 +417,58 @@ function DriverSettingItem({
       </div>
     </div>
   );
+}
+
+/** 全局外观设置面板（独立于主题，存储于 "globalSettings"） */
+function GlobalSettingsPanel({ kernel }: { kernel: MinexKernel }) {
+  const ns = kernel.storage.namespace("minex.appearance");
+  const [g, setG] = useState<Record<string, unknown>>(() => (ns.get("globalSettings") as Record<string, unknown>) ?? {});
+
+  function setField(key: string, value: unknown): void {
+    const next = { ...g, [key]: value };
+    setG(next);
+    ns.set("globalSettings", next);
+    kernel.events.emit("minex:dataChanged", { driverId: "minex.appearance" });
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="section-title">全局设置</div>
+      <div className="field">
+        <label>全局缩放</label>
+        <div className="field-control">
+          <input type="number" min={50} max={200} value={Number(g.zoom ?? 100)} onChange={(e) => setField("zoom", clamp(Number(e.target.value), 50, 200))} />
+        </div>
+      </div>
+      <div className="field">
+        <label>动画效果</label>
+        <div className="field-control">
+          <input type="checkbox" checked={g.animations !== false} onChange={(e) => setField("animations", e.target.checked)} />
+        </div>
+      </div>
+      <div className="field">
+        <label>亚克力效果</label>
+        <div className="field-control">
+          <input type="checkbox" checked={g.acrylic === true} onChange={(e) => setField("acrylic", e.target.checked)} />
+        </div>
+      </div>
+      <div className="field">
+        <label>亚克力透明度</label>
+        <div className="field-control">
+          <input type="number" min={0} max={100} value={Number(g.acrylicOpacity ?? 80)} onChange={(e) => setField("acrylicOpacity", clamp(Number(e.target.value), 0, 100))} />
+        </div>
+      </div>
+      <div className="field">
+        <label>背景图片 URL</label>
+        <div className="field-control">
+          <input type="text" value={String(g.backgroundImage ?? "")} onChange={(e) => setField("backgroundImage", e.target.value)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  if (Number.isNaN(v)) return lo;
+  return Math.max(lo, Math.min(hi, v));
 }
