@@ -594,3 +594,96 @@ code {
   background: color-mix(in srgb, var(--color-unfinished, #f59e0b) 15%, transparent);
   color: var(--color-unfinished, #f59e0b);
 }
+
+/* —— appearance 驱动：主题管理 —— */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--spacing-md);
+}
+.theme-card {
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  overflow: hidden;
+  cursor: default;
+}
+.theme-card:hover {
+  box-shadow: var(--shadow-card);
+}
+.theme-preview {
+  height: 100px;
+  background: var(--color-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.theme-preview-placeholder {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+.theme-meta {
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.theme-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.theme-readonly {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--color-text-muted);
+  color: var(--color-bg);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+/* 虚线框加号（导航到主题商店，占位） */
+.theme-add {
+  border-style: dashed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  min-height: 160px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.theme-add:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.theme-add-plus {
+  font-size: 28px;
+  line-height: 1;
+}
+/* 双击打开的主题选项卡面板 */
+.theme-open-panel {
+  margin-top: var(--spacing-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  padding: var(--spacing-md);
+}
+.theme-open-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+}
+.readme-card pre {
+  font-size: 13px;
+  line-height: 1.6;
+}

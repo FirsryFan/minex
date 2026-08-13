@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
+import type { ComponentType } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import { DriverIcon } from "./DriverIcon.js";
 import { SettingsForm } from "./SettingsForm.js";
 
 type Tab = "about" | "settings";
 
+interface SettingsViewContribution {
+  load: () => Promise<{ default: ComponentType<{ kernel: MinexKernel }> }>;
+}
+
 /**
  * 驱动详情页：头部（大图标居左 + 介绍居右）+ 选项卡（介绍 / 设置）。
+ * 若驱动贡献了 settingsView（自定义设置界面），则用其替代默认「介绍/设置」结构。
  * 图片大小恒定（足够大的值），不随介绍内容宽度变化。
  */
 export function DriverDetail({
@@ -26,6 +32,24 @@ export function DriverDetail({
   }
   const m = driver.manifest;
   const state = kernel.drivers.getState(m.id);
+
+  // 方案 A：驱动贡献的自定义设置视图（惰性加载），替代默认结构
+  const settingsView = kernel.registry.get<SettingsViewContribution>("settingsView", driverId);
+  if (settingsView) {
+    const View = lazy(settingsView.value.load);
+    return (
+      <div>
+        <div className="manage-toolbar">
+          <button className="icon-btn" onClick={onBack}>
+            ← 返回
+          </button>
+        </div>
+        <Suspense fallback={<div className="muted">加载设置界面…</div>}>
+          <View kernel={kernel} />
+        </Suspense>
+      </div>
+    );
+  }
 
   return (
     <div>

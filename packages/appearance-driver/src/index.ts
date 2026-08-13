@@ -3,53 +3,57 @@ import type { DriverContext } from "@minex/kernel";
 interface AppearanceSettings {
   primaryColor?: string;
   backgroundColor?: string;
-  unfinishedColor?: string;
-  errorColor?: string;
-  uiEnFont?: string;
-  uiZhFont?: string;
-  contentEnFont?: string;
-  contentZhFont?: string;
-  codeFont?: string;
+  warningColor?: string;
+  dangerColor?: string;
+  zhFont?: string;
+  enFont?: string;
   iconTheme?: string;
   customCss?: string;
 }
 
-/** 字体名加引号（W2：含空格字体名如 "Microsoft YaHei" 必须引号，否则被解析为两个字体系列静默回退） */
+/** 字体名加引号（含空格字体名如 "Microsoft YaHei" 必须引号） */
 function quoteFont(name: string): string {
   return name.startsWith('"') || name.startsWith("'") ? name : `"${name}"`;
 }
 
-/**
- * 由设置生成主题 CSS 覆盖块（浅/深各一份）+ 追加自定义 CSS。
- * 导出为纯函数（可单测）：输入设置对象，输出合法 CSS。
- */
+/** 由主题全局设置生成 CSS 覆盖块（浅/深各一份）+ 追加自定义 CSS。纯函数可测。 */
 export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string {
   const sel = mode === "dark" ? '[data-theme="dark"]' : ":root";
   const lines: string[] = [];
   if (s.primaryColor) lines.push(`  --color-primary: ${s.primaryColor};`);
   if (s.backgroundColor) lines.push(`  --color-bg: ${s.backgroundColor};`);
-  if (s.unfinishedColor) lines.push(`  --color-unfinished: ${s.unfinishedColor};`);
-  if (s.errorColor) lines.push(`  --color-error: ${s.errorColor};`);
+  if (s.warningColor) lines.push(`  --color-warning: ${s.warningColor};`);
+  if (s.dangerColor) lines.push(`  --color-danger: ${s.dangerColor};`);
 
-  const uiFont = [s.uiEnFont, s.uiZhFont].filter(Boolean).map(quoteFont).join(", ");
-  if (uiFont) lines.push(`  --font-ui: ${uiFont}, system-ui, sans-serif;`);
-  const contentFont = [s.contentEnFont, s.contentZhFont].filter(Boolean).map(quoteFont).join(", ");
-  if (contentFont) lines.push(`  --font-content: ${contentFont}, system-ui, sans-serif;`);
-  if (s.codeFont) lines.push(`  --font-code: ${quoteFont(s.codeFont)}, ui-monospace, monospace;`);
+  // 全局字体：中文 + 英文（UI 与内容统一）
+  const font = [s.enFont, s.zhFont].filter(Boolean).map(quoteFont).join(", ");
+  if (font) lines.push(`  --font-ui: ${font}, system-ui, sans-serif;`);
+  if (font) lines.push(`  --font-content: ${font}, system-ui, sans-serif;`);
 
   let css = `${sel} {\n${lines.join("\n")}\n}`;
   if (s.customCss) css += `\n${s.customCss}`;
   return css;
 }
 
+interface Theme {
+  id: string;
+  settings?: Record<string, unknown>;
+}
+
 /**
- * 外观驱动：贡献两个 theme（浅/深），外壳 ThemeManager 注入 CSS。
- * 设置保存在 storage config；收到 minex:dataChanged 后重注册主题（外壳随即重应用）。
+ * 外观驱动：贡献 theme（浅/深 CSS）+ settingsView（惰性加载 React 组件）。
+ * - 主题设置存 storage "themes"，当前激活主题存 "activeThemeId"。
+ * - 收到 minex:dataChanged 后重注册 theme（外壳随即重应用）。
+ * - settingsView 惰性 import：Node(CLI) 宿主不调用 load()，不加载 React。
  */
 export default {
   async activate(ctx: DriverContext) {
     const apply = (): void => {
-      const settings = (ctx.storage.get("config") ?? {}) as AppearanceSettings;
+      const themes = (ctx.storage.get("themes") ?? []) as Theme[];
+      const activeId = (ctx.storage.get("activeThemeId") ?? "default") as string;
+      const theme = themes.find((t) => t.id === activeId) ?? themes[0];
+      const settings = (theme?.settings ?? {}) as AppearanceSettings;
+
       ctx.register("theme", "minex.appearance.light", {
         id: "minex.appearance.light",
         name: "Appearance Light",
@@ -63,8 +67,15 @@ export default {
         css: buildCss("dark", settings),
       });
     };
+
     apply();
-    const off = ctx.on("minex:dataChanged", () => apply()); // 设置保存后重注册
+
+    // settingsView：惰性加载 React 组件（Node 宿主永不触发）
+    ctx.register("settingsView", "minex.appearance", {
+      load: () => import("./settings-view.js"),
+    });
+
+    const off = ctx.on("minex:dataChanged", () => apply());
     return () => off();
   },
 };

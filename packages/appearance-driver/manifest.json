@@ -22,58 +22,22 @@
             "default": "#f3f6fb",
             "description": "背景色"
           },
-          "unfinishedColor": {
+          "warningColor": {
             "type": "color",
             "default": "#f59e0b",
-            "description": "未完成标记（提示色）"
+            "description": "提示色"
           },
-          "errorColor": {
+          "dangerColor": {
             "type": "color",
             "default": "#ef4444",
-            "description": "报错（提示色）"
+            "description": "警告色"
           }
         }
       },
       {
         "title": "字体设置",
         "properties": {
-          "uiEnFont": {
-            "type": "font",
-            "enum": [
-              "Arial",
-              "Helvetica",
-              "Georgia",
-              "Times New Roman",
-              "Verdana",
-              "Tahoma",
-              "Trebuchet MS",
-              "Courier New",
-              "Segoe UI",
-              "Roboto",
-              "Open Sans",
-              "Lato",
-              "Montserrat",
-              "Merriweather",
-              "Source Sans Pro",
-              "Noto Sans",
-              "PT Sans",
-              "Ubuntu",
-              "Futura",
-              "Garamond",
-              "Palatino",
-              "Cambria",
-              "Calibri",
-              "Consolas",
-              "Impact",
-              "Comic Sans MS",
-              "Candara",
-              "Constantia",
-              "Corbel"
-            ],
-            "default": "",
-            "description": "UI 英文字体（留空用默认）"
-          },
-          "uiZhFont": {
+          "zhFont": {
             "type": "font",
             "enum": [
               "PingFang SC",
@@ -81,105 +45,38 @@
               "SimHei",
               "SimSun",
               "Songti SC",
-              "Noto Sans CJK SC",
-              "Noto Serif CJK SC",
-              "Source Han Sans SC",
-              "Source Han Serif SC",
-              "WenQuanYi Micro Hei",
               "KaiTi",
               "FangSong",
-              "STHeiti",
-              "STSong",
-              "STKaiti",
-              "STFangsong",
-              "Hiragino Sans GB"
+              "Noto Sans CJK SC",
+              "Source Han Sans SC"
             ],
             "default": "",
-            "description": "UI 中文字体"
+            "description": "全局中文"
           },
-          "contentEnFont": {
+          "enFont": {
             "type": "font",
             "enum": [
               "Arial",
-              "Helvetica",
               "Georgia",
               "Times New Roman",
               "Verdana",
               "Tahoma",
               "Trebuchet MS",
-              "Courier New",
               "Segoe UI",
               "Roboto",
               "Open Sans",
-              "Lato",
-              "Montserrat",
-              "Merriweather",
-              "Source Sans Pro",
-              "Noto Sans",
-              "PT Sans",
-              "Ubuntu",
-              "Futura",
-              "Garamond",
-              "Palatino",
-              "Cambria",
-              "Calibri",
+              "Courier New",
               "Consolas",
               "Impact",
-              "Comic Sans MS",
-              "Candara",
-              "Constantia",
-              "Corbel"
+              "Comic Sans MS"
             ],
             "default": "",
-            "description": "内容英文字体"
-          },
-          "contentZhFont": {
-            "type": "font",
-            "enum": [
-              "PingFang SC",
-              "Microsoft YaHei",
-              "SimHei",
-              "SimSun",
-              "Songti SC",
-              "Noto Sans CJK SC",
-              "Noto Serif CJK SC",
-              "Source Han Sans SC",
-              "Source Han Serif SC",
-              "WenQuanYi Micro Hei",
-              "KaiTi",
-              "FangSong",
-              "STHeiti",
-              "STSong",
-              "STKaiti",
-              "STFangsong",
-              "Hiragino Sans GB"
-            ],
-            "default": "",
-            "description": "内容中文字体"
-          },
-          "codeFont": {
-            "type": "font",
-            "enum": [
-              "Cascadia Code",
-              "JetBrains Mono",
-              "Consolas",
-              "Courier New",
-              "Fira Code",
-              "Source Code Pro",
-              "Ubuntu Mono",
-              "Menlo",
-              "Monaco",
-              "DejaVu Sans Mono",
-              "Inconsolata",
-              "Hack"
-            ],
-            "default": "",
-            "description": "代码字体"
+            "description": "全局英文"
           }
         }
       },
       {
-        "title": "UI 图标设置",
+        "title": "图标设置",
         "properties": {
           "iconTheme": {
             "type": "string",
@@ -188,22 +85,12 @@
               "简约"
             ],
             "default": "默认",
-            "description": "图标体系（仅下拉选择，不做逐项设置）"
-          }
-        }
-      },
-      {
-        "title": "代码块设置",
-        "properties": {
-          "customCss": {
-            "type": "textarea",
-            "default": "",
-            "description": "自定义 CSS（追加到主题覆盖之后，可定义任意变量）"
+            "description": "图标体系"
           }
         }
       }
     ]
   },
   "source": "本地",
-  "description": "外观驱动：主题色/字体/图标/代码块设置，贡献 theme 给外壳"
+  "description": "外观驱动：主题管理 + 全局外观设置（颜色/字体/图标），贡献 theme 给外壳"
 }
