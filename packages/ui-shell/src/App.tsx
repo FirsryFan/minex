@@ -21,6 +21,8 @@ export function App({ problems }: { problems: string[] }) {
     typeof localStorage !== "undefined" ? localStorage.getItem(ACTIVE_DRIVER_KEY) : null,
   );
   const [collapsed, setCollapsed] = useState({ left: false, right: false });
+  // 左右栏宽度（可拖拽调整，受最小宽度约束）；collapsed 时由 CSS 收缩为窄条
+  const [widths, setWidths] = useState({ left: 220, right: 220 });
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
   const [dark, setDark] = useState<boolean>(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem(THEME_KEY) : null;
@@ -75,10 +77,8 @@ export function App({ problems }: { problems: string[] }) {
     );
   }
 
-  const shellClass = `shell${collapsed.left ? " left-collapsed" : ""}${collapsed.right ? " right-collapsed" : ""}`;
-
   return (
-    <div className={shellClass}>
+    <div className="shell">
       <ThemeManager dark={dark} />
       <TopBar
         drivers={drivers}
@@ -88,14 +88,56 @@ export function App({ problems }: { problems: string[] }) {
         onToggleTheme={() => setDark((d) => !d)}
         onOpenSettings={() => setView("settings")}
       />
-      <Sidebar selectedPanelId={selectedPanelId} onSelect={setSelectedPanelId} problems={problems} />
-      <MainArea
-        collapsed={collapsed}
-        onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
-        onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
-        selectedPanelId={selectedPanelId}
-      />
-      <RightBar />
+      <div className="workspace">
+        <div
+          className={`sidebar${collapsed.left ? " collapsed" : ""}`}
+          style={{ width: collapsed.left ? undefined : widths.left }}
+        >
+          <Sidebar
+            selectedPanelId={selectedPanelId}
+            onSelect={(id) => setSelectedPanelId(id === selectedPanelId ? null : id)}
+            problems={problems}
+          />
+        </div>
+        {!collapsed.left && (
+          <Resizer side="left" onResize={(dx) => setWidths((w) => ({ ...w, left: clamp(w.left + dx, 160, 480) }))} />
+        )}
+        <MainArea
+          collapsed={collapsed}
+          onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
+          onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
+          selectedPanelId={selectedPanelId}
+        />
+        {!collapsed.right && (
+          <Resizer side="right" onResize={(dx) => setWidths((w) => ({ ...w, right: clamp(w.right - dx, 160, 480) }))} />
+        )}
+        <div
+          className={`rightbar${collapsed.right ? " collapsed" : ""}`}
+          style={{ width: collapsed.right ? undefined : widths.right }}
+        >
+          <RightBar />
+        </div>
+      </div>
     </div>
   );
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v));
+}
+
+/** 可拖拽分隔条：左右栏宽度的拖拽把手 */
+function Resizer({ side, onResize }: { side: "left" | "right"; onResize: (dx: number) => void }) {
+  function onMouseDown(e: React.MouseEvent): void {
+    e.preventDefault();
+    const startX = e.clientX;
+    const move = (ev: MouseEvent) => onResize(ev.clientX - startX);
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+  return <div className={`resizer resizer-${side}`} onMouseDown={onMouseDown} />;
 }

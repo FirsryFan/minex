@@ -30,12 +30,12 @@ export function MainArea({
     <main className="main">
       {/* 顶条：折叠按钮在主区顶条左右两侧 */}
       <div className="main-strip">
-        <button className="icon-btn" onClick={onToggleLeft}>
-          {collapsed.left ? "左栏 ▸" : "◂ 左栏"}
+        <button className="icon-btn" title="折叠左栏" onClick={onToggleLeft}>
+          {collapsed.left ? "»" : "«"}
         </button>
         <span className="muted">{panel ? panel.value.title ?? selectedPanelId : "Minex"}</span>
-        <button className="icon-btn" onClick={onToggleRight}>
-          {collapsed.right ? "◂ 右栏" : "右栏 ▸"}
+        <button className="icon-btn" title="折叠右栏" onClick={onToggleRight}>
+          {collapsed.right ? "«" : "»"}
         </button>
       </div>
 

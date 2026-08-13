@@ -22,51 +22,59 @@ code {
   font-family: var(--font-code);
 }
 
-/* 布局：顶/左/右在最底层（同底色），主区抬升一层带圆角（|q--p|） */
+/* 布局：flex（顶栏 + 工作区）。侧栏可拖拽宽度；折叠为窄条；主区抬升圆角。 */
 .shell {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  grid-template-columns: var(--sidebar-w) 1fr var(--sidebar-w);
-  grid-template-rows: var(--topbar-h) 1fr;
-  grid-template-areas:
-    "topbar topbar topbar"
-    "sidebar main rightbar";
-  transition: grid-template-columns 0.2s ease;
 }
-.shell.left-collapsed {
-  grid-template-columns: 0 1fr var(--sidebar-w);
-}
-.shell.right-collapsed {
-  grid-template-columns: var(--sidebar-w) 1fr 0;
-}
-.shell.left-collapsed.right-collapsed {
-  grid-template-columns: 0 1fr 0;
-}
-
 .topbar {
-  grid-area: topbar;
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
   padding: 0 var(--spacing-lg);
   background: var(--color-bars);
+  height: var(--topbar-h);
+  flex: 0 0 auto;
 }
-.sidebar {
-  grid-area: sidebar;
-  background: var(--color-bars);
-  padding: var(--spacing-md);
-  overflow-y: auto;
+.workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
+.sidebar,
 .rightbar {
-  grid-area: rightbar;
   background: var(--color-bars);
-  padding: var(--spacing-md);
   overflow-y: auto;
+  overflow-x: hidden;
+  flex: 0 0 auto;
+}
+.sidebar > *,
+.rightbar > * {
+  padding: var(--spacing-md);
+}
+.sidebar.collapsed,
+.rightbar.collapsed {
+  width: 32px !important; /* 折叠成侧面窄条 */
+}
+.sidebar.collapsed > *,
+.rightbar.collapsed > * {
+  display: none;
+}
+
+/* 可拖拽分隔条 */
+.resizer {
+  flex: 0 0 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.resizer:hover {
+  background: var(--color-primary-soft);
 }
 
 /* 主区：抬升层，圆角，内部再分「顶条 + 内容」两个圆角区块 */
 .main {
-  grid-area: main;
   position: relative;
   z-index: 1;
   margin: var(--main-gap);
@@ -76,6 +84,8 @@ code {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0; /* flex 收缩允许，实际最小宽度由主体内容决定 */
 }
 .main-strip {
   display: flex;

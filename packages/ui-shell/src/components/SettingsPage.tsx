@@ -271,7 +271,7 @@ function ManageView({
                     <span>{d.manifest.name}</span>
                     <span className="muted">v{d.manifest.version}</span>
                     <span className="muted">{enabled ? "● 已启用" : "○ 已禁用"}</span>
-                    {pendingLabel && <span className="pending-badge">{pendingLabel}</span>}
+                    {pendingLabel && <span className="pending-badge unfinished">{pendingLabel}</span>}
                   </span>
                 </td>
                 <td style={{ textAlign: "right" }}>
