@@ -6,7 +6,7 @@ import {
   runAgent,
   type AgentDeps,
 } from "../src/agent.js";
-import type { ChatMessage, LLMChunk } from "minex-llm-driver";
+import type { ChatMessage, LLMChunk, LLMMetricsEntry } from "minex-llm-driver";
 
 function makeDeps(
   stream: AgentDeps["stream"],
@@ -110,6 +110,27 @@ describe("runAgent loop 停止条件", () => {
     const kinds = await collect(events);
     expect(kinds).toEqual(["toolCall", "text", "done"]);
     expect(calls).toBe(2);
+  });
+});
+
+describe("runAgent 计量集成", () => {
+  it("stream 结束后 recordMetrics 被调用且 cost/hitRate 正确（审查 INFO-5）", async () => {
+    const recorded: LLMMetricsEntry[] = [];
+    async function* stream(): AsyncIterable<LLMChunk> {
+      yield { delta: "答", done: false };
+      yield { delta: "", done: true, usage: { promptTokens: 1_000_000, completionTokens: 1_000_000, cachedTokens: 400_000 } };
+    }
+    const deps = makeDeps(stream);
+    deps.recordMetrics = (e) => recorded.push(e);
+    await collect(runAgent(deps, { systemPrompt: "s", history: [] }));
+    expect(recorded).toHaveLength(1);
+    const entry = recorded[0];
+    expect(entry.promptTokens).toBe(1_000_000);
+    expect(entry.completionTokens).toBe(1_000_000);
+    expect(entry.cachedTokens).toBe(400_000);
+    // hit 0.4M×0.07 + miss 0.6M×0.27 + output 1M×1.1 = 0.028 + 0.162 + 1.1 = 1.29
+    expect(entry.cost).toBeCloseTo(1.29, 10);
+    expect(entry.hitRate).toBeCloseTo(0.4, 10);
   });
 });
 

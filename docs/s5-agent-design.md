@@ -37,13 +37,13 @@ chunk   = { delta, done }
 
 | 层 | 内容 | 缓存前缀 | 谁能改 |
 |---|---|---|---|
-| S 稳定层 | system 骨架 + 工具 schema + 早期历史 | ✅ 进 | 无人（append-only） |
-| W 工作记忆层 | 提炼的最新状态 / tool_result 加工产物 / 动态指令 | ❌ 末尾 | 模型（经再加工 hook） |
+| S 稳定层 | system 骨架 + 完整对话历史（含**工具往返**：assistant tool_calls + tool 结果，按协议顺序 append） | ✅ 进 | 无人（append-only） |
+| W 工作记忆层 | rework 的**提炼产物**（跨轮摘要/长期记忆，非协议必需） | ❌ 末尾 | 模型（经再加工 hook） |
 | P 参数层 | temperature / reasoning_effort / thinking | ❌ 不在 messages | 模型自主 |
 
 - **缓存纪律**：S 层字节级稳定（system 骨架固定、工具 schema 固定序列化、历史 append-only）。
 - **注意力优化**（W 层）：相关性排序、结构化标记、精简、去噪。
-- **再加工 hook**：挂在「填充 W 层」路径，默认透传（=L1），可替换（=L2，即 design-ideas #13 的「再加工步骤」）。
+- **再加工 hook**：默认透传工具结果（=L1，直接进 S 层历史）；L2 替换后产出**提炼进 W 层**，原始工具结果仍在 S 层（协议必需）。即 design-ideas #13 的「再加工步骤」。
 - `MessageAssembler` 是唯一允许拼 messages 的地方。
 
 ---

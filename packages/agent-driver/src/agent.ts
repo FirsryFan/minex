@@ -61,7 +61,10 @@ export function parseAssistantResponse(payload: AccumulatedResponse): { text: st
     if (d.name !== undefined) cur.name = d.name;
     if (d.arguments !== undefined) cur.arguments += d.arguments;
   }
-  const toolCalls = [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c);
+  const toolCalls = [...acc.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, c]) => c)
+    .filter((c) => c.id !== "" && c.name !== ""); // 防御：缺 id/name 的分片重组视为异常，丢弃避免 API 400（审查 MINOR-2）
   return { text: payload.content, toolCalls };
 }
 
@@ -80,7 +83,7 @@ export function defaultRework(result: ChatMessage): ChatMessage[] {
  * 产出 AgentEvent 流。
  */
 export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIterable<AgentEvent> {
-  const maxIterations = opts.maxIterations ?? 10;
+  const maxIterations = Math.max(1, opts.maxIterations ?? 10); // 防呆：≤0 时至少 1 次迭代（审查 MINOR-3）
   const rework = opts.rework ?? defaultRework;
   const tools: ToolDef[] = deps.tools.map((t) => ({
     name: t.name,
@@ -101,8 +104,8 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
 
     try {
       for await (const chunk of deps.stream({ model: deps.model, messages, tools, stream: true })) {
-        if (first && chunk.delta) {
-          ttftMs = Date.now() - started;
+        if (first && (chunk.delta || chunk.toolCallDelta)) {
+          ttftMs = Date.now() - started; // 首个分片（文本或工具调用）即计 ttft（审查 MINOR-1）
           first = false;
         }
         if (chunk.delta) {
