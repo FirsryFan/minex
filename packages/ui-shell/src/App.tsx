@@ -76,9 +76,12 @@ export function App({ problems }: { problems: string[] }) {
     }
   }, [dark]);
 
+  // 文件树点击 → 目标工作视图切到 markdown（openFile 定向到 targetInstanceId；缺省当前实例）
   useEffect(() => {
-    return kernel.events.on("filesystem:openFile", () => {
-      updateInstance(activeInstanceId, { activeDriverId: "minex.markdown" });
+    return kernel.events.on("filesystem:openFile", (payload) => {
+      const p = payload as { targetInstanceId?: number } | undefined;
+      const targetId = p?.targetInstanceId ?? activeInstanceId;
+      updateInstance(targetId, { activeDriverId: "minex.markdown" });
       try {
         localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.markdown");
       } catch {
@@ -229,8 +232,10 @@ function WorkspaceInstance({
   const leftPanel = leftPanels.find((p) => p.id === instance.activeLeftPanelId) ?? leftPanels[0];
 
   const panelLazy = useMemo(() => {
-    const map = new Map<string, ComponentType<{ kernel: ReturnType<typeof useKernel> }>>();
-    for (const p of panels) map.set(p.id, lazy(p.load) as ComponentType<{ kernel: ReturnType<typeof useKernel> }>);
+    const map = new Map<string, ComponentType<{ kernel: ReturnType<typeof useKernel>; instanceId?: number }>>();
+    for (const p of panels) {
+      map.set(p.id, lazy(p.load) as ComponentType<{ kernel: ReturnType<typeof useKernel>; instanceId?: number }>);
+    }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panels]);
@@ -283,7 +288,8 @@ function WorkspaceInstance({
     if (!Comp) return null;
     return (
       <Suspense fallback={<div className="loading">{fallback ?? "加载面板…"}</div>}>
-        <Comp kernel={kernel} />
+        {/* 注入 instanceId：面板组件可据此隔离 doc / openFile / lastOpenPath（多实例隔离） */}
+        <Comp kernel={kernel} instanceId={instance.id} />
       </Suspense>
     );
   }

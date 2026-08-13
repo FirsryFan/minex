@@ -8,7 +8,7 @@ import type { SessionStore } from "./store.js";
  * 点击会话 → emit `filesystem:openFile`（.ses 路径）→ markdown 编辑器打开主链。
  * 数据走 `session` 能力（store.loadIndex，只读轻量索引，不扫描正文）。
  */
-export default function OverviewView({ kernel }: { kernel: MinexKernel }) {
+export default function OverviewView({ kernel, instanceId }: { kernel: MinexKernel; instanceId?: number }) {
   const store = kernel.registry.get<SessionStore>("session", "default")?.value;
   const [entries, setEntries] = useState<SessionIndexEntry[]>([]);
   const [query, setQuery] = useState("");
@@ -46,9 +46,9 @@ export default function OverviewView({ kernel }: { kernel: MinexKernel }) {
   }
 
   function openSession(type: string, id: string): void {
-    // 用 store.sessionPath 复用路径约定（审查 phase28 m2），避免硬编码 .ses 路径
+    // 用 store.sessionPath 复用路径约定（审查 phase28 m2）；openFile 定向本实例（phase30 第3步）
     const path = store?.sessionPath(type, id);
-    if (path) kernel.events.emit("filesystem:openFile", { path });
+    if (path) kernel.events.emit("filesystem:openFile", { path, targetInstanceId: instanceId });
   }
 
   return (

@@ -15,7 +15,7 @@ interface FsNode extends FsEntry {
 const visible = (e: FsEntry): boolean => !e.name.startsWith(".");
 
 /** 文件系统侧边栏：打开文件夹 → 以根展开的文件树。点击 markdown 文件 → 广播打开事件给 markdown 驱动。 */
-export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
+export default function SidebarView({ kernel, instanceId }: { kernel: MinexKernel; instanceId?: number }) {
   const [fs] = useState<FileSystemAbility>(() => kernel.registry.get<FileSystemAbility>("filesystem", "default")!.value);
   const [hasRoot, setHasRoot] = useState(fs.hasRoot());
   const [tree, setTree] = useState<FsNode[]>([]);
@@ -56,9 +56,9 @@ export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
       return;
     }
     if (!isMarkdownFile(node.name) && !isSessionFile(node.name)) return;
-    // lastOpenPath 供 markdown 工作区挂载时补开（首次点击时 markdown 可能尚未挂载，事件会丢）
-    kernel.storage.namespace("minex.filesystem").set("lastOpenPath", node.path);
-    kernel.events.emit("filesystem:openFile", { path: node.path });
+    // lastOpenPath 按实例区分（审查 phase30 第4步）；openFile 定向本实例（第3步）
+    kernel.storage.namespace("minex.filesystem").set(`lastOpenPath@${instanceId ?? 0}`, node.path);
+    kernel.events.emit("filesystem:openFile", { path: node.path, targetInstanceId: instanceId });
   }
 
   /** markdown 保存后刷新根列表（保留展开状态；已展开子目录的新增文件需重新折叠/展开才可见——v1 简化）。 */

@@ -69,9 +69,11 @@ const MODES: { id: Mode; title: string; Icon: LucideIcon }[] = [
  * markdown 编辑器工作区：编辑 / 预览 / 分屏 / 即时（所见即所得）四模式。
  * 打开文件后：编辑停顿自动保存 + Ctrl/Cmd+S 立即保存（拦截浏览器默认「保存网页」）。
  */
-export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
+export default function WorkspaceView({ kernel, instanceId }: { kernel: MinexKernel; instanceId?: number }) {
   const [mode, setMode] = useState<Mode>("split");
-  const [doc, setDoc] = useState<string>(() => kernel.storage.namespace("minex.markdown").get<string>(DOC_KEY) ?? DEFAULT_DOC);
+  // 文档缓冲按实例命名空间隔离（doc@<instanceId>）；默认实例迁移旧 doc（审查 phase30 第2步）
+  const docKey = `doc@${instanceId ?? 0}`;
+  const [doc, setDoc] = useState<string>(() => readInitialDoc(kernel, instanceId));
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState("");
   const [renderOpts, setRenderOpts] = useState<RenderOptions>(() => readRenderOpts(kernel));
@@ -108,16 +110,19 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
     const offs = [
       kernel.events.on("minex:dataChanged", () => setRenderOpts(readRenderOpts(kernel))),
       kernel.events.on(OPEN_FILE_TOPIC, (payload) => {
-        if (isOpenFilePayload(payload)) void openPath(payload.path);
+        if (!isOpenFilePayload(payload)) return;
+        // 多实例定向：targetInstanceId 非本实例则忽略（审查 phase30 第3步）
+        if (payload.targetInstanceId !== undefined && payload.targetInstanceId !== (instanceId ?? 0)) return;
+        void openPath(payload.path);
       }),
     ];
     return () => offs.forEach((off) => off());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kernel]);
 
-  // 挂载时补开上次打开的文件（sidebar 记录于 filesystem 命名空间；尚未授权根目录时 readFile 抛错则忽略）
+  // 挂载时补开本实例上次打开的文件（lastOpenPath 按实例区分，审查 phase30 第4步）
   useEffect(() => {
-    const last = kernel.storage.namespace("minex.filesystem").get<string>("lastOpenPath");
+    const last = kernel.storage.namespace("minex.filesystem").get<string>(`lastOpenPath@${instanceId ?? 0}`);
     if (last) void openPath(last);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -213,7 +218,7 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
   function updateDoc(text: string): void {
     didEditRef.current = true;
     setDoc(text);
-    kernel.storage.namespace("minex.markdown").set(DOC_KEY, text);
+    kernel.storage.namespace("minex.markdown").set(docKey, text);
   }
 
   // 源码编辑区快捷键（Typora 风格）
@@ -236,7 +241,7 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
       didEditRef.current = true;
       const md = turndown.turndown(wysiwygRef.current.innerHTML);
       setDoc(md);
-      kernel.storage.namespace("minex.markdown").set(DOC_KEY, md);
+      kernel.storage.namespace("minex.markdown").set(docKey, md);
     }
   }
 
@@ -293,4 +298,16 @@ function readRenderOpts(kernel: MinexKernel): RenderOptions {
     codeHighlight: ns.get<boolean>("codeHighlight") ?? false,
     katex: ns.get<boolean>("katex") ?? false,
   };
+}
+
+/** 初始文档：按实例读 doc@<id>；默认实例回退迁移旧 doc（无实例时代数据） */
+function readInitialDoc(kernel: MinexKernel, instanceId?: number): string {
+  const ns = kernel.storage.namespace("minex.markdown");
+  const v = ns.get<string>(`doc@${instanceId ?? 0}`);
+  if (v !== undefined) return v;
+  if ((instanceId ?? 0) === 0) {
+    const legacy = ns.get<string>(DOC_KEY);
+    if (legacy !== undefined) return legacy;
+  }
+  return DEFAULT_DOC;
 }

@@ -11,6 +11,8 @@ export const FILE_SAVED_TOPIC = "filesystem:fileSaved";
 
 export interface OpenFilePayload {
   path: string;
+  /** 多工作视图定向：目标实例 id；缺省 = 广播（向后兼容单实例） */
+  targetInstanceId?: number;
 }
 
 export interface FileSavedPayload {
