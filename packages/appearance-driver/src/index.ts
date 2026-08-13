@@ -14,8 +14,16 @@ interface AppearanceSettings {
   customCss?: string;
 }
 
-/** 由设置生成主题 CSS 覆盖块（浅/深各一份）+ 追加自定义 CSS。 */
-function buildCss(mode: "dark" | "light", s: AppearanceSettings): string {
+/** 字体名加引号（W2：含空格字体名如 "Microsoft YaHei" 必须引号，否则被解析为两个字体系列静默回退） */
+function quoteFont(name: string): string {
+  return name.startsWith('"') || name.startsWith("'") ? name : `"${name}"`;
+}
+
+/**
+ * 由设置生成主题 CSS 覆盖块（浅/深各一份）+ 追加自定义 CSS。
+ * 导出为纯函数（可单测）：输入设置对象，输出合法 CSS。
+ */
+export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string {
   const sel = mode === "dark" ? '[data-theme="dark"]' : ":root";
   const lines: string[] = [];
   if (s.primaryColor) lines.push(`  --color-primary: ${s.primaryColor};`);
@@ -23,11 +31,11 @@ function buildCss(mode: "dark" | "light", s: AppearanceSettings): string {
   if (s.unfinishedColor) lines.push(`  --color-unfinished: ${s.unfinishedColor};`);
   if (s.errorColor) lines.push(`  --color-error: ${s.errorColor};`);
 
-  const uiFont = [s.uiEnFont, s.uiZhFont].filter(Boolean).join(", ");
+  const uiFont = [s.uiEnFont, s.uiZhFont].filter(Boolean).map(quoteFont).join(", ");
   if (uiFont) lines.push(`  --font-ui: ${uiFont}, system-ui, sans-serif;`);
-  const contentFont = [s.contentEnFont, s.contentZhFont].filter(Boolean).join(", ");
+  const contentFont = [s.contentEnFont, s.contentZhFont].filter(Boolean).map(quoteFont).join(", ");
   if (contentFont) lines.push(`  --font-content: ${contentFont}, system-ui, sans-serif;`);
-  if (s.codeFont) lines.push(`  --font-code: ${s.codeFont}, ui-monospace, monospace;`);
+  if (s.codeFont) lines.push(`  --font-code: ${quoteFont(s.codeFont)}, ui-monospace, monospace;`);
 
   let css = `${sel} {\n${lines.join("\n")}\n}`;
   if (s.customCss) css += `\n${s.customCss}`;

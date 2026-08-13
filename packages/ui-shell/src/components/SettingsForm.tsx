@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 
 type FieldType = "string" | "number" | "boolean" | "color" | "textarea";
@@ -54,13 +54,22 @@ export function SettingsForm({
     return <div className="muted">该驱动无设置项。</div>;
   }
 
+  // W7：自动保存 debounce（textarea 频繁输入不逐键全链路重写）
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+  }, []);
+
   // 自动保存：写 storage（基于最新 config 合并）+ 通知（驱动重注册 / ThemeManager 重应用）
   function setField(key: string, value: unknown): void {
     const current = kernel.storage.namespace(driverId).get<Record<string, unknown>>("config") ?? {};
     const next = { ...current, [key]: value };
-    kernel.storage.namespace(driverId).set("config", next);
-    kernel.events.emit("minex:dataChanged", { driverId });
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setValues((prev) => ({ ...prev, [key]: value })); // UI 立即更新
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      kernel.storage.namespace(driverId).set("config", next);
+      kernel.events.emit("minex:dataChanged", { driverId });
+    }, 300);
   }
 
   return (
@@ -95,7 +104,16 @@ function Field({
     return <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />;
   }
   if (t === "color") {
-    return <input type="color" value={String(value ?? "#000000")} onChange={(e) => onChange(e.target.value)} />;
+    return (
+      <input
+        type="color"
+        value={String(value ?? "#000000")}
+        onChange={(e) => {
+          // W8：只接受合法十六进制色（#RGB/#RRGGBB），非法输入忽略
+          if (/^#[0-9a-fA-F]{3,8}$/.test(e.target.value)) onChange(e.target.value);
+        }}
+      />
+    );
   }
   if (t === "textarea") {
     return <textarea rows={6} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
@@ -115,7 +133,7 @@ function Field({
   return <input type="text" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
 }
 
-/** 带搜索的下拉（字体/图标体系等） */
+/** 带搜索的下拉（字体/图标体系等）。W6：点外部/Esc 关闭（与 DriverSelector 一致） */
 function Select({
   value,
   options,
@@ -127,11 +145,28 @@ function Select({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
   const q = query.trim().toLowerCase();
   const filtered = q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDoc);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDoc);
+    };
+  }, [open]);
+
   return (
-    <div className="driver-selector">
+    <div className="driver-selector" ref={ref}>
       <button className="select-btn" onClick={() => setOpen((o) => !o)}>
         {value || "（默认）"}
       </button>

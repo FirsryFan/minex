@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { MainArea } from "./components/MainArea.js";
 import { RightBar } from "./components/RightBar.js";
 import { SettingsPage } from "./components/SettingsPage.js";
@@ -126,8 +126,10 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
 
-/** 可拖拽分隔条：左右栏宽度的拖拽把手 */
+/** 可拖拽分隔条：左右栏宽度的拖拽把手。W5：window blur 兜底 + 卸载清理 */
 function Resizer({ side, onResize }: { side: "left" | "right"; onResize: (dx: number) => void }) {
+  const cleanupRef = React.useRef<(() => void) | null>(null);
+
   function onMouseDown(e: React.MouseEvent): void {
     e.preventDefault();
     const startX = e.clientX;
@@ -135,9 +137,17 @@ function Resizer({ side, onResize }: { side: "left" | "right"; onResize: (dx: nu
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
+      window.removeEventListener("blur", up); // 窗口失焦视为释放
+      cleanupRef.current = null;
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+    window.addEventListener("blur", up);
+    cleanupRef.current = up;
   }
+
+  // 组件卸载（如折叠时 Resizer 卸载）：强制清理拖拽状态
+  React.useEffect(() => () => cleanupRef.current?.(), []);
+
   return <div className={`resizer resizer-${side}`} onMouseDown={onMouseDown} />;
 }

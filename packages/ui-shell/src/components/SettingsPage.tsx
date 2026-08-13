@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import { useKernel } from "../kernel-context.js";
+import { planApply } from "../plan-apply.js";
 import { DriverDetail } from "./DriverDetail.js";
 import { DriverIcon } from "./DriverIcon.js";
 
@@ -116,8 +117,12 @@ function ManageView({
 }) {
   // pending: driverId → 期望的启用状态（true=启用，false=禁用）；undefined=无待变更
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  // confirm: 依赖警告确认（pending = 确认后要合并的待变更；message = 警告文案）
-  const [confirm, setConfirm] = useState<{ pending: Record<string, boolean>; message: string } | null>(null);
+  // confirm: 依赖警告确认（pending = 确认后要合并的待变更；message = 警告文案；onConfirm = 确认后的继续动作）
+  const [confirm, setConfirm] = useState<{
+    pending: Record<string, boolean>;
+    message: string;
+    onConfirm?: () => void;
+  } | null>(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -165,7 +170,10 @@ function ManageView({
   }
 
   function confirmApply(): void {
-    if (confirm) setPending((p) => ({ ...p, ...confirm.pending }));
+    if (confirm) {
+      setPending((p) => ({ ...p, ...confirm.pending }));
+      confirm.onConfirm?.(); // 冲突场景：确认后继续执行计划
+    }
     setConfirm(null);
   }
 
@@ -202,21 +210,32 @@ function ManageView({
     setPending(next);
   }
 
-  /** S1：统一应用（先启用[依赖先于依赖者]，后禁用[依赖者先于依赖]；失败项保留并汇报） */
+  /** S1+W1：按 planApply 计划应用（冲突弹确认）；失败项保留并汇报 */
   async function applyAll(): Promise<void> {
-    const entries = Object.entries(pending);
-    const enables = entries.filter(([, e]) => e);
-    const disables = entries.filter(([, e]) => !e);
-    const failures: string[] = [];
-    for (const [id] of enables) {
-      if (!(await applyDriverState(kernel, id, true))) failures.push(id);
+    const plan = planApply(
+      pending,
+      (id) => kernel.drivers.list().find((d) => d.manifest.id === id)?.manifest.dependencies ?? [],
+    );
+    if (plan.conflicts.length > 0) {
+      setConfirm({
+        pending,
+        message: `检测到依赖冲突：\n${plan.conflicts.join("\n")}\n\n继续执行可能导致依赖不一致（启用项会连带激活其被禁依赖）。`,
+        onConfirm: () => void executePlan(plan.steps), // W1：确认后按计划执行
+      });
+      return;
     }
-    for (const [id] of disables) {
-      if (!(await applyDriverState(kernel, id, false))) failures.push(id);
+    await executePlan(plan.steps);
+  }
+
+  /** 按步骤应用并保留失败项 */
+  async function executePlan(steps: { id: string; enabled: boolean }[]): Promise<void> {
+    const failures: string[] = [];
+    for (const s of steps) {
+      if (!(await applyDriverState(kernel, s.id, s.enabled))) failures.push(s.id);
     }
     const failedSet = new Set(failures);
     const remaining: Record<string, boolean> = {};
-    for (const [id, e] of entries) if (failedSet.has(id)) remaining[id] = e;
+    for (const [id, e] of Object.entries(pending)) if (failedSet.has(id)) remaining[id] = e;
     setPending(remaining);
     if (failures.length > 0) console.error(`驱动状态应用失败：${failures.join(", ")}`);
     onApplied();

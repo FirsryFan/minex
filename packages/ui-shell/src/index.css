@@ -85,7 +85,7 @@ code {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-width: 0; /* flex 收缩允许，实际最小宽度由主体内容决定 */
+  min-width: 320px; /* W4：主体最小宽度（两侧拖到最大时也不被压没） */
 }
 .main-strip {
   display: flex;
@@ -477,13 +477,6 @@ code {
 }
 
 /* 暂存式启用/禁用 */
-.pending-badge {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-radius: var(--radius-sm);
-  padding: 1px 8px;
-  font-size: 11px;
-}
 .btn-primary {
   background: var(--color-primary);
   color: var(--color-on-primary);
