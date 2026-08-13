@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createRegistry, type OperationRegistry } from "../src/operations.js";
+import { createBuiltinRegistry, createRegistry, type OperationRegistry } from "../src/operations.js";
 import { executeWorkflow } from "../src/interpreter.js";
+import { echoTool } from "../src/tool.js";
 import type { Workflow } from "../src/workflow.js";
 
 function makeRegistry(): OperationRegistry {
@@ -132,5 +133,13 @@ describe("executeWorkflow", () => {
   it("安全：引用未注册 op（eval）被 validateWorkflow 拒绝", async () => {
     const wf: Workflow = { nodes: [{ id: "a", op: "eval", args: { code: "x" } }] };
     await expect(executeWorkflow(wf, undefined, { maxLoopIterations: 5, registry: makeRegistry() })).rejects.toThrow(/未注册操作：eval/);
+  });
+
+  it("workflow 接线：callTool 桥接 echo 工具（S5g 接线）", async () => {
+    const ctx = { query: () => [echoTool], get: () => undefined };
+    const registry = createBuiltinRegistry(ctx as never);
+    const wf: Workflow = { nodes: [{ id: "a", op: "callTool", args: { name: "echo", args: { text: "hi" } } }] };
+    const results = await executeWorkflow(wf, ctx, { maxLoopIterations: 5, registry });
+    expect(results.get("a")).toBe("hi");
   });
 });

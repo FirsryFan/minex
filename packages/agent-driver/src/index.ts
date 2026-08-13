@@ -2,8 +2,11 @@ import type { DriverContext } from "@minex/kernel";
 import type { ChatMessage, LLMMetricsEntry, LLMPrices, LLMProvider } from "minex-llm-driver";
 import { runAgent } from "./agent.js";
 import { onEnvelope, parseEnvelope, sendEnvelope, serializeEnvelope, type Envelope } from "./envelope.js";
+import { executeWorkflow } from "./interpreter.js";
+import { createBuiltinRegistry } from "./operations.js";
 import { createPool } from "./pool.js";
 import { echoTool, type AgentTool } from "./tool.js";
+import { validateWorkflow, type Workflow } from "./workflow.js";
 
 /** llm.config 结构类型子集（agent 用到的部分） */
 interface ConfigLike {
@@ -36,6 +39,16 @@ export default {
 
     // 消息池能力（manager 独占写；expert 申请→批准→写）
     ctx.register("pool", "default", createPool(ctx.storage, ctx));
+
+    // 代码插槽（S5g 接线）：白名单操作注册表 + workflow 解释执行能力
+    const registry = createBuiltinRegistry(ctx);
+    ctx.register("workflow", "default", {
+      run(wf: Workflow, opts?: { maxLoopIterations?: number }) {
+        const maxLoopIterations = opts?.maxLoopIterations ?? 100;
+        validateWorkflow(wf, registry, { maxLoopIterations });
+        return executeWorkflow(wf, ctx, { registry, maxLoopIterations });
+      },
+    });
 
     // agent 能力：从内核收集依赖 → runAgent
     ctx.register("agent", "default", {

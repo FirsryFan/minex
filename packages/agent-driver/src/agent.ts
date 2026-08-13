@@ -10,6 +10,7 @@ import type {
   ToolDef,
 } from "minex-llm-driver";
 import { buildMessages, computeCost, computeHitRate } from "minex-llm-driver";
+import { execute, type Task } from "./scheduler.js";
 import type { AgentTool } from "./tool.js";
 
 /** agent loop 事件（流式） */
@@ -23,6 +24,8 @@ export interface RunAgentOptions {
   systemPrompt: string;
   history: ChatMessage[];
   maxIterations?: number;
+  /** 一轮内多个无依赖工具调用的最大并行数（默认 4） */
+  maxConcurrent?: number;
   /** 再加工 hook（W 层）：工具结果回灌前加工，默认透传 */
   rework?: (result: ChatMessage) => ChatMessage[];
 }
@@ -153,7 +156,7 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
     // 回灌 assistant（带 tool_calls）
     history.push({ role: "assistant", content: text, tool_calls: toolCalls });
 
-    // 逐个执行工具（串行）
+    // 工具执行：先按声明顺序 yield toolCall 事件（UI 顺序稳定），再经 scheduler.execute 并行执行
     for (const call of toolCalls) {
       let args: Record<string, unknown> = {};
       try {
@@ -162,19 +165,36 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
         args = {};
       }
       yield { kind: "toolCall", name: call.name, args };
-      const tool = byName.get(call.name);
-      let result: string;
-      if (!tool) {
-        result = `Error: 未找到工具 ${call.name}`;
-      } else {
-        try {
-          result = await tool.execute(args);
-        } catch (err) {
-          result = `Error: ${err instanceof Error ? err.message : String(err)}`;
-        }
+    }
+
+    const toolTasks: Task<ToolCall>[] = toolCalls.map((call, index) => ({
+      id: String(index),
+      deps: [],
+      payload: call,
+    }));
+    const maxConcurrent = opts.maxConcurrent ?? 4;
+    const toolResults = await execute(toolTasks, async (task) => {
+      const call = task.payload;
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
+      } catch {
+        args = {};
       }
-      // 结果经再加工 hook 回灌
-      for (const msg of rework(buildToolResultMessage(call.id, result))) {
+      const tool = byName.get(call.name);
+      if (!tool) return `Error: 未找到工具 ${call.name}`;
+      try {
+        return await tool.execute(args);
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }, { maxConcurrent });
+
+    // 结果按原 toolCalls 声明顺序回灌（缓存友好）；run 回调已把错误转字符串，result 为 string
+    for (let i = 0; i < toolCalls.length; i++) {
+      const call = toolCalls[i];
+      const text = String(toolResults.get(String(i)) ?? "");
+      for (const msg of rework(buildToolResultMessage(call.id, text))) {
         history.push(msg);
       }
     }

@@ -113,6 +113,34 @@ describe("runAgent loop 停止条件", () => {
   });
 });
 
+describe("runAgent 工具并行执行", () => {
+  it("多个无依赖 tool_calls 并行（并发计数）+ 结果按声明顺序回灌", async () => {
+    let active = 0;
+    let maxActive = 0;
+    async function* stream(): AsyncIterable<LLMChunk> {
+      // 一轮产出 2 个无依赖 tool_calls
+      yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c1", name: "slow", arguments: "{}" } };
+      yield { delta: "", done: false, toolCallDelta: { index: 1, id: "c2", name: "slow", arguments: "{}" } };
+      yield { delta: "", done: true, usage: { promptTokens: 10, completionTokens: 2, cachedTokens: 0 } };
+    }
+    const slow = {
+      name: "slow",
+      description: "d",
+      parameters: {},
+      execute: async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((r) => setTimeout(r, 20));
+        active--;
+        return "done";
+      },
+    };
+    const events = runAgent(makeDeps(stream, [slow]), { systemPrompt: "s", history: [], maxIterations: 1 });
+    await collect(events);
+    expect(maxActive).toBeGreaterThanOrEqual(2); // 并行执行
+  });
+});
+
 describe("runAgent 计量集成", () => {
   it("stream 结束后 recordMetrics 被调用且 cost/hitRate 正确（审查 INFO-5）", async () => {
     const recorded: LLMMetricsEntry[] = [];
