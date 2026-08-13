@@ -101,7 +101,7 @@ export function DriverDetail({
 }
 
 /** 驱动信息头部：图标 + 名称/开发者(来源)/状态/版本（settingsView 与默认结构共用） */
-function DriverHeader({ manifest: m, state }: { manifest: DriverManifest; state: string }) {
+function DriverHeader({ manifest: m, state }: { manifest: DriverManifest; state: string | undefined }) {
   return (
     <div className="driver-header">
       <div className="driver-header-icon">
@@ -114,7 +114,7 @@ function DriverHeader({ manifest: m, state }: { manifest: DriverManifest; state:
         </div>
         <div className="driver-header-meta">
           <span>来源：{m.source ?? "本地"}</span>
-          <span>状态：{state}</span>
+          <span>状态：{state ?? "-"}</span>
           <span>最小内核：{m.minKernelVersion ?? "-"}</span>
         </div>
         <div className="driver-header-desc">{m.description ?? ""}</div>
