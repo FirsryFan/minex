@@ -339,7 +339,10 @@ interface DriverAppearanceSetting {
 
 /** 驱动设置区：渲染其他驱动通过 appearance.driverSetting 注册的外观设置 */
 function DriverSettingsSection({ kernel }: { kernel: MinexKernel }) {
-  const settings = kernel.registry.query<DriverAppearanceSetting>("appearance.driverSetting");
+  // 宿主视图：registry.query 返回 Contribution[]，需 .map(c => c.value)（受限视图 ctx.query 才返回 T[]）
+  const settings = kernel.registry
+    .query<DriverAppearanceSetting>("appearance.driverSetting")
+    .map((c) => c.value);
   if (settings.length === 0) return null;
   return (
     <>
