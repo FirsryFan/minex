@@ -1,5 +1,5 @@
 import type { MinexKernel } from "@minex/kernel";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { renderMarkdown } from "./markdown.js";
 
 type Mode = "edit" | "preview" | "split";
@@ -41,7 +41,7 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
     kernel.storage.namespace("minex.markdown").set(DOC_KEY, text);
   }
 
-  const html = renderMarkdown(doc);
+  const html = useMemo(() => renderMarkdown(doc), [doc]);
 
   return (
     <div className="md-workspace">

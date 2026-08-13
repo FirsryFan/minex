@@ -30,14 +30,17 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
     const saved = kernel.storage.namespace("minex.appearance").get<Theme[]>(THEMES_KEY);
     return saved && saved.length > 0 ? saved : DEFAULT_THEMES;
   });
+  const themesRef = useRef(themes);
+  useEffect(() => {
+    themesRef.current = themes;
+  }, [themes]);
 
+  // M1：副作用移出 setState updater（用 ref 取最新值，storage 写 + emit 在 updater 外）
   function persistThemes(updater: (prev: Theme[]) => Theme[]): void {
-    setThemes((prev) => {
-      const next = updater(prev); // 函数式更新，避免闭包旧值
-      kernel.storage.namespace("minex.appearance").set(THEMES_KEY, next);
-      kernel.events.emit("minex:dataChanged", { driverId: "minex.appearance" });
-      return next;
-    });
+    const next = updater(themesRef.current);
+    setThemes(next);
+    kernel.storage.namespace("minex.appearance").set(THEMES_KEY, next);
+    kernel.events.emit("minex:dataChanged", { driverId: "minex.appearance" });
   }
 
   // 双击主题 → 打开新选项卡（可关闭），不原地叠加

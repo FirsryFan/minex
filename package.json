@@ -12,7 +12,7 @@
     "test": "vitest run",
     "cli": "npm run build -w @minex/cli && node packages/cli/dist/cli.js",
     "ui": "npm run build -w @minex/kernel && npm run dev -w @minex/ui-shell",
-    "drivers:sync": "npm run build -w minex-appearance-driver -w minex-demo-driver && node scripts/sync-drivers.mjs"
+    "drivers:sync": "npm run build -w minex-appearance-driver -w minex-demo-driver -w minex-markdown-driver && node scripts/sync-drivers.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
