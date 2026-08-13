@@ -12,7 +12,7 @@
 - `ChatMessage = { role: "system" | "user" | "assistant" | "tool"; content: string }`
 - `ToolDef = { name: string; description: string; parameters: Record<string, unknown> }`
 - `LLMRequest = { model: string; messages: ChatMessage[]; tools?: ToolDef[]; params?: Record<string, unknown>; stream?: boolean }`
-- `LLMChunk = { delta: string; done: boolean }`
+- `LLMChunk = { delta: string; done: boolean; usage?: LLMUsage }`  // usage 可选，仅流末 chunk 携带
 - `LLMUsage = { promptTokens: number; completionTokens: number; cachedTokens: number }`
 - `LLMProvider = { stream(req: LLMRequest): AsyncIterable<LLMChunk> }`
 
@@ -20,8 +20,8 @@
 - `createDeepSeekProvider(apiKey: string): LLMProvider`
 - 请求：`POST https://api.deepseek.com/chat/completions`，`Authorization: Bearer <key>`，body 含 `model/messages/tools/stream:true/params`。
 - 流式：解析 SSE `data:` 行 → `choices[0].delta.content`；`[DONE]` 结束。
-- usage：从流末 chunk 提取 `usage`（`prompt_tokens`/`completion_tokens`/`prompt_cache_hit_tokens`）。
-- 抽纯函数：`parseSseLine(line: string): { delta: string } | { done: true } | null`；`extractUsage(payload: unknown): LLMUsage`。
+- usage：流末 usage chunk（`choices: []` 且含 `usage`）→ `extractUsage` 产出，作为 `{ delta: "", done: true, usage }` 的最后一个 chunk；**流末无 usage 时兜底 `usage = { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }`**。
+- 抽纯函数：`parseSseLine(line: string): { delta: string } | { usage: unknown } | { done: true } | null`；`extractUsage(payload: unknown): LLMUsage`。
 
 ### 4. config + 注册（src/index.ts）
 - 注册 `llm.config` 能力：`get/set apiKey|model|params`（storage 命名空间 `minex.llm`）。
@@ -36,15 +36,15 @@
 ## S5b · MessageAssembler：S/W/P 三层 + 稳定前缀
 
 ### 1. 纯函数（src/assembler.ts）
-- `serializeToolDef(t: ToolDef): string` —— 固定字段顺序（name→description→parameters）的 JSON，字节级稳定。
-- `buildMessages(input: { systemPrompt: string; tools: ToolDef[]; history: ChatMessage[]; workMemory: ChatMessage[] }): ChatMessage[]`
-  - 顺序：`[system] → [tool(序列化后的描述)] → history → workMemory`。
-  - system/tools/history 是 S 层（稳定）；workMemory 是 W 层（末尾）。
-- `assembleWorkMemory(ctx: unknown): ChatMessage[]` —— 再加工 hook，默认透传传入内容（返回 `ctx` 本身或其 message 数组）。
+- `serializeToolDef(t: ToolDef): string` —— 对 `parameters` **递归稳定键排序**后 stringify，保证字节级稳定（顶层 + 嵌套）。
+- `buildMessages(input: { systemPrompt: string; history: ChatMessage[]; workMemory: ChatMessage[] }): ChatMessage[]`
+  - 顺序：`[system] → history → workMemory`。工具 schema **不走 message**（走 `LLMRequest.tools` 参数，见 S5a）。
+  - system/history 是 S 层（稳定）；workMemory 是 W 层（末尾）。
+- `assembleWorkMemory(ctx: unknown): ChatMessage[]` —— 再加工 hook，默认透传传入内容。
 
 ### 2. 测试（test/assembler.test.ts）
-- `serializeToolDef` 两次调用输出完全一致（字节级稳定）。
-- `buildMessages` 顺序正确、history 原样 append、workMemory 在末尾。
+- `serializeToolDef` 对同一 schema 的不同 `parameters` 键序输出**完全一致**（字节级稳定，含嵌套）。
+- `buildMessages` 顺序正确、history 原样 append、workMemory 在末尾、无 `role:"tool"` 消息。
 - `assembleWorkMemory` 默认透传。
 
 ---
@@ -53,16 +53,16 @@
 
 ### 1. 纯函数 + 类型（src/metrics.ts）
 - `LLMMetricsEntry = { model: string; promptTokens: number; completionTokens: number; cachedTokens: number; ttftMs: number; totalMs: number; cost: number; hitRate: number }`
-- `computeCost(usage: LLMUsage, prices: { hit: number; miss: number }): number` —— 命中 token × hit 价 + 未命中 token × miss 价（价格以「每 1M token 美元」传入，输出美元）。
-- `computeHitRate(cachedTokens: number, promptTokens: number): number` —— `cached / prompt`（prompt=0 时返回 0）。
+- `computeCost(usage: LLMUsage, prices: { inputHit: number; inputMiss: number; output: number }): number` —— 缓存命中 token × inputHit + 未命中输入 token × inputMiss + 输出 token × output（单位：每 1M token 美元，输出美元）。
+- `computeHitRate(cachedTokens: number, promptTokens: number): number` —— `cached / prompt`（prompt=0 返回 0，结果 clamp 到 [0,1]）。
 
 ### 2. 价格表 + 记录（src/index.ts）
-- 价格表由 config 提供，**按模型区分** hit/miss 价（单位：每 1M token 美元）；不写死默认值。
+- 价格表由 config 提供，**按模型区分** inputHit/inputMiss/output 三档价；不写死默认值。
 - 注册 `llm.metrics` 能力：`record(entry)` 追加到 storage `minex.llm/metrics`；`list(model?)` 读取聚合。
 
 ### 3. 测试（test/metrics.test.ts）
-- `computeCost`：全命中 / 全未命中 / 混合。
-- `computeHitRate`：0 / 50% / 100% / prompt=0。
+- `computeCost`：全命中 / 全未命中 / 混合 / 输出按 output 价计。
+- `computeHitRate`：0 / 50% / 100% / prompt=0 / cached>prompt（clamp 到 1）。
 
 ---
 

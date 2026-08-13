@@ -96,7 +96,8 @@ export function createDeepSeekProvider(apiKey: string): LLMProvider {
         if (parsed.delta) yield { delta: parsed.delta, done: false };
       }
     }
-    yield { delta: "", done: true, ...(lastUsage ? { usage: lastUsage } : {}) };
+    // done 时产出 usage；流末无 usage 时兜底 {0,0,0}（任务清单 S5a-3）
+    yield { delta: "", done: true, usage: lastUsage ?? { promptTokens: 0, completionTokens: 0, cachedTokens: 0 } };
   }
 
   return { stream };
