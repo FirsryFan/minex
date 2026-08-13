@@ -844,8 +844,8 @@ button {
   border: none;
   padding: var(--spacing-lg);
   resize: none;
-  font-family: var(--font-content);
-  font-size: 14px;
+  font-family: var(--font-md, var(--font-content));
+  font-size: var(--md-font-size, 14px);
   line-height: 1.6;
   background: transparent;
   color: var(--color-text);
@@ -860,7 +860,8 @@ button {
 }
 /* markdown 渲染内容样式 */
 .markdown-body {
-  font-family: var(--font-content);
+  font-family: var(--font-md, var(--font-content));
+  font-size: var(--md-font-size, 14px);
   line-height: 1.6;
   color: var(--color-text);
 }
@@ -881,6 +882,7 @@ button {
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
   overflow-x: auto;
+  white-space: var(--md-code-wrap, pre);
 }
 .markdown-body pre code {
   background: transparent;
