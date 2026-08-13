@@ -755,18 +755,49 @@ button {
   padding: var(--spacing-sm);
   z-index: 200;
 }
-.color-slider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 0;
-  font-size: 12px;
+/* HSV 调色板：饱和度/亮度平面 + 色相条，可拖动 */
+.sv-plane {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  /* 底层 hue 纯色（由内联 style 设置）；叠加白→透明(水平) 与 透明→黑(垂直) */
+  background-image: linear-gradient(to right, white, transparent), linear-gradient(to bottom, transparent, black);
 }
-.color-slider span:first-child {
+.sv-thumb {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+.hue-bar {
+  position: relative;
+  height: 14px;
+  margin-top: 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.hue-thumb {
+  position: absolute;
+  top: -2px;
   width: 14px;
-  color: var(--color-text-muted);
+  height: 18px;
+  border: 2px solid white;
+  border-radius: 4px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+  pointer-events: none;
 }
-.color-slider input[type="range"] {
-  flex: 1;
-  accent-color: var(--color-primary);
+.color-hex {
+  margin-top: 8px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
 }

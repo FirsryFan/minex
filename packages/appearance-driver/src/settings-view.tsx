@@ -1,17 +1,8 @@
 import type { MinexKernel } from "@minex/kernel";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import readme from "../README.md?raw";
-
-interface Theme {
-  id: string;
-  name: string;
-  version: string;
-  author: string;
-  mode: "light" | "dark";
-  preview?: string;
-  readOnly?: boolean;
-  settings?: Record<string, unknown>;
-}
+import { hexToHsv, hsvToHex, type Hsv } from "./color.js";
+import { DEFAULT_THEMES, THEMES_KEY, type Theme } from "./theme.js";
 
 const GLOBAL_COLORS = [
   { key: "primaryColor", label: "主题色" },
@@ -22,19 +13,6 @@ const GLOBAL_COLORS = [
 const EN_FONTS = ["Arial", "Georgia", "Times New Roman", "Verdana", "Tahoma", "Trebuchet MS", "Segoe UI", "Roboto", "Open Sans", "Courier New", "Consolas"];
 const ZH_FONTS = ["PingFang SC", "Microsoft YaHei", "SimHei", "SimSun", "Songti SC", "KaiTi", "FangSong", "Noto Sans CJK SC", "Source Han Sans SC"];
 const ICON_THEMES = ["默认", "简约"];
-
-const DEFAULT_THEMES: Theme[] = [
-  {
-    id: "default-light", name: "默认浅色", version: "1.0.0", author: "Minex", mode: "light",
-    settings: { primaryColor: "#2563eb", backgroundColor: "#f3f6fb", warningColor: "#f59e0b", dangerColor: "#ef4444", zhFont: "Microsoft YaHei", enFont: "Arial", iconTheme: "默认" },
-  },
-  {
-    id: "default-dark", name: "默认深色", version: "1.0.0", author: "Minex", mode: "dark",
-    settings: { primaryColor: "#3b82f6", backgroundColor: "#0f172a", warningColor: "#f59e0b", dangerColor: "#ef4444", zhFont: "Microsoft YaHei", enFont: "Arial", iconTheme: "默认" },
-  },
-];
-
-const THEMES_KEY = "themes";
 
 interface Tab {
   id: string;
@@ -185,41 +163,79 @@ function ThemeSettings({
   );
 }
 
-/** 颜色选择：色块点击展开，内部滑块拖动调节（非系统取色器） */
+/** 颜色选择：HSV 调色板（色相条 + 饱和度/亮度平面，可拖动）。色块点击展开。 */
 function ColorField({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
-  const r = Number.parseInt(value.slice(1, 3), 16) || 0;
-  const g = Number.parseInt(value.slice(3, 5), 16) || 0;
-  const b = Number.parseInt(value.slice(5, 7), 16) || 0;
-  function toHex(n: number): string {
-    return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(value));
+  const hsvRef = useRef(hsv);
+  const svRef = useRef<HTMLDivElement>(null);
+  const hueRef = useRef<HTMLDivElement>(null);
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    hsvRef.current = hsv;
+  }, [hsv]);
+  useEffect(() => {
+    setHsv(hexToHsv(value));
+  }, [value]);
+
+  function clamp(n: number, lo: number, hi: number): number {
+    return Math.max(lo, Math.min(hi, n));
   }
+  function commit(hex: string, immediate: boolean): void {
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    if (immediate) onChange(hex);
+    else commitTimer.current = setTimeout(() => onChange(hex), 120);
+  }
+  function apply(nh: number, ns: number, nv: number, immediate = false): void {
+    const next: Hsv = { h: ((nh % 360) + 360) % 360, s: clamp(ns, 0, 100), v: clamp(nv, 0, 100) };
+    hsvRef.current = next;
+    setHsv(next);
+    commit(hsvToHex(next.h, next.s, next.v), immediate);
+  }
+  function move(ev: MouseEvent, kind: "sv" | "hue"): void {
+    if (kind === "hue") {
+      const rect = hueRef.current!.getBoundingClientRect();
+      apply(((ev.clientX - rect.left) / rect.width) * 360, hsvRef.current.s, hsvRef.current.v);
+    } else {
+      const rect = svRef.current!.getBoundingClientRect();
+      const s = ((ev.clientX - rect.left) / rect.width) * 100;
+      const v = 100 - ((ev.clientY - rect.top) / rect.height) * 100;
+      apply(hsvRef.current.h, s, v);
+    }
+  }
+  function startDrag(kind: "sv" | "hue", e: React.MouseEvent): void {
+    e.preventDefault();
+    move(e.nativeEvent, kind);
+    const onMove = (ev: MouseEvent) => move(ev, kind);
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      commit(hsvToHex(hsvRef.current.h, hsvRef.current.s, hsvRef.current.v), true);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  const hueCss = hsvToHex(hsv.h, 100, 100);
+
   return (
     <div className="color-field">
       <button className="color-swatch" style={{ background: value }} disabled={disabled} onClick={() => setOpen((o) => !o)} />
       {open && !disabled && (
         <div className="color-popover">
-          {(["r", "g", "b"] as const).map((ch, i) => {
-            const v = [r, g, b][i];
-            return (
-              <label key={ch} className="color-slider">
-                <span>{ch.toUpperCase()}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={255}
-                  value={v}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    const arr = [r, g, b];
-                    arr[i] = n;
-                    onChange(`#${toHex(arr[0])}${toHex(arr[1])}${toHex(arr[2])}`);
-                  }}
-                />
-                <span className="muted">{v}</span>
-              </label>
-            );
-          })}
+          <div
+            className="sv-plane"
+            ref={svRef}
+            style={{ background: hueCss }}
+            onMouseDown={(e) => startDrag("sv", e)}
+          >
+            <div className="sv-thumb" style={{ left: `${hsv.s}%`, top: `${100 - hsv.v}%` }} />
+          </div>
+          <div className="hue-bar" ref={hueRef} onMouseDown={(e) => startDrag("hue", e)}>
+            <div className="hue-thumb" style={{ left: `${(hsv.h / 360) * 100}%` }} />
+          </div>
+          <div className="color-hex">{value}</div>
         </div>
       )}
     </div>

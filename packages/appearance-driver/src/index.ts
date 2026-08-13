@@ -1,4 +1,5 @@
 import type { DriverContext } from "@minex/kernel";
+import { DEFAULT_THEMES, THEMES_KEY, type Theme } from "./theme.js";
 
 interface AppearanceSettings {
   primaryColor?: string;
@@ -40,11 +41,6 @@ export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string 
   return css;
 }
 
-interface Theme {
-  id: string;
-  settings?: Record<string, unknown>;
-}
-
 /**
  * 外观驱动：贡献 theme（浅/深 CSS）+ settingsView（惰性加载 React 组件）。
  * - 主题设置存 storage "themes"，当前激活主题存 "activeThemeId"。
@@ -53,8 +49,14 @@ interface Theme {
  */
 export default {
   async activate(ctx: DriverContext) {
+    // 初始化：storage 无主题时写入默认浅/深主题（保证 apply 能读到设置）
+    const existing = ctx.storage.get<Theme[]>(THEMES_KEY);
+    if (!existing || existing.length === 0) {
+      ctx.storage.set(THEMES_KEY, DEFAULT_THEMES);
+    }
+
     const apply = (): void => {
-      const themes = (ctx.storage.get("themes") ?? []) as Theme[];
+      const themes = (ctx.storage.get<Theme[]>(THEMES_KEY) ?? DEFAULT_THEMES) as Theme[];
       // 浅/深各自取对应 mode 的主题设置（默认浅色/默认深色）
       const lightSettings = (themes.find((t) => t.mode === "light")?.settings ?? {}) as AppearanceSettings;
       const darkSettings = (themes.find((t) => t.mode === "dark")?.settings ?? {}) as AppearanceSettings;
