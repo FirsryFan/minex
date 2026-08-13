@@ -1,0 +1,14 @@
+{
+  "name": "mist-session-driver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mist 会话驱动：会话图数据（.ses 文件）+ 标签总览索引",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.2.3"
+  }
+}

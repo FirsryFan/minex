@@ -7,8 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @minex/kernel && npm run build -w minex-filesystem-driver && npm run build -w minex-appearance-driver  && npm run build -w minex-markdown-driver && npm run build -w @minex/cli && npm run build -w @minex/ui-shell",
-    "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-filesystem-driver && npm run typecheck -w minex-appearance-driver  && npm run typecheck -w minex-markdown-driver && npm run typecheck -w @minex/cli && npm run typecheck -w @minex/ui-shell",
+    "build": "npm run build -w @minex/kernel && npm run build -w minex-filesystem-driver && npm run build -w mist-session-driver && npm run build -w minex-appearance-driver  && npm run build -w minex-markdown-driver && npm run build -w @minex/cli && npm run build -w @minex/ui-shell",
+    "typecheck": "npm run typecheck -w @minex/kernel && npm run typecheck -w minex-filesystem-driver && npm run typecheck -w mist-session-driver && npm run typecheck -w minex-appearance-driver  && npm run typecheck -w minex-markdown-driver && npm run typecheck -w @minex/cli && npm run typecheck -w @minex/ui-shell",
     "test": "vitest run",
     "cli": "npm run build -w @minex/cli && node packages/cli/dist/cli.js",
     "ui": "npm run build -w @minex/kernel && npm run dev -w @minex/ui-shell",
@@ -17,6 +17,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/turndown": "^5.0.6",
+    "lucide-react": "^1.31.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

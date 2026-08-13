@@ -1,3 +1,4 @@
+import "./fs-access-types.js"; // 全局类型补充（showDirectoryPicker / entries）；运行时无副作用
 import { joinPath, resolveSafePath } from "./path.js";
 
 export interface FsEntry {
@@ -6,13 +7,15 @@ export interface FsEntry {
   isDirectory: boolean;
 }
 
-/** 文件系统能力（供 markdown / agent 等驱动复用）。所有路径相对根目录，经 resolveSafePath 校验。 */
+/** 文件系统能力（供 markdown / agent / session 等驱动复用）。所有路径相对根目录，经 resolveSafePath 校验。 */
 export interface FileSystemAbility {
   hasRoot(): boolean;
   openRoot(): Promise<void>;
   readDir(path: string): Promise<FsEntry[]>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  /** 确保目录存在（递归创建；供写入深层文件前调用） */
+  ensureDir(path: string): Promise<void>;
 }
 
 /**
@@ -27,12 +30,12 @@ export function createBrowserFileSystem(): FileSystemAbility {
     return root;
   }
 
-  async function resolveDir(path: string): Promise<FileSystemDirectoryHandle> {
+  async function resolveDir(path: string, create = false): Promise<FileSystemDirectoryHandle> {
     const safe = resolveSafePath(path);
     let dir = await requireRoot();
     if (safe) {
       for (const seg of safe.split("/")) {
-        dir = await dir.getDirectoryHandle(seg);
+        dir = await dir.getDirectoryHandle(seg, { create });
       }
     }
     return dir;
@@ -66,6 +69,9 @@ export function createBrowserFileSystem(): FileSystemAbility {
       const w = await file.createWritable();
       await w.write(content);
       await w.close();
+    },
+    async ensureDir(path) {
+      await resolveDir(path, true);
     },
   };
 }

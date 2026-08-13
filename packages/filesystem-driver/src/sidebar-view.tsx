@@ -1,6 +1,9 @@
 import type { MinexKernel } from "@minex/kernel";
 import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { ChevronDown, ChevronRight, File, FileCode, FileCog, FileImage, FileText } from "lucide-react";
 import type { FileSystemAbility, FsEntry } from "./fs.js";
+import { isMarkdownFile } from "./path.js";
 
 interface FsNode extends FsEntry {
   children?: FsNode[];
@@ -8,7 +11,10 @@ interface FsNode extends FsEntry {
   expanded?: boolean;
 }
 
-/** 文件系统侧边栏：打开文件夹 → 以根展开的文件树 */
+/** 文件树隐藏点开头的隐藏项（如 .mist 数据目录、.git 等） */
+const visible = (e: FsEntry): boolean => !e.name.startsWith(".");
+
+/** 文件系统侧边栏：打开文件夹 → 以根展开的文件树。点击 markdown 文件 → 广播打开事件给 markdown 驱动。 */
 export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
   const [fs] = useState<FileSystemAbility>(() => kernel.registry.get<FileSystemAbility>("filesystem", "default")!.value);
   const [hasRoot, setHasRoot] = useState(fs.hasRoot());
@@ -17,7 +23,7 @@ export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
   const loadChildren = useCallback(
     async (node: FsNode): Promise<FsNode[]> => {
       const entries = await fs.readDir(node.path);
-      return entries.map((e) => ({ ...e, loaded: false, expanded: false }));
+      return entries.filter(visible).map((e) => ({ ...e, loaded: false, expanded: false }));
     },
     [fs],
   );
@@ -26,7 +32,7 @@ export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
     await fs.openRoot();
     setHasRoot(true);
     const entries = await fs.readDir("");
-    setTree(entries.map((e) => ({ ...e, loaded: false, expanded: false })));
+    setTree(entries.filter(visible).map((e) => ({ ...e, loaded: false, expanded: false })));
   }
 
   function updateNode(path: string, fn: (n: FsNode) => FsNode): void {
@@ -43,8 +49,43 @@ export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
     updateNode(node.path, (n) => ({ ...n, expanded: true, loaded: true, children }));
   }
 
+  /** 目录 → 展开/折叠；markdown 文件 → 记录最近打开 + 广播打开事件（App 层会切到 markdown 工作区）。 */
+  function onItemClick(node: FsNode): void {
+    if (node.isDirectory) {
+      void toggle(node);
+      return;
+    }
+    if (!isMarkdownFile(node.name)) return;
+    // lastOpenPath 供 markdown 工作区挂载时补开（首次点击时 markdown 可能尚未挂载，事件会丢）
+    kernel.storage.namespace("minex.filesystem").set("lastOpenPath", node.path);
+    kernel.events.emit("filesystem:openFile", { path: node.path });
+  }
+
+  /** markdown 保存后刷新根列表（保留展开状态；已展开子目录的新增文件需重新折叠/展开才可见——v1 简化）。 */
   useEffect(() => {
-    if (hasRoot && tree.length === 0) void openRoot();
+    const off = kernel.events.on("filesystem:fileSaved", () => void refreshTree());
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kernel, fs]);
+
+  async function refreshTree(): Promise<void> {
+    if (!fs.hasRoot()) return;
+    const entries = (await fs.readDir("")).filter(visible);
+    setTree((prev) => {
+      const prevByPath = new Map(prev.map((r) => [r.path, r]));
+      return entries.map((e) => {
+        const old = prevByPath.get(e.path);
+        return old?.expanded
+          ? { ...e, expanded: true, loaded: true, children: old.children }
+          : { ...e, loaded: false, expanded: false };
+      });
+    });
+  }
+
+  // 挂载时若已有根目录，仅恢复文件树（readDir("")），不重弹「选择文件夹」对话框；
+  // openRoot（showDirectoryPicker 弹窗）只应由用户点「打开文件夹」按钮触发（审查 M1）。
+  useEffect(() => {
+    if (hasRoot && tree.length === 0) void refreshTree();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -55,7 +96,7 @@ export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
       ) : (
         <div className="fs-tree">
           {tree.map((n) => (
-            <FsTreeItem key={n.path} node={n} depth={0} onToggle={toggle} />
+            <FsTreeItem key={n.path} node={n} depth={0} onItemClick={onItemClick} />
           ))}
         </div>
       )}
@@ -69,24 +110,25 @@ function mapNode(n: FsNode, path: string, fn: (n: FsNode) => FsNode): FsNode {
   return n;
 }
 
-function FsTreeItem({ node, depth, onToggle }: { node: FsNode; depth: number; onToggle: (n: FsNode) => void }) {
+function FsTreeItem({ node, depth, onItemClick }: { node: FsNode; depth: number; onItemClick: (n: FsNode) => void }) {
   return (
     <>
-      <div className="fs-item" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => void onToggle(node)}>
-        <span className="fs-icon">{node.isDirectory ? (node.expanded ? "▾" : "▸") : iconFor(node.name)}</span>
+      <div className="fs-item" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => onItemClick(node)}>
+        <span className="fs-icon">{node.isDirectory ? (node.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : fileIcon(node.name)}</span>
         <span>{node.name}</span>
       </div>
-      {node.expanded && node.children?.map((c) => <FsTreeItem key={c.path} node={c} depth={depth + 1} onToggle={onToggle} />)}
+      {node.expanded && node.children?.map((c) => <FsTreeItem key={c.path} node={c} depth={depth + 1} onItemClick={onItemClick} />)}
     </>
   );
 }
 
-/** 文件类型 → emoji 图标（v1 简化；图标体系后续接 appearance） */
-function iconFor(name: string): string {
+/** 文件类型 → 图标（lucide 开源图标体系；图标色后续接 appearance 主题） */
+function fileIcon(name: string): ReactNode {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["md", "markdown"].includes(ext)) return "📝";
-  if (["ts", "tsx", "js", "jsx", "py", "cpp", "c", "rs", "go"].includes(ext)) return "🧾";
-  if (["json", "yaml", "yml", "toml"].includes(ext)) return "⚙️";
-  if (["png", "jpg", "jpeg", "gif", "svg"].includes(ext)) return "🖼";
-  return "📄";
+  const size = 14;
+  if (["md", "markdown"].includes(ext)) return <FileText size={size} />;
+  if (["ts", "tsx", "js", "jsx", "py", "cpp", "c", "rs", "go"].includes(ext)) return <FileCode size={size} />;
+  if (["json", "yaml", "yml", "toml"].includes(ext)) return <FileCog size={size} />;
+  if (["png", "jpg", "jpeg", "gif", "svg"].includes(ext)) return <FileImage size={size} />;
+  return <File size={size} />;
 }
