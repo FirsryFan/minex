@@ -69,6 +69,60 @@ describe("executeWorkflow", () => {
     expect(calls).toBe(3);
   });
 
+  it("loop + when 前置：when 不满足 0 次", async () => {
+    const r = createRegistry();
+    let calls = 0;
+    r.register("set", async (args) => args.value);
+    r.register("tick", async () => {
+      calls++;
+      return calls;
+    });
+    const wf: Workflow = {
+      nodes: [
+        { id: "flag", op: "set", args: { value: false } },
+        { id: "loop", op: "tick", loop: true, deps: ["flag"], when: { field: "flag", op: "eq", value: true } },
+      ],
+    };
+    await executeWorkflow(wf, undefined, { maxLoopIterations: 5, registry: r });
+    expect(calls).toBe(0); // when 不满足 → 前置 while 0 次
+  });
+
+  it("双层上限：传 1e9 在 absoluteMax 处停止", async () => {
+    const r = createRegistry();
+    let calls = 0;
+    r.register("tick", async () => {
+      calls++;
+      return calls;
+    });
+    const wf: Workflow = { nodes: [{ id: "loop", op: "tick", loop: true }] };
+    await executeWorkflow(wf, undefined, { maxLoopIterations: 1e9, absoluteMaxIterations: 3, registry: r });
+    expect(calls).toBe(3); // effectiveMax = min(1e9, 3) = 3
+  });
+
+  it("条件跳过级联：A 被跳过 → 依赖 A 的 B 也跳过", async () => {
+    const r = createRegistry();
+    const executed: string[] = [];
+    r.register("set", async (args) => {
+      executed.push(String(args.id));
+      return args.value;
+    });
+    r.register("mark", async (args) => {
+      executed.push(String(args.id));
+      return true;
+    });
+    const wf: Workflow = {
+      nodes: [
+        { id: "flag", op: "set", args: { id: "flag", value: false } },
+        { id: "a", op: "mark", args: { id: "a" }, deps: ["flag"], when: { field: "flag", op: "eq", value: true } },
+        { id: "b", op: "mark", args: { id: "b" }, deps: ["a"] },
+      ],
+    };
+    const results = await executeWorkflow(wf, undefined, { maxLoopIterations: 5, registry: r });
+    expect(results.has("a")).toBe(false); // A 条件跳过
+    expect(results.has("b")).toBe(false); // B 级联跳过
+    expect(executed).not.toContain("b");
+  });
+
   it("结果 Map 键全", async () => {
     const wf: Workflow = { nodes: [{ id: "a", op: "echo", args: { text: "x" } }, { id: "b", op: "echo", args: { text: "y" } }] };
     const results = await executeWorkflow(wf, undefined, { maxLoopIterations: 5, registry: makeRegistry() });

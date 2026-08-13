@@ -27,6 +27,10 @@ describe("validateWorkflow", () => {
     expect(() => validateWorkflow(wf, registry, {})).toThrow(/maxLoopIterations/);
     expect(() => validateWorkflow(wf, registry, { maxLoopIterations: 3 })).not.toThrow();
   });
+  it("when.field 引用不存在的节点 → 抛错", () => {
+    const wf: Workflow = { nodes: [{ id: "a", op: "echo", when: { field: "nonexistent", op: "eq", value: 1 } }] };
+    expect(() => validateWorkflow(wf, registry, { maxLoopIterations: 3 })).toThrow(/when.field/);
+  });
 });
 
 describe("evalCondition", () => {
@@ -40,5 +44,9 @@ describe("evalCondition", () => {
     expect(evalCondition({ field: "n", op: "gte", value: 5 }, results)).toBe(true);
     expect(evalCondition({ field: "n", op: "lt", value: 6 }, results)).toBe(true);
     expect(evalCondition({ field: "n", op: "lte", value: 5 }, results)).toBe(true);
+  });
+  it("数值比较：'10' gt '9' → true（审查数值语义）", () => {
+    const r = new Map<string, unknown>([["n", "10"]]);
+    expect(evalCondition({ field: "n", op: "gt", value: "9" }, r)).toBe(true);
   });
 });

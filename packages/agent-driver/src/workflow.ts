@@ -49,6 +49,9 @@ export function validateWorkflow(
       if (!ids.has(d)) throw new Error(`节点依赖不存在：${n.id} → ${d}`);
     }
     if (!registry.has(n.op)) throw new Error(`未注册操作：${n.op}`);
+    if (n.when && !ids.has(n.when.field)) {
+      throw new Error(`when.field 引用不存在的节点：${n.when.field}`);
+    }
     if (n.loop && !(opts.maxLoopIterations !== undefined && opts.maxLoopIterations > 0)) {
       throw new Error(`loop 节点需要 maxLoopIterations 上限：${n.id}`);
     }
@@ -67,12 +70,12 @@ export function evalCondition(cond: Condition, results: Map<string, unknown>): b
     case "ne":
       return actual !== cond.value;
     case "gt":
-      return (actual as number) > (cond.value as number);
+      return Number(actual) > Number(cond.value); // 数值语义（"10" > "9"）
     case "gte":
-      return (actual as number) >= (cond.value as number);
+      return Number(actual) >= Number(cond.value);
     case "lt":
-      return (actual as number) < (cond.value as number);
+      return Number(actual) < Number(cond.value);
     case "lte":
-      return (actual as number) <= (cond.value as number);
+      return Number(actual) <= Number(cond.value);
   }
 }

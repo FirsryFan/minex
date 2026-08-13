@@ -56,14 +56,17 @@ describe("verifyPlan", () => {
 describe("execute", () => {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  it("无依赖并行：总耗时 ≈ 最慢者，非求和", async () => {
-    const start = Date.now();
+  it("无依赖并行（并发计数，非 wall-clock）", async () => {
+    let active = 0;
+    let maxActive = 0;
     await execute([t("a"), t("b"), t("c")], async () => {
+      active++;
+      maxActive = Math.max(maxActive, active);
       await sleep(20);
+      active--;
       return 1;
     });
-    const elapsed = Date.now() - start;
-    expect(elapsed).toBeLessThan(55); // 并行 ≈20ms，串行会 ≥60ms
+    expect(maxActive).toBeGreaterThanOrEqual(2); // 无依赖 → 并行
   });
 
   it("有依赖串行", async () => {
@@ -82,14 +85,17 @@ describe("execute", () => {
     expect(results.get("a")).toBe("A");
   });
 
-  it("maxConcurrent 限流：串行执行", async () => {
-    const start = Date.now();
+  it("maxConcurrent 限流：并发不超过 1（串行）", async () => {
+    let active = 0;
+    let maxActive = 0;
     await execute([t("a"), t("b"), t("c")], async () => {
+      active++;
+      maxActive = Math.max(maxActive, active);
       await sleep(15);
+      active--;
       return 1;
     }, { maxConcurrent: 1 });
-    const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(40); // 3×15 串行
+    expect(maxActive).toBe(1); // 限流 → 串行
   });
 
   it("单任务失败不中断整层（失败存 Error，审查 MINOR-1）", async () => {
@@ -109,19 +115,22 @@ describe("execute", () => {
     expect(results.get("ok")).toBeUndefined(); // 成功返回 undefined
     expect(results.get("fail")).toBeInstanceOf(Error); // 失败是 Error
   });
-  it("混合场景：B 在 A 后、C 与 A 并行、耗时≈max(A,C)+B（审查 INFO-4）", async () => {
+  it("混合场景：B 在 A 后、C 与 A 并行（审查 INFO-4）", async () => {
     const order: string[] = [];
-    const start = Date.now();
+    let active = 0;
+    let maxActive = 0;
     await execute([t("a"), t("b", ["a"]), t("c")], async (task) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
       if (task.id === "a") await sleep(20);
       if (task.id === "b") await sleep(10);
       if (task.id === "c") await sleep(20);
+      active--;
       order.push(task.id);
       return task.id;
     });
-    const elapsed = Date.now() - start;
     expect(order.indexOf("b")).toBeGreaterThan(order.indexOf("a")); // B 在 A 后
-    expect(order.indexOf("c")).toBeLessThan(order.indexOf("b")); // C 与 A 同层（并行）
-    expect(elapsed).toBeLessThan(48); // ≈30（max(20,20)+10），非 50（串行求和）
+    expect(order.indexOf("c")).toBeLessThan(order.indexOf("b")); // C 与 A 同层（先于 B 完成）
+    expect(maxActive).toBeGreaterThanOrEqual(2); // A 与 C 并行
   });
 });

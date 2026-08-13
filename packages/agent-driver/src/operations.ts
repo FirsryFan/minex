@@ -48,22 +48,39 @@ export function createBuiltinRegistry(ctx: DriverContext): OperationRegistry {
     });
   }
 
-  // sendEnvelope：查 envelope 能力
+  // sendEnvelope：查 envelope 能力（from/to/type 必填）
   const envelope = ctx.get<{ send(env: unknown): void }>("envelope", "default");
   if (envelope) {
     registry.register("sendEnvelope", async (args) => {
+      const from = args.from;
+      const to = args.to;
+      const type = args.type;
+      if (typeof from !== "string" || typeof to !== "string" || typeof type !== "string") {
+        throw new Error("sendEnvelope 需要 from/to/type 必填");
+      }
       envelope.send(args);
       return undefined;
     });
   }
 
   // readPool / requestPoolWrite：查 pool 能力
-  const pool = ctx.get<{ read(key: string): unknown; write(key: string, value: unknown): void }>("pool", "default");
+  const pool = ctx.get<{ read(key: string): unknown }>("pool", "default");
   if (pool) {
     registry.register("readPool", async (args) => pool.read(String(args.key ?? "")));
+  }
+
+  // requestPoolWrite：发 pool-request 信封（写池是 manager 编排层特权，白名单不含直接写）
+  if (envelope) {
     registry.register("requestPoolWrite", async (args) => {
-      // v1：直接写（manager 独占写由编排层保证，此处仅桥接）
-      pool.write(String(args.key ?? ""), args.value);
+      const from = args.from;
+      const to = args.to ?? "manager";
+      if (typeof from !== "string") throw new Error("requestPoolWrite 需要 from 必填");
+      envelope.send({
+        from,
+        to,
+        type: "pool-request",
+        payload: { key: args.key, value: args.value },
+      });
       return undefined;
     });
   }
