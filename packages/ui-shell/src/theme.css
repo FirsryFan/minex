@@ -10,9 +10,11 @@
   --color-on-primary: #ffffff;         /* 主色按钮上的文字 */
   --mask-bg: rgba(15, 23, 42, 0.45);   /* 浮窗遮罩 */
 
-  /* 背景层：所有底色（顶/左/右栏/主区）用 --color-bg；卡片（表面层）用 --color-card */
+  /* 背景层（两层）：框架（顶栏/左右栏/页面底）用 --color-panel；主体（main）用 --color-card。
+     另有 --color-bg 供按钮反白文字/遮罩等场景使用，不直接作栏背景 */
   --color-bg: #f3f6fb;
   --color-card: #ffffff;
+  --color-panel: #e9eef6;              /* 框架色（顶栏/侧栏/右栏）：比主体 --color-card 深，形成两色层次 */
 
   /* 文本 / 边框 */
   --color-text: #1e293b;
@@ -66,6 +68,7 @@
 
   --color-bg: #0f172a;
   --color-card: #253244;
+  --color-panel: #16233a;              /* 框架色：深色下相对主体略暗，形成两色层次 */
 
   --color-text: #e2e8f0;
   --color-text-muted: #94a3b8;

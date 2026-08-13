@@ -156,5 +156,6 @@ npm run drivers:sync                              # 同步驱动到 drivers/（C
 - 内核：`packages/kernel/src/{kernel,registry,lifecycle,events,storage,types,loader,manifest}.ts`
 - 外壳：`packages/ui-shell/src/{App.tsx,drivers.ts,storage-local.ts}` + `components/{DriverDetail,SettingsPage,ThemeManager,TopBar,...}`
 - 驱动：`packages/{filesystem,markdown,appearance}-driver/src/index.ts`（各驱动的入口 + 纯函数）
+- CLI 宿主：`packages/cli/src/{main.ts,cli.ts}`（`loadDriversFromDir` 消费 `drivers/` 同步产物；`npm run cli`）
 - 测试：各包 `test/*.test.ts`
 - 文档：`docs/{roadmap,driver-architecture,report-NN,review-phaseNN-report}.md`

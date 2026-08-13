@@ -47,4 +47,14 @@ describe("buildMarkdownCss", () => {
     expect(css).not.toContain("--md-font-size");
     expect(css).toContain("Consolas");
   });
+  it("emits line-height and heading/link colors", () => {
+    const css = buildMarkdownCss({ lineHeight: 1.8, headingColor: "#ff0000", linkColor: "#00ff00" });
+    expect(css).toContain("--md-line-height: 1.8");
+    expect(css).toContain("--md-heading-color: #ff0000");
+    expect(css).toContain("--md-link-color: #00ff00");
+  });
+  it("omits line-height at default 1.6", () => {
+    const css = buildMarkdownCss({ lineHeight: 1.6 });
+    expect(css).not.toContain("--md-line-height");
+  });
 });

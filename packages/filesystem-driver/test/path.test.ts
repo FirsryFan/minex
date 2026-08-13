@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseName, joinPath, parentPath, resolveSafePath } from "../src/path.js";
+import { baseName, isMarkdownFile, joinPath, parentPath, resolveSafePath } from "../src/path.js";
 
 describe("resolveSafePath", () => {
   it("normalizes relative path", () => {
@@ -31,5 +31,24 @@ describe("joinPath / parentPath / baseName", () => {
   it("basename", () => {
     expect(baseName("a/b/c.md")).toBe("c.md");
     expect(baseName("c.md")).toBe("c.md");
+  });
+});
+
+describe("isMarkdownFile", () => {
+  it("recognizes .md / .markdown ignoring case", () => {
+    expect(isMarkdownFile("README.md")).toBe(true);
+    expect(isMarkdownFile("notes.MARKDOWN")).toBe(true);
+    expect(isMarkdownFile("a/b/c.md")).toBe(true);
+  });
+  it("rejects non-markdown extensions", () => {
+    expect(isMarkdownFile("a.txt")).toBe(false);
+    expect(isMarkdownFile("a.md.txt")).toBe(false);
+    expect(isMarkdownFile("a.js")).toBe(false);
+  });
+  it("rejects hidden files / no extension / empty", () => {
+    expect(isMarkdownFile(".md")).toBe(false);
+    expect(isMarkdownFile("a.")).toBe(false);
+    expect(isMarkdownFile("a")).toBe(false);
+    expect(isMarkdownFile("")).toBe(false);
   });
 });

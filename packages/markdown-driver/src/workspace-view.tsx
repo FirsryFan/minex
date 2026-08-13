@@ -1,10 +1,12 @@
 import type { MinexKernel } from "@minex/kernel";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Columns2, Eye, Pen, Zap, type LucideIcon } from "lucide-react";
 import "highlight.js/styles/github.css";
 import "katex/dist/katex.min.css";
 import TurndownService from "turndown";
 import { renderMarkdown, type RenderOptions } from "./markdown.js";
 import { applyFormat, shortcutToAction } from "./shortcuts.js";
+import { FILE_SAVED_TOPIC, isOpenFilePayload, OPEN_FILE_TOPIC } from "./events.js";
 
 type Mode = "edit" | "preview" | "split" | "wysiwyg";
 
@@ -36,19 +38,126 @@ $$
 `;
 
 const DOC_KEY = "doc";
+/** 自动保存防抖间隔（编辑停顿后写回文件） */
+const AUTO_SAVE_DELAY = 800;
 const turndown = new TurndownService();
 
-/** markdown 编辑器工作区：编辑 / 预览 / 分屏 / 即时（所见即所得）四模式 */
+/** filesystem 能力中 markdown 用到的子集（结构类型，避免跨包 import）。 */
+interface FileSystemOps {
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+}
+
+const MODES: { id: Mode; title: string; Icon: LucideIcon }[] = [
+  { id: "edit", title: "编辑", Icon: Pen },
+  { id: "preview", title: "预览", Icon: Eye },
+  { id: "split", title: "分屏", Icon: Columns2 },
+  { id: "wysiwyg", title: "即时", Icon: Zap },
+];
+
+/**
+ * markdown 编辑器工作区：编辑 / 预览 / 分屏 / 即时（所见即所得）四模式。
+ * 打开文件后：编辑停顿自动保存 + Ctrl/Cmd+S 立即保存（拦截浏览器默认「保存网页」）。
+ */
 export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
   const [mode, setMode] = useState<Mode>("split");
   const [doc, setDoc] = useState<string>(() => kernel.storage.namespace("minex.markdown").get<string>(DOC_KEY) ?? DEFAULT_DOC);
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState("");
   const [renderOpts, setRenderOpts] = useState<RenderOptions>(() => readRenderOpts(kernel));
   const wysiwygRef = useRef<HTMLDivElement>(null);
+  const openSeqRef = useRef(0); // 竞态防护：连续打开时只应用最后一次请求的结果
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const docRef = useRef(doc);
+  const pathRef = useRef(currentPath);
+
+  const fs = useMemo<FileSystemOps | undefined>(
+    () => kernel.registry.get<FileSystemOps>("filesystem", "default")?.value,
+    [kernel],
+  );
+
+  const html = useMemo(() => renderMarkdown(doc, renderOpts), [doc, renderOpts]);
+
+  // 同步最新值到 ref（异步写文件用最新值，避免闭包捕获过期状态）
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
+  useEffect(() => {
+    pathRef.current = currentPath;
+  }, [currentPath]);
 
   useEffect(() => {
-    const off = kernel.events.on("minex:dataChanged", () => setRenderOpts(readRenderOpts(kernel)));
-    return off;
+    const offs = [
+      kernel.events.on("minex:dataChanged", () => setRenderOpts(readRenderOpts(kernel))),
+      kernel.events.on(OPEN_FILE_TOPIC, (payload) => {
+        if (isOpenFilePayload(payload)) void openPath(payload.path);
+      }),
+    ];
+    return () => offs.forEach((off) => off());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kernel]);
+
+  // 挂载时补开上次打开的文件（sidebar 记录于 filesystem 命名空间；尚未授权根目录时 readFile 抛错则忽略）
+  useEffect(() => {
+    const last = kernel.storage.namespace("minex.filesystem").get<string>("lastOpenPath");
+    if (last) void openPath(last);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ctrl/Cmd+S：抢在浏览器默认「保存网页」之前保存当前文档（preventDefault 改变优先级）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void persistDoc();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [kernel]);
+
+  // 自动保存：有打开文件时，编辑停顿 AUTO_SAVE_DELAY 后写回文件
+  useEffect(() => {
+    if (!currentPath) return;
+    setSaveStatus("编辑中…");
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => {
+      void persistDoc();
+    }, AUTO_SAVE_DELAY);
+    return () => {
+      if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, currentPath]);
+
+  async function openPath(path: string): Promise<void> {
+    if (!fs) return;
+    const seq = ++openSeqRef.current;
+    try {
+      const content = await fs.readFile(path);
+      if (seq !== openSeqRef.current) return; // 期间又请求了别的文件，丢弃过期结果
+      if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+      setCurrentPath(path);
+      setDoc(content);
+      setSaveStatus("");
+    } catch (err) {
+      if (seq === openSeqRef.current) {
+        setSaveStatus(`打开失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  /** 写回当前文件（自动保存 / Ctrl+S 共用；用 ref 取最新 doc 与 path） */
+  async function persistDoc(): Promise<void> {
+    if (!fs || !pathRef.current) return;
+    try {
+      await fs.writeFile(pathRef.current, docRef.current);
+      kernel.events.emit(FILE_SAVED_TOPIC, { path: pathRef.current });
+      setSaveStatus("已保存");
+    } catch (err) {
+      setSaveStatus(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   // 进入即时模式时，把渲染结果写入 contentEditable（仅进入时同步，避免编辑中光标重置）
   useEffect(() => {
@@ -62,8 +171,6 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
     setDoc(text);
     kernel.storage.namespace("minex.markdown").set(DOC_KEY, text);
   }
-
-  const html = useMemo(() => renderMarkdown(doc, renderOpts), [doc, renderOpts]);
 
   // 源码编辑区快捷键（Typora 风格）
   function onEditorKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
@@ -91,10 +198,22 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
   return (
     <div className="md-workspace">
       <div className="md-toolbar">
-        <button className={`md-mode${mode === "edit" ? " active" : ""}`} onClick={() => setMode("edit")}>编辑</button>
-        <button className={`md-mode${mode === "preview" ? " active" : ""}`} onClick={() => setMode("preview")}>预览</button>
-        <button className={`md-mode${mode === "split" ? " active" : ""}`} onClick={() => setMode("split")}>分屏</button>
-        <button className={`md-mode${mode === "wysiwyg" ? " active" : ""}`} onClick={() => setMode("wysiwyg")}>即时</button>
+        {/* 模式按钮组：主体顶部左侧 */}
+        <div className="md-modes">
+          {MODES.map(({ id, title, Icon }) => (
+            <button key={id} className={`md-mode${mode === id ? " active" : ""}`} title={title} onClick={() => setMode(id)}>
+              <Icon size={14} />
+            </button>
+          ))}
+        </div>
+        {/* 文件名：主体顶部居中 */}
+        <div className="md-file" title={currentPath ?? "尚未打开文件"}>
+          {currentPath ?? "未打开文件"}
+        </div>
+        {/* 右侧：自动保存状态 */}
+        <div className="md-toolbar-right">
+          {saveStatus && <span className="md-save-msg">{saveStatus}</span>}
+        </div>
       </div>
       <div className="md-body">
         {(mode === "edit" || mode === "split") && (

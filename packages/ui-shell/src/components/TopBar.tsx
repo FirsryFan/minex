@@ -1,3 +1,4 @@
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings } from "lucide-react";
 import { DriverIcon } from "./DriverIcon.js";
 import { DriverSelector } from "./DriverSelector.js";
 import { ThemeToggle } from "./ThemeToggle.js";
@@ -19,6 +20,9 @@ export function TopBar({
   dark,
   onToggleTheme,
   onOpenSettings,
+  collapsed,
+  onToggleLeft,
+  onToggleRight,
 }: {
   drivers: DriverOption[];
   activeDriverId: string | null;
@@ -26,6 +30,9 @@ export function TopBar({
   dark: boolean;
   onToggleTheme: () => void;
   onOpenSettings: () => void;
+  collapsed: { left: boolean; right: boolean };
+  onToggleLeft: () => void;
+  onToggleRight: () => void;
 }) {
   const active = drivers.find((d) => d.id === activeDriverId);
 
@@ -39,9 +46,16 @@ export function TopBar({
         </span>
       )}
       <span style={{ flex: 1 }} />
+      {/* 折叠按钮常驻顶栏（驱动工作区存在时 MainArea 不渲染，折叠入口不能只放在 MainArea） */}
+      <button className="icon-btn" title={collapsed.left ? "展开左栏" : "折叠左栏"} onClick={onToggleLeft}>
+        {collapsed.left ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+      </button>
+      <button className="icon-btn" title={collapsed.right ? "展开右栏" : "折叠右栏"} onClick={onToggleRight}>
+        {collapsed.right ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+      </button>
       <ThemeToggle dark={dark} onToggle={onToggleTheme} />
-      <button className="btn-ghost" onClick={onOpenSettings}>
-        设置
+      <button className="icon-btn" title="设置" onClick={onOpenSettings}>
+        <Settings size={15} />
       </button>
     </header>
   );

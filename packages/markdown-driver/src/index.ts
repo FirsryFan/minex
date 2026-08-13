@@ -11,6 +11,9 @@ interface MarkdownSettings {
   fontSize?: number;
   codeFont?: string;
   codeWrap?: boolean;
+  lineHeight?: number;
+  headingColor?: string;
+  linkColor?: string;
 }
 
 function quoteFont(name: string): string {
@@ -28,6 +31,9 @@ export function buildMarkdownCss(s: MarkdownSettings): string {
   if (s.fontSize && s.fontSize !== 14) lines.push(`  --md-font-size: ${s.fontSize}px;`);
   if (s.codeFont) lines.push(`  --font-code: "${s.codeFont}", ui-monospace, monospace;`);
   if (s.codeWrap) lines.push(`  --md-code-wrap: pre-wrap;`);
+  if (s.lineHeight && s.lineHeight !== 1.6) lines.push(`  --md-line-height: ${s.lineHeight};`);
+  if (s.headingColor) lines.push(`  --md-heading-color: ${s.headingColor};`);
+  if (s.linkColor) lines.push(`  --md-link-color: ${s.linkColor};`);
   return lines.length > 0 ? `:root {\n${lines.join("\n")}\n}` : "";
 }
 
@@ -46,9 +52,12 @@ export default {
       const s: MarkdownSettings = {
         docEnFont: (ctx.storage.get("docEnFont") ?? "") as string,
         docZhFont: (ctx.storage.get("docZhFont") ?? "") as string,
-        fontSize: (ctx.storage.get("fontSize") ?? 14) as number,
+        fontSize: Number(ctx.storage.get("fontSize") ?? 14) || 14,
         codeFont: (ctx.storage.get("codeFont") ?? "") as string,
-        codeWrap: (ctx.storage.get("codeWrap") ?? false) as boolean,
+        codeWrap: (ctx.storage.get("codeWrap") ?? false) === true || (ctx.storage.get("codeWrap") ?? false) === "on",
+        lineHeight: Number(ctx.storage.get("lineHeight") ?? 1.6) || 1.6,
+        headingColor: (ctx.storage.get("headingColor") ?? "") as string,
+        linkColor: (ctx.storage.get("linkColor") ?? "") as string,
       };
       ctx.register("theme", "minex.markdown.css", {
         id: "minex.markdown.css",
@@ -58,11 +67,20 @@ export default {
     };
     applyCss();
 
-    // 注册到 appearance「驱动设置」扩展点
+    // 注册到 appearance「驱动设置」扩展点（markdown 编辑器外观条目）
     ctx.register("appearance.driverSetting", "minex.markdown", {
       driverId: "minex.markdown",
       title: "Markdown 编辑器",
-      items: [{ key: "codeFont", label: "代码块字体", type: "font", enum: CODE_FONTS, default: "" }],
+      items: [
+        { key: "docEnFont", label: "文档英文", type: "font", enum: EN_FONTS, default: "" },
+        { key: "docZhFont", label: "文档中文", type: "font", enum: ZH_FONTS, default: "" },
+        { key: "fontSize", label: "文档字号", type: "select", enum: ["12", "14", "16", "18", "20"], default: "14" },
+        { key: "lineHeight", label: "行距", type: "select", enum: ["1.4", "1.6", "1.8", "2.0", "2.2"], default: "1.6" },
+        { key: "headingColor", label: "标题颜色", type: "color", default: "" },
+        { key: "linkColor", label: "链接颜色", type: "color", default: "" },
+        { key: "codeFont", label: "代码块字体", type: "font", enum: CODE_FONTS, default: "" },
+        { key: "codeWrap", label: "代码块换行", type: "select", enum: ["off", "on"], default: "off" },
+      ],
     });
 
     ctx.register("workspace", "minex.markdown", { load: () => import("./workspace-view.js") });

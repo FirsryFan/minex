@@ -19,6 +19,9 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
     codeWrap: ns.get<boolean>("codeWrap") ?? false,
     codeHighlight: ns.get<boolean>("codeHighlight") ?? false,
     katex: ns.get<boolean>("katex") ?? false,
+    lineHeight: ns.get<string>("lineHeight") ?? "1.6",
+    headingColor: ns.get<string>("headingColor") ?? "",
+    linkColor: ns.get<string>("linkColor") ?? "",
   }));
 
   const readmeHtml = useMemo(() => renderMarkdown(readme), []);
@@ -76,6 +79,30 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
             <label>KaTeX 渲染</label>
             <div className="field-control">
               <input type="checkbox" checked={Boolean(values.katex)} onChange={(e) => setField("katex", e.target.checked)} />
+            </div>
+          </div>
+
+          <div className="section-title">排版</div>
+          <div className="field">
+            <label>行距</label>
+            <div className="field-control">
+              <select value={String(values.lineHeight)} onChange={(e) => setField("lineHeight", e.target.value)}>
+                {["1.4", "1.6", "1.8", "2.0", "2.2"].map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="field">
+            <label>标题颜色</label>
+            <div className="field-control">
+              <input type="color" value={String(values.headingColor || "#000000")} onChange={(e) => setField("headingColor", e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <label>链接颜色</label>
+            <div className="field-control">
+              <input type="color" value={String(values.linkColor || "#2563eb")} onChange={(e) => setField("linkColor", e.target.value)} />
             </div>
           </div>
         </div>

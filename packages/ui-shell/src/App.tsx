@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
-import { MainArea } from "./components/MainArea.js";
 import { RightBar } from "./components/RightBar.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { Sidebar } from "./components/Sidebar.js";
@@ -39,6 +38,18 @@ export function App({ problems }: { problems: string[] }) {
     return () => offs.forEach((off) => off());
   }, [kernel]);
 
+  // 文件树点击 markdown 文件 → 自动切换到 markdown 工作区（markdown workspace 随后订阅事件加载内容）
+  useEffect(() => {
+    return kernel.events.on("filesystem:openFile", () => {
+      setActiveDriverId("minex.markdown");
+      try {
+        localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.markdown");
+      } catch {
+        /* localStorage 不可用 */
+      }
+    });
+  }, [kernel]);
+
   // 主题：应用 data-theme + 持久化（ThemeManager 消费驱动 theme 贡献）
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -58,10 +69,10 @@ export function App({ problems }: { problems: string[] }) {
     }
   }
 
-  // 顶栏驱动选择器只列有主界面的驱动（hasWorkspace）；纯设置驱动（外观/hello）不出现
+  // 顶栏驱动选择器只列「已启用且有主界面」的驱动（纯设置驱动 / 被禁用的驱动不出现）
   const drivers = kernel.drivers
     .list()
-    .filter((m) => m.manifest.hasWorkspace)
+    .filter((m) => m.manifest.hasWorkspace && kernel.drivers.getState(m.manifest.id) === "activated")
     .map((m) => ({
       id: m.manifest.id,
       name: m.manifest.name,
@@ -99,6 +110,9 @@ export function App({ problems }: { problems: string[] }) {
         dark={dark}
         onToggleTheme={() => setDark((d) => !d)}
         onOpenSettings={() => setView("settings")}
+        collapsed={collapsed}
+        onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
+        onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
       />
       <div className="workspace">
         <div
@@ -130,12 +144,8 @@ export function App({ problems }: { problems: string[] }) {
               <WorkspaceView kernel={kernel} />
             </Suspense>
           ) : (
-            <MainArea
-              collapsed={collapsed}
-              onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
-              onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
-              selectedPanelId={selectedPanelId}
-            />
+            /* 无活动/已启用驱动工作区时：主体留空，不显示任何占位文字 */
+            <div className="main-empty" />
           )}
         </div>
         {!collapsed.right && (

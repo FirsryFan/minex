@@ -1,3 +1,4 @@
+import { CircleAlert } from "lucide-react";
 import { useKernel } from "../kernel-context.js";
 
 interface UiContribution {
@@ -31,8 +32,9 @@ export function Sidebar({
         </div>
       ))}
       {problems.map((p) => (
-        <div key={p} className="muted" style={{ padding: "4px 12px" }}>
-          ⚠ {p}
+        <div key={p} className="muted" style={{ padding: "4px 12px", display: "flex", alignItems: "center", gap: 4 }}>
+          <CircleAlert size={13} />
+          {p}
         </div>
       ))}
 

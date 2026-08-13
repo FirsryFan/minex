@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Menu } from "lucide-react";
 import { DriverIcon } from "./DriverIcon.js";
 
 interface DriverOption {
@@ -46,7 +47,7 @@ export function DriverSelector({
   return (
     <div className="driver-selector" ref={ref}>
       <button className="driver-selector-btn" onClick={() => setOpen((o) => !o)} title="选择驱动">
-        ☰
+        <Menu size={16} />
       </button>
       {open && (
         <div className="dropdown">

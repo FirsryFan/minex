@@ -1,5 +1,6 @@
 import type { MinexKernel } from "@minex/kernel";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, X } from "lucide-react";
 import readme from "../README.md?raw";
 import { hexToHsv, hsvToHex, type Hsv } from "./color.js";
 import { DEFAULT_THEMES, THEMES_KEY, type Theme } from "./theme.js";
@@ -74,7 +75,7 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
                   closeTab(t.id);
                 }}
               >
-                ×
+                <X size={12} />
               </span>
             )}
           </span>
@@ -121,7 +122,7 @@ function ThemeGrid({ themes, onOpen }: { themes: Theme[]; onOpen: (t: Theme) => 
   return (
     <div className="theme-grid">
       <div className="theme-card theme-add" title="主题商店">
-        <div className="theme-add-plus">＋</div>
+        <div className="theme-add-plus"><Plus size={18} /></div>
       </div>
       {themes.map((t) => (
         <div key={t.id} className="theme-card" onDoubleClick={() => onOpen(t)} title={t.name}>
@@ -434,12 +435,8 @@ function GlobalSettingsPanel({ kernel }: { kernel: MinexKernel }) {
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div className="section-title">全局设置</div>
-      <div className="field">
-        <label>全局缩放</label>
-        <div className="field-control">
-          <input type="number" min={50} max={200} value={Number(g.zoom ?? 100)} onChange={(e) => setField("zoom", clamp(Number(e.target.value), 50, 200))} />
-        </div>
-      </div>
+      {/* 数字输入：输入过程不立即 clamp（避免逐字符立刻更正），失焦/回车时边界检测并应用 */}
+      <NumberField label="全局缩放" value={Number(g.zoom ?? 100)} min={50} max={200} onCommit={(v) => setField("zoom", v)} />
       <div className="field">
         <label>动画效果</label>
         <div className="field-control">
@@ -452,17 +449,58 @@ function GlobalSettingsPanel({ kernel }: { kernel: MinexKernel }) {
           <input type="checkbox" checked={g.acrylic === true} onChange={(e) => setField("acrylic", e.target.checked)} />
         </div>
       </div>
-      <div className="field">
-        <label>亚克力透明度</label>
-        <div className="field-control">
-          <input type="number" min={0} max={100} value={Number(g.acrylicOpacity ?? 80)} onChange={(e) => setField("acrylicOpacity", clamp(Number(e.target.value), 0, 100))} />
-        </div>
-      </div>
+      <NumberField label="亚克力透明度" value={Number(g.acrylicOpacity ?? 80)} min={0} max={100} onCommit={(v) => setField("acrylicOpacity", v)} />
       <div className="field">
         <label>背景图片 URL</label>
         <div className="field-control">
           <input type="text" value={String(g.backgroundImage ?? "")} onChange={(e) => setField("backgroundImage", e.target.value)} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** 数字输入框：本地保存输入串，失焦/回车时做边界 clamp 并提交（输入过程不立即更正）。 */
+function NumberField({
+  label,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (v: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  function commit(): void {
+    const n = Number(text);
+    const v = Number.isNaN(n) ? min : Math.min(max, Math.max(min, n));
+    setText(String(v));
+    onCommit(v);
+  }
+
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className="field-control">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
       </div>
     </div>
   );

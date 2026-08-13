@@ -5,6 +5,9 @@
   "version": "0.1.0",
   "minKernelVersion": "0.2.3",
   "entry": "./dist/index.js",
+  "dependencies": [
+    "minex.filesystem"
+  ],
   "reloadable": true,
   "hasWorkspace": true,
   "source": "本地",
