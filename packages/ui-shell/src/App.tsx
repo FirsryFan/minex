@@ -75,6 +75,10 @@ export function App({ problems }: { problems: string[] }) {
     : undefined;
   const WorkspaceView = useMemo(() => (workspaceView ? lazy(workspaceView.value.load) : null), [workspaceView, activeDriverId]);
 
+  // 侧边栏贡献（文件系统驱动的文件树常驻左栏，不依赖活动驱动）
+  const sidebarView = kernel.registry.get<{ load: () => Promise<{ default: ComponentType<{ kernel: typeof kernel }> }> }>("sidebar", "minex.filesystem");
+  const SidebarContribution = useMemo(() => (sidebarView ? lazy(sidebarView.value.load) : null), [sidebarView]);
+
   if (view === "settings") {
     // T1：ThemeManager 常驻（两种视图都挂载），设置页改主题即时生效
     return (
@@ -96,23 +100,22 @@ export function App({ problems }: { problems: string[] }) {
         onToggleTheme={() => setDark((d) => !d)}
         onOpenSettings={() => setView("settings")}
       />
-      {WorkspaceView ? (
-        <div className="workspace">
-          <Suspense fallback={<div className="loading">加载工作区…</div>}>
-            <WorkspaceView kernel={kernel} />
-          </Suspense>
-        </div>
-      ) : (
       <div className="workspace">
         <div
           className={`sidebar${collapsed.left ? " collapsed" : ""}`}
           style={{ width: collapsed.left ? undefined : widths.left }}
         >
-          <Sidebar
-            selectedPanelId={selectedPanelId}
-            onSelect={(id) => setSelectedPanelId(id === selectedPanelId ? null : id)}
-            problems={problems}
-          />
+          {SidebarContribution ? (
+            <Suspense fallback={<div className="muted">加载侧边栏…</div>}>
+              <SidebarContribution kernel={kernel} />
+            </Suspense>
+          ) : (
+            <Sidebar
+              selectedPanelId={selectedPanelId}
+              onSelect={(id) => setSelectedPanelId(id === selectedPanelId ? null : id)}
+              problems={problems}
+            />
+          )}
         </div>
         {!collapsed.left && (
           <Resizer
@@ -121,12 +124,20 @@ export function App({ problems }: { problems: string[] }) {
             onResize={(target) => setWidths((w) => ({ ...w, left: clamp(target, 160, 480) }))}
           />
         )}
-        <MainArea
-          collapsed={collapsed}
-          onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
-          onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
-          selectedPanelId={selectedPanelId}
-        />
+        <div className="main">
+          {WorkspaceView ? (
+            <Suspense fallback={<div className="loading">加载工作区…</div>}>
+              <WorkspaceView kernel={kernel} />
+            </Suspense>
+          ) : (
+            <MainArea
+              collapsed={collapsed}
+              onToggleLeft={() => setCollapsed((c) => ({ ...c, left: !c.left }))}
+              onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
+              selectedPanelId={selectedPanelId}
+            />
+          )}
+        </div>
         {!collapsed.right && (
           <Resizer
             side="right"
@@ -141,7 +152,6 @@ export function App({ problems }: { problems: string[] }) {
           <RightBar />
         </div>
       </div>
-      )}
     </div>
   );
 }

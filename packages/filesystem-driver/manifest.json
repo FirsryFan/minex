@@ -1,0 +1,14 @@
+{
+  "id": "minex.filesystem",
+  "name": "文件系统",
+  "icon": "./assets/icon.svg",
+  "version": "0.1.0",
+  "minKernelVersion": "0.2.3",
+  "entry": "./dist/index.js",
+  "reloadable": true,
+  "hasWorkspace": true,
+  "source": "本地",
+  "description": "文件系统驱动：打开文件夹为根，贡献 filesystem 能力（readDir/readFile/writeFile）+ 侧边栏文件树",
+  "tags": ["文件", "资源管理器"],
+  "kind": "driver"
+}

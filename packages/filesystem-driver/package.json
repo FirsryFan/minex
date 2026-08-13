@@ -1,0 +1,21 @@
+{
+  "name": "minex-filesystem-driver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minex 文件系统驱动：打开文件夹为根，贡献 filesystem 能力 + 侧边栏文件树",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.2.3"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.1"
+  }
+}
