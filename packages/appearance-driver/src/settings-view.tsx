@@ -31,10 +31,13 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
     return saved && saved.length > 0 ? saved : DEFAULT_THEMES;
   });
 
-  function persistThemes(next: Theme[]): void {
-    kernel.storage.namespace("minex.appearance").set(THEMES_KEY, next);
-    setThemes(next);
-    kernel.events.emit("minex:dataChanged", { driverId: "minex.appearance" });
+  function persistThemes(updater: (prev: Theme[]) => Theme[]): void {
+    setThemes((prev) => {
+      const next = updater(prev); // 函数式更新，避免闭包旧值
+      kernel.storage.namespace("minex.appearance").set(THEMES_KEY, next);
+      kernel.events.emit("minex:dataChanged", { driverId: "minex.appearance" });
+      return next;
+    });
   }
 
   // 双击主题 → 打开新选项卡（可关闭），不原地叠加
@@ -44,11 +47,10 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
     setActiveTab(tabId);
   }
   function closeTab(id: string): void {
-    setTabs((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      if (activeTab === id) setActiveTab(next.length > 0 ? next[next.length - 1].id : "manage");
-      return next;
-    });
+    // M1：拆两个独立 setState（不在 updater 内做副作用）
+    const next = tabs.filter((t) => t.id !== id);
+    setTabs(next);
+    if (activeTab === id) setActiveTab(next.length > 0 ? next[next.length - 1].id : "manage");
   }
 
   const activeTheme = activeTab.startsWith("theme:")
@@ -84,9 +86,10 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
       {activeTab === "manage" && <ThemeGrid themes={themes} onOpen={openTheme} />}
       {activeTheme && (
         <ThemeSettings
+          key={activeTheme.id}
           theme={activeTheme}
           onSave={(settings) => {
-            persistThemes(themes.map((t) => (t.id === activeTheme.id ? { ...t, settings } : t)));
+            persistThemes((prev) => prev.map((t) => (t.id === activeTheme.id ? { ...t, settings } : t)));
           }}
         />
       )}

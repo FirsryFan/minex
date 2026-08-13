@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import { DriverIcon } from "./DriverIcon.js";
@@ -35,8 +35,12 @@ export function DriverDetail({
 
   // 方案 A：驱动贡献的自定义设置视图（惰性加载），替代默认结构
   const settingsView = kernel.registry.get<SettingsViewContribution>("settingsView", driverId);
-  if (settingsView) {
-    const View = lazy(settingsView.value.load);
+  // B2：lazy 必须 useMemo（组件体内新建 lazy 对象会导致每次渲染重挂载、状态重置）
+  const SettingsView = useMemo(
+    () => (settingsView ? lazy(settingsView.value.load) : null),
+    [settingsView, driverId],
+  );
+  if (SettingsView) {
     return (
       <div>
         <div className="manage-toolbar">
@@ -45,7 +49,7 @@ export function DriverDetail({
           </button>
         </div>
         <Suspense fallback={<div className="muted">加载设置界面…</div>}>
-          <View kernel={kernel} />
+          <SettingsView kernel={kernel} />
         </Suspense>
       </div>
     );

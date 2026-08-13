@@ -32,7 +32,7 @@ export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string 
   if (s.dangerColor) lines.push(`  --color-danger: ${s.dangerColor};`);
 
   // 全局字体：中文 + 英文（UI 与内容统一）
-  const font = [s.enFont, s.zhFont].filter(Boolean).map(quoteFont).join(", ");
+  const font = [s.enFont, s.zhFont].filter((f): f is string => Boolean(f)).map(quoteFont).join(", ");
   if (font) lines.push(`  --font-ui: ${font}, system-ui, sans-serif;`);
   if (font) lines.push(`  --font-content: ${font}, system-ui, sans-serif;`);
 
@@ -49,9 +49,11 @@ export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string 
  */
 export default {
   async activate(ctx: DriverContext) {
-    // 初始化：storage 无主题时写入默认浅/深主题（保证 apply 能读到设置）
+    // 初始化：确保 storage 里浅/深两种模式的主题齐全（旧数据缺失 mode 或只有一个浅色时重置）
     const existing = ctx.storage.get<Theme[]>(THEMES_KEY);
-    if (!existing || existing.length === 0) {
+    const hasLight = existing?.some((t) => t.mode === "light");
+    const hasDark = existing?.some((t) => t.mode === "dark");
+    if (!existing || existing.length === 0 || !hasLight || !hasDark) {
       ctx.storage.set(THEMES_KEY, DEFAULT_THEMES);
     }
 
