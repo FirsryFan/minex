@@ -1,0 +1,14 @@
+{
+  "name": "minex-llm-driver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minex LLM 接入驱动：Provider 抽象 + DeepSeek 实现 + 消息装配 + 计量",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.2.3"
+  }
+}

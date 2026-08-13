@@ -1,0 +1,12 @@
+{
+  "id": "minex.llm",
+  "name": "LLM 接入",
+  "version": "0.1.0",
+  "minKernelVersion": "0.2.3",
+  "entry": "./dist/index.js",
+  "reloadable": true,
+  "source": "本地",
+  "description": "LLM 接入驱动：Provider 抽象（DeepSeek 实现）+ 消息装配 + 计量",
+  "tags": ["LLM", "Agent"],
+  "kind": "driver"
+}
