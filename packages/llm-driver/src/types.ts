@@ -22,10 +22,11 @@ export interface LLMRequest {
   stream?: boolean;
 }
 
-/** 流式输出分片：delta 为增量文本；done 为结束标记 */
+/** 流式输出分片：delta 为增量文本；done 为结束标记；usage 在 done 时产出（流末 usage chunk） */
 export interface LLMChunk {
   delta: string;
   done: boolean;
+  usage?: LLMUsage;
 }
 
 /** 用量统计（DeepSeek 缓存计费字段） */

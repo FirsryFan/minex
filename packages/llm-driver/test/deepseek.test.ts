@@ -15,6 +15,10 @@ describe("parseSseLine", () => {
     expect(parseSseLine("data: not-json")).toBeNull();
     expect(parseSseLine('data: {"choices":[{"delta":{}}]}')).toBeNull(); // 无 content
   });
+  it("parses usage chunk (审查 MAJOR-1)", () => {
+    const r = parseSseLine('data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"prompt_cache_hit_tokens":30}}');
+    expect(r).toEqual({ usage: { promptTokens: 100, completionTokens: 50, cachedTokens: 30 } });
+  });
 });
 
 describe("extractUsage", () => {

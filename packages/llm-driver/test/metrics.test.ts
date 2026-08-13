@@ -2,28 +2,36 @@ import { describe, expect, it } from "vitest";
 import { computeCost, computeHitRate } from "../src/metrics.js";
 
 describe("computeCost", () => {
+  // DeepSeek 真实价格：inputHit 0.07 / inputMiss 0.27 / output 1.10
+  const prices = { inputHit: 0.07, inputMiss: 0.27, output: 1.1 };
   it("all-hit: cached == prompt, no completion", () => {
-    // 1M token 全命中：1M × hit 价
     const cost = computeCost(
       { promptTokens: 1_000_000, completionTokens: 0, cachedTokens: 1_000_000 },
-      { hit: 0.1, miss: 1.0 },
+      prices,
     );
-    expect(cost).toBeCloseTo(0.1, 10);
+    expect(cost).toBeCloseTo(0.07, 10);
   });
-  it("all-miss: no cache, prompt + completion all miss", () => {
+  it("all-miss: prompt all miss + completion charged at output price", () => {
     const cost = computeCost(
       { promptTokens: 1_000_000, completionTokens: 1_000_000, cachedTokens: 0 },
-      { hit: 0.1, miss: 1.0 },
+      prices,
     );
-    expect(cost).toBeCloseTo(2.0, 10); // 2M × miss 价
+    expect(cost).toBeCloseTo(0.27 + 1.1, 10); // 输入 miss + 输出（独立价）
   });
-  it("mixed: hit + miss split", () => {
+  it("mixed: hit + miss + output split", () => {
     const cost = computeCost(
       { promptTokens: 1_000_000, completionTokens: 500_000, cachedTokens: 400_000 },
-      { hit: 0.1, miss: 1.0 },
+      prices,
     );
-    // hit=0.4M×0.1=0.04；miss=(1M-0.4M+0.5M)=1.1M×1.0=1.1；合计 1.14
-    expect(cost).toBeCloseTo(1.14, 10);
+    // hit 0.4M×0.07=0.028; miss 0.6M×0.27=0.162; output 0.5M×1.1=0.55; 合计 0.74
+    expect(cost).toBeCloseTo(0.74, 10);
+  });
+  it("clamps negative guard values to 0", () => {
+    const cost = computeCost(
+      { promptTokens: 0, completionTokens: 0, cachedTokens: 0 },
+      prices,
+    );
+    expect(cost).toBe(0);
   });
 });
 
@@ -39,5 +47,8 @@ describe("computeHitRate", () => {
   });
   it("prompt=0 returns 0", () => {
     expect(computeHitRate(10, 0)).toBe(0);
+  });
+  it("clamps cached > prompt to 100% (审查 MINOR)", () => {
+    expect(computeHitRate(150, 100)).toBe(1);
   });
 });

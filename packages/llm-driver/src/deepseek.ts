@@ -3,20 +3,27 @@ import type { LLMChunk, LLMProvider, LLMRequest, LLMUsage, ToolDef } from "./typ
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 
 /**
- * 解析 SSE 行 → 增量 / 结束标记 / null。
- * DeepSeek 流式每行形如 `data: {json}`；`data: [DONE]` 结束。
+ * 解析 SSE 行 → 增量 / usage / 结束标记 / null。
+ * DeepSeek 流式每行形如 `data: {json}`；`data: [DONE]` 结束；流末 chunk 含 usage。
  * 纯函数可测。
  */
-export function parseSseLine(line: string): { delta: string } | { done: true } | null {
+export function parseSseLine(line: string): { delta: string } | { done: true } | { usage: LLMUsage } | null {
   const trimmed = line.trim();
   if (!trimmed.startsWith("data:")) return null;
   const data = trimmed.slice(5).trim();
   if (data === "[DONE]") return { done: true };
   try {
-    const obj = JSON.parse(data) as { choices?: Array<{ delta?: { content?: unknown } }> };
+    const obj = JSON.parse(data) as {
+      choices?: Array<{ delta?: { content?: unknown } }>;
+      usage?: Record<string, unknown>;
+    };
+    // usage chunk（流末，choices 空 / finish_reason）优先提取（审查 MAJOR-1）
+    if (obj.usage && (obj.usage.prompt_tokens !== undefined || obj.usage.completion_tokens !== undefined)) {
+      return { usage: extractUsage(obj) };
+    }
     const delta = obj.choices?.[0]?.delta?.content;
     if (typeof delta === "string") return { delta };
-    return null; // 无 content（可能仅 reasoning 或 usage）
+    return null; // 无 content（可能仅 reasoning）
   } catch {
     return null;
   }
@@ -67,6 +74,7 @@ export function createDeepSeekProvider(apiKey: string): LLMProvider {
     const decoder = new TextDecoder();
     let buf = "";
     let finished = false;
+    let lastUsage: LLMUsage | undefined;
     while (!finished) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -81,10 +89,14 @@ export function createDeepSeekProvider(apiKey: string): LLMProvider {
           finished = true;
           break;
         }
+        if ("usage" in parsed) {
+          lastUsage = parsed.usage;
+          continue;
+        }
         if (parsed.delta) yield { delta: parsed.delta, done: false };
       }
     }
-    yield { delta: "", done: true };
+    yield { delta: "", done: true, ...(lastUsage ? { usage: lastUsage } : {}) };
   }
 
   return { stream };
