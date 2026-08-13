@@ -1,6 +1,8 @@
 import type { DriverContext } from "@minex/kernel";
 import type { ChatMessage, LLMMetricsEntry, LLMPrices, LLMProvider } from "minex-llm-driver";
 import { runAgent } from "./agent.js";
+import { onEnvelope, parseEnvelope, sendEnvelope, serializeEnvelope, type Envelope } from "./envelope.js";
+import { createPool } from "./pool.js";
 import { echoTool, type AgentTool } from "./tool.js";
 
 /** llm.config 结构类型子集（agent 用到的部分） */
@@ -23,6 +25,17 @@ export default {
   async activate(ctx: DriverContext) {
     // 示例工具（后续接 filesystem 等真实工具）
     ctx.register("tool", "echo", echoTool);
+
+    // 协议信封能力（parse/serialize/send/on，纯数据层）
+    ctx.register("envelope", "default", {
+      parse: parseEnvelope,
+      serialize: serializeEnvelope,
+      send: (env: Envelope) => sendEnvelope(ctx, env),
+      on: (to: string, cb: (env: Envelope) => void) => onEnvelope(ctx, to, cb),
+    });
+
+    // 消息池能力（manager 独占写；expert 申请→批准→写）
+    ctx.register("pool", "default", createPool(ctx.storage, ctx));
 
     // agent 能力：从内核收集依赖 → runAgent
     ctx.register("agent", "default", {
