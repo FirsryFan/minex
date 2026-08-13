@@ -9,9 +9,19 @@ interface DriverOption {
   icon?: string;
 }
 
+/** Windows 任务视图风格图标：两个部分重合的矩形（一虚一实） */
+function TaskViewIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="14" height="14" rx="2" strokeDasharray="3 3" opacity="0.6" />
+      <rect x="8" y="8" width="13" height="13" rx="2" />
+    </svg>
+  );
+}
+
 /**
- * 顶栏（外壳固定）：左 = 驱动选择器 + 当前驱动；右 = 深浅切换 + 设置。
- * 命令面板（/ 指令）留待后续。
+ * 顶栏（外壳固定）：左 = 驱动选择器 + 当前驱动；右 = 折叠 + 深浅切换 + 任务视图 + 设置。
+ * 任务视图按钮（S4）：打开 Windows 任务视图风格的工作区切换浮窗。
  */
 export function TopBar({
   drivers,
@@ -23,6 +33,8 @@ export function TopBar({
   collapsed,
   onToggleLeft,
   onToggleRight,
+  onOpenTaskView,
+  taskViewActive,
 }: {
   drivers: DriverOption[];
   activeDriverId: string | null;
@@ -33,6 +45,8 @@ export function TopBar({
   collapsed: { left: boolean; right: boolean };
   onToggleLeft: () => void;
   onToggleRight: () => void;
+  onOpenTaskView: () => void;
+  taskViewActive: boolean;
 }) {
   const active = drivers.find((d) => d.id === activeDriverId);
 
@@ -54,6 +68,9 @@ export function TopBar({
         {collapsed.right ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
       </button>
       <ThemeToggle dark={dark} onToggle={onToggleTheme} />
+      <button className={`icon-btn taskview-btn${taskViewActive ? " active" : ""}`} title="任务视图（切换工作区）" onClick={onOpenTaskView}>
+        <TaskViewIcon />
+      </button>
       <button className="icon-btn" title="设置" onClick={onOpenSettings}>
         <Settings size={15} />
       </button>

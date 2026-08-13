@@ -64,6 +64,7 @@ export function App({ problems }: { problems: string[] }) {
   });
   const [instances, setInstances] = useState<InstanceState[]>(() => [makeInstance(1, "工作区 1")]);
   const [activeInstanceId, setActiveInstanceId] = useState(1);
+  const [taskViewOpen, setTaskViewOpen] = useState(false);
   const activeInstance = instances.find((i) => i.id === activeInstanceId) ?? instances[0];
 
   useEffect(() => {
@@ -85,6 +86,21 @@ export function App({ problems }: { problems: string[] }) {
       }
     });
   }, [kernel, activeInstanceId]);
+
+  // 任务视图弹窗：Esc 关闭
+  useEffect(() => {
+    if (!taskViewOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTaskViewOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [taskViewOpen]);
+
+  function selectInstance(id: number): void {
+    setActiveInstanceId(id);
+    setTaskViewOpen(false);
+  }
 
   function updateInstance(id: number, patch: Partial<InstanceState>): void {
     setInstances((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -140,31 +156,44 @@ export function App({ problems }: { problems: string[] }) {
         collapsed={activeInstance.collapsed}
         onToggleLeft={() => updateInstance(activeInstanceId, { collapsed: { ...activeInstance.collapsed, left: !activeInstance.collapsed.left } })}
         onToggleRight={() => updateInstance(activeInstanceId, { collapsed: { ...activeInstance.collapsed, right: !activeInstance.collapsed.right } })}
+        onOpenTaskView={() => setTaskViewOpen((o) => !o)}
+        taskViewActive={taskViewOpen}
       />
-      {/* 工作视图条（S4 多开：切换 / 新建 / 关闭） */}
-      <div className="view-strip">
-        {instances.map((i) => (
-          <span
-            key={i.id}
-            className={`view-tab${i.id === activeInstanceId ? " active" : ""}`}
-            onClick={() => setActiveInstanceId(i.id)}
-          >
-            {i.name}
-            {instances.length > 1 && (
-              <button className="view-tab-close" title="关闭工作视图" onClick={(e) => { e.stopPropagation(); closeInstance(i.id); }}>
-                ×
-              </button>
-            )}
-          </span>
-        ))}
-        <button className="view-add" title="新建工作视图" onClick={addInstance}>＋</button>
-      </div>
       <WorkspaceInstance
         key={activeInstanceId}
         kernel={kernel}
         instance={activeInstance}
         onUpdate={(patch) => updateInstance(activeInstanceId, patch)}
       />
+
+      {/* 任务视图弹窗（Windows 任务视图风格：横向预览浮窗，点击预览切换工作区） */}
+      {taskViewOpen && (
+        <div className="taskview-overlay" onClick={() => setTaskViewOpen(false)}>
+          <div className="taskview-popup" onClick={(e) => e.stopPropagation()}>
+            {instances.map((inst) => (
+              <div
+                key={inst.id}
+                className={`taskview-card${inst.id === activeInstanceId ? " active" : ""}`}
+                onClick={() => selectInstance(inst.id)}
+                title={inst.name}
+              >
+                <div className="taskview-thumb">
+                  <div className="thumb-side thumb-left" />
+                  <div className="thumb-main" />
+                  <div className="thumb-side thumb-right" />
+                </div>
+                <div className="taskview-name">{inst.name}</div>
+                {instances.length > 1 && (
+                  <button className="taskview-close" title="关闭工作区" onClick={(e) => { e.stopPropagation(); closeInstance(inst.id); }}>
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            <button className="taskview-add" onClick={addInstance}>＋ 新建工作区</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
