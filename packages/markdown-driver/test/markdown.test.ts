@@ -19,6 +19,16 @@ describe("renderMarkdown", () => {
     expect(html).toContain("<strong>");
     expect(html).toContain("<code>");
   });
+  it("renders highlighted code with language", () => {
+    const html = renderMarkdown("```ts
+const a = 1;
+```", { codeHighlight: true });
+    expect(html).toContain("hljs");
+  });
+  it("renders KaTeX math when enabled", () => {
+    const html = renderMarkdown("$E = mc^2$", { katex: true });
+    expect(html).toContain("katex");
+  });
 });
 
 

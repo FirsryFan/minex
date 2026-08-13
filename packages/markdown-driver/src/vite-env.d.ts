@@ -1,5 +1,9 @@
-// Vite 的 ?raw 导入：README.md 作为字符串
+// Vite 的 ?raw 与 CSS 导入声明
 declare module "*?raw" {
+  const content: string;
+  export default content;
+}
+declare module "*.css" {
   const content: string;
   export default content;
 }

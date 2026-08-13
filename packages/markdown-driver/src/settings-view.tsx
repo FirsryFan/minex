@@ -17,6 +17,8 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
     fontSize: ns.get<number>("fontSize") ?? 14,
     codeFont: ns.get<string>("codeFont") ?? "",
     codeWrap: ns.get<boolean>("codeWrap") ?? false,
+    codeHighlight: ns.get<boolean>("codeHighlight") ?? false,
+    katex: ns.get<boolean>("katex") ?? false,
   }));
 
   const readmeHtml = useMemo(() => renderMarkdown(readme), []);
@@ -60,6 +62,20 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
             <label>自动换行</label>
             <div className="field-control">
               <input type="checkbox" checked={Boolean(values.codeWrap)} onChange={(e) => setField("codeWrap", e.target.checked)} />
+            </div>
+          </div>
+          <div className="field">
+            <label>语法高亮</label>
+            <div className="field-control">
+              <input type="checkbox" checked={Boolean(values.codeHighlight)} onChange={(e) => setField("codeHighlight", e.target.checked)} />
+            </div>
+          </div>
+
+          <div className="section-title">数学公式</div>
+          <div className="field">
+            <label>KaTeX 渲染</label>
+            <div className="field-control">
+              <input type="checkbox" checked={Boolean(values.katex)} onChange={(e) => setField("katex", e.target.checked)} />
             </div>
           </div>
         </div>
