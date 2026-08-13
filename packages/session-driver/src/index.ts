@@ -18,6 +18,15 @@ export default {
     const store: SessionStore = createSessionStore(fs);
     ctx.register("session", "default", store);
 
+    // 面板：会话总览（右栏；搜索 / 标签筛选 / 列表 / 新建，点击打开 .ses）
+    ctx.register("panel", "mist.session.overview", {
+      driverId: "mist.session",
+      id: "mist.session.overview",
+      title: "会话",
+      defaultDock: "right",
+      load: () => import("./overview-view.js"),
+    });
+
     // 会话 markdown 视图（.ses 主链渲染 + 保存；保存走 store 保证索引一致）
     ctx.register("session.md", "default", {
       toMarkdown,
