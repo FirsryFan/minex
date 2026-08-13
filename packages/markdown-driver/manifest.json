@@ -8,5 +8,10 @@
   "reloadable": true,
   "hasWorkspace": true,
   "source": "本地",
-  "description": "Markdown 编辑器驱动：编辑 / 预览 / 分屏三模式，并贡献通用 markdown 渲染能力（供 README 等其他位置复用）"
+  "description": "Markdown 编辑器驱动：编辑 / 预览 / 分屏三模式，并贡献通用 markdown 渲染能力（供 README 等其他位置复用）",
+  "tags": [
+    "编辑器",
+    "markdown"
+  ],
+  "kind": "driver"
 }

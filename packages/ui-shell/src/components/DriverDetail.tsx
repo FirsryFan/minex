@@ -118,6 +118,13 @@ function DriverHeader({ manifest: m, state }: { manifest: DriverManifest; state:
           <span>最小内核：{m.minKernelVersion ?? "-"}</span>
         </div>
         <div className="driver-header-desc">{m.description ?? ""}</div>
+        {m.tags && m.tags.length > 0 && (
+          <div className="driver-tags">
+            {m.tags.map((t) => (
+              <span key={t} className="driver-tag">{t}</span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -891,3 +891,18 @@ button {
   padding-left: var(--spacing-md);
   color: var(--color-text-muted);
 }
+
+/* 驱动标签 */
+.driver-tags {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+.driver-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-hover);
+  color: var(--color-text-muted);
+}

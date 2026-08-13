@@ -47,6 +47,12 @@ export function parseManifest(raw: unknown): DriverManifest {
   ) {
     throw new Error(`Manifest: "dependencies" must be an array of strings (driver "${m.id}")`);
   }
+  if (m.tags !== undefined && !(Array.isArray(m.tags) && m.tags.every((t) => typeof t === "string"))) {
+    throw new Error(`Manifest: "tags" must be an array of strings (driver "${m.id}")`);
+  }
+  if (m.kind !== undefined && typeof m.kind !== "string") {
+    throw new Error(`Manifest: "kind" must be a string (driver "${m.id}")`);
+  }
   if (
     m.settingsSchema !== undefined &&
     (typeof m.settingsSchema !== "object" || m.settingsSchema === null || Array.isArray(m.settingsSchema))
@@ -73,6 +79,8 @@ export function parseManifest(raw: unknown): DriverManifest {
     ...(m.hasWorkspace !== undefined && { hasWorkspace: m.hasWorkspace as boolean }),
     ...(m.source !== undefined && { source: m.source as string }),
     ...(m.description !== undefined && { description: m.description as string }),
+    ...(m.tags !== undefined && { tags: m.tags as string[] }),
+    ...(m.kind !== undefined && { kind: m.kind as string }),
     version: m.version,
     ...(m.minKernelVersion !== undefined && { minKernelVersion: m.minKernelVersion as string }),
     ...(m.dependencies !== undefined && { dependencies: m.dependencies as string[] }),

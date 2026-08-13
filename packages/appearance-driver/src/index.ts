@@ -10,6 +10,16 @@ interface AppearanceSettings {
   enFont?: string;
   iconTheme?: string;
   customCss?: string;
+  /** 全局缩放（百分比，100 = 不缩放） */
+  zoom?: number;
+  /** 是否启用动画 */
+  animations?: boolean;
+  /** 是否启用亚克力效果 */
+  acrylic?: boolean;
+  /** 亚克力透明度（0-100，100 = 不透明） */
+  acrylicOpacity?: number;
+  /** 背景图片 URL */
+  backgroundImage?: string;
 }
 
 /** 字体名加引号（含空格字体名如 "Microsoft YaHei" 必须引号） */
@@ -39,6 +49,30 @@ export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string 
   let css = `${sel} {\n${lines.join("\n")}\n}`;
   if (s.customCss) css += `\n${s.customCss}`;
   return css;
+}
+
+/**
+ * 全局设置 CSS（两种模式都适用，与深浅无关）：缩放 / 动画 / 亚克力 / 背景图。
+ * 纯函数可测。
+ */
+export function buildGlobalCss(s: AppearanceSettings): string {
+  const parts: string[] = [];
+  if (s.zoom && s.zoom !== 100) {
+    parts.push(`:root { zoom: ${s.zoom / 100}; }`);
+  }
+  if (s.animations === false) {
+    parts.push(`*, *::before, *::after { animation: none !important; transition: none !important; }`);
+  }
+  if (s.acrylic) {
+    const op = Math.max(0, Math.min(100, s.acrylicOpacity ?? 80));
+    parts.push(
+      `.card, .floating, .dropdown, .manage-table { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: color-mix(in srgb, var(--color-card) ${op}%, transparent); }`,
+    );
+  }
+  if (s.backgroundImage) {
+    parts.push(`body { background-image: url(${s.backgroundImage}); background-size: cover; background-attachment: fixed; }`);
+  }
+  return parts.join("\n");
 }
 
 /**
@@ -74,6 +108,12 @@ export default {
         name: "Appearance Dark",
         mode: "dark" as const,
         css: buildCss("dark", darkSettings),
+      });
+      // 全局设置（缩放/动画/亚克力/背景图）——mode 缺省，两种模式都注入（用浅色主题的全局设置）
+      ctx.register("theme", "minex.appearance.global", {
+        id: "minex.appearance.global",
+        name: "Appearance Global",
+        css: buildGlobalCss(lightSettings),
       });
     };
 

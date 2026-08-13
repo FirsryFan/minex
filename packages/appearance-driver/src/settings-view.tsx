@@ -193,6 +193,38 @@ function ThemeSettings({
         </div>
       </div>
 
+      <div className="section-title">全局设置</div>
+      <div className="field">
+        <label>全局缩放</label>
+        <div className="field-control">
+          <input type="number" min={50} max={200} disabled={readonly} value={Number(settings.zoom ?? 100)} onChange={(e) => setField("zoom", Number(e.target.value) || 100)} />
+        </div>
+      </div>
+      <div className="field">
+        <label>动画效果</label>
+        <div className="field-control">
+          <input type="checkbox" disabled={readonly} checked={settings.animations !== false} onChange={(e) => setField("animations", e.target.checked)} />
+        </div>
+      </div>
+      <div className="field">
+        <label>亚克力效果</label>
+        <div className="field-control">
+          <input type="checkbox" disabled={readonly} checked={settings.acrylic === true} onChange={(e) => setField("acrylic", e.target.checked)} />
+        </div>
+      </div>
+      <div className="field">
+        <label>亚克力透明度</label>
+        <div className="field-control">
+          <input type="number" min={0} max={100} disabled={readonly} value={Number(settings.acrylicOpacity ?? 80)} onChange={(e) => setField("acrylicOpacity", Number(e.target.value) || 80)} />
+        </div>
+      </div>
+      <div className="field">
+        <label>背景图片 URL</label>
+        <div className="field-control">
+          <input type="text" disabled={readonly} value={String(settings.backgroundImage ?? "")} onChange={(e) => setField("backgroundImage", e.target.value)} />
+        </div>
+      </div>
+
       {/* 驱动设置：其他驱动通过 appearance.driverSetting 注册的外观设置，统一在此管理 */}
       <DriverSettingsSection kernel={kernel} />
     </div>

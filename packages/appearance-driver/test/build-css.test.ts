@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCss } from "../src/index.js";
+import { buildCss, buildGlobalCss } from "../src/index.js";
 
 describe("buildCss", () => {
   it("generates valid CSS with quoted fonts", () => {
@@ -46,5 +46,21 @@ describe("buildCss", () => {
     expect(css).toContain("--color-bg: #123456;");
     expect(css).toContain("--color-card: color-mix(in srgb, #123456 92%, white);");
     expect(css).toContain("--color-hover: color-mix(in srgb, #123456 96%, white);");
+  });
+});
+
+describe("buildGlobalCss", () => {
+  it("emits zoom, animations off, acrylic, background image", () => {
+    const css = buildGlobalCss({ zoom: 125, animations: false, acrylic: true, acrylicOpacity: 60, backgroundImage: "https://x/y.png" });
+    expect(css).toContain("zoom: 1.25");
+    expect(css).toContain("animation: none !important");
+    expect(css).toContain("backdrop-filter: blur(20px)");
+    expect(css).toContain("background-image: url(https://x/y.png)");
+  });
+  it("empty settings produce empty css", () => {
+    expect(buildGlobalCss({})).toBe("");
+  });
+  it("default zoom (100) omits zoom rule", () => {
+    expect(buildGlobalCss({ zoom: 100 })).toBe("");
   });
 });

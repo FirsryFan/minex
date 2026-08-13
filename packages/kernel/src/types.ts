@@ -16,6 +16,10 @@ export interface DriverManifest {
   source?: string;
   /** 简介 */
   description?: string;
+  /** 标签（市场筛选/管理用，如 "编辑器" "外观" "主题"） */
+  tags?: string[];
+  /** 驱动的 kind（主题是扩展的特例，kind 用于区分，如 "theme" / "driver" / "extension"） */
+  kind?: string;
   version: string;
   /** 要求内核版本 >= 此值，过低则拒绝激活 */
   minKernelVersion?: string;
