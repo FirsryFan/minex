@@ -67,4 +67,11 @@ describe("sendEnvelope / onEnvelope", () => {
     sendEnvelope(bus, { from: "mgr", to: "agentA", type: "task", payload: {} });
     expect(received).toEqual([]);
   });
+  it("onEnvelope(bus,'*',cb) 广播只触发一次（审查 MINOR-1）", () => {
+    const bus = createEventBus();
+    const received: string[] = [];
+    onEnvelope(bus, "*", (e) => received.push(e.type));
+    sendEnvelope(bus, { from: "mgr", to: "*", type: "notice", payload: {} });
+    expect(received).toEqual(["notice"]);
+  });
 });

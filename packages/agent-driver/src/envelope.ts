@@ -64,12 +64,9 @@ export function sendEnvelope(bus: EnvelopeBus, env: Envelope): void {
   bus.emit(topic, env);
 }
 
-/** 订阅自身信封：定向（`agent:envelope:<to>`）+ 广播（`agent:envelope:*`），返回退订函数。 */
+/** 订阅自身信封：定向（`agent:envelope:<to>`）+ 广播（`agent:envelope:*`），返回退订函数。to="*" 时两 topic 去重，避免重复回调。 */
 export function onEnvelope(bus: EnvelopeBus, to: string, cb: (env: Envelope) => void): () => void {
-  const off1 = bus.on(`${ENVELOPE_PREFIX}:${to}`, (payload) => cb(payload as Envelope));
-  const off2 = bus.on(`${ENVELOPE_PREFIX}:*`, (payload) => cb(payload as Envelope));
-  return () => {
-    off1();
-    off2();
-  };
+  const topics = [...new Set([`${ENVELOPE_PREFIX}:${to}`, `${ENVELOPE_PREFIX}:*`])];
+  const offs = topics.map((topic) => bus.on(topic, (payload) => cb(payload as Envelope)));
+  return () => offs.forEach((off) => off());
 }
