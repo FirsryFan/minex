@@ -86,6 +86,7 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
       {activeTheme && (
         <ThemeSettings
           key={activeTheme.id}
+          kernel={kernel}
           theme={activeTheme}
           onSave={(settings) => {
             persistThemes((prev) => prev.map((t) => (t.id === activeTheme.id ? { ...t, settings } : t)));
@@ -134,9 +135,11 @@ function ThemeGrid({ themes, onOpen }: { themes: Theme[]; onOpen: (t: Theme) => 
 }
 
 function ThemeSettings({
+  kernel,
   theme,
   onSave,
 }: {
+  kernel: MinexKernel;
   theme: Theme;
   onSave: (settings: Record<string, unknown>) => void;
 }) {
@@ -189,6 +192,9 @@ function ThemeSettings({
           />
         </div>
       </div>
+
+      {/* 驱动设置：其他驱动通过 appearance.driverSetting 注册的外观设置，统一在此管理 */}
+      <DriverSettingsSection kernel={kernel} />
     </div>
   );
 }
@@ -313,6 +319,93 @@ function FontRow({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface DriverAppearanceItem {
+  key: string;
+  label: string;
+  type: "font" | "color" | "select" | "string";
+  enum?: string[];
+  default?: string;
+}
+interface DriverAppearanceSetting {
+  driverId: string;
+  title: string;
+  items: DriverAppearanceItem[];
+}
+
+/** 驱动设置区：渲染其他驱动通过 appearance.driverSetting 注册的外观设置 */
+function DriverSettingsSection({ kernel }: { kernel: MinexKernel }) {
+  const settings = kernel.registry.query<DriverAppearanceSetting>("appearance.driverSetting");
+  if (settings.length === 0) return null;
+  return (
+    <>
+      <div className="section-title">驱动设置</div>
+      {settings.map((ds) => (
+        <div key={ds.driverId} style={{ marginBottom: 8 }}>
+          <div className="muted">{ds.title}</div>
+          {ds.items.map((item) => (
+            <DriverSettingItem key={item.key} kernel={kernel} driverId={ds.driverId} item={item} />
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function DriverSettingItem({
+  kernel,
+  driverId,
+  item,
+}: {
+  kernel: MinexKernel;
+  driverId: string;
+  item: DriverAppearanceItem;
+}) {
+  const ns = kernel.storage.namespace(driverId);
+  const [value, setValue] = useState<string>(() => String(ns.get(item.key) ?? item.default ?? ""));
+
+  function set(v: string): void {
+    setValue(v);
+    ns.set(item.key, v);
+    kernel.events.emit("minex:dataChanged", { driverId });
+  }
+
+  if (item.type === "font") {
+    return <FontRow label={item.label} fonts={item.enum ?? []} value={value} readonly={false} onChange={set} />;
+  }
+  if (item.type === "select") {
+    return (
+      <div className="field">
+        <label>{item.label}</label>
+        <div className="field-control">
+          <select value={value} onChange={(e) => set(e.target.value)}>
+            {(item.enum ?? []).map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+    );
+  }
+  if (item.type === "color") {
+    return (
+      <div className="field">
+        <label>{item.label}</label>
+        <div className="field-control">
+          <ColorField value={value || "#000000"} disabled={false} onChange={set} />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="field">
+      <label>{item.label}</label>
+      <div className="field-control">
+        <input type="text" value={value} onChange={(e) => set(e.target.value)} />
       </div>
     </div>
   );

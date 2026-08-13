@@ -1,6 +1,8 @@
 import type { DriverContext } from "@minex/kernel";
 import { renderMarkdown } from "./markdown.js";
 
+const CODE_FONTS = ["Cascadia Code", "JetBrains Mono", "Consolas", "Courier New", "Fira Code", "Source Code Pro", "Ubuntu Mono", "Menlo", "Monaco"];
+
 /**
  * Markdown 编辑器驱动：贡献四样能力。
  * 1. markdown.render —— 通用 markdown→HTML 渲染（供 README 等其他位置复用）
@@ -25,6 +27,13 @@ export default {
       });
     };
     applyCodeFont();
+
+    // 注册到 appearance「驱动设置」扩展点（代码块字体统一在 appearance 管理）
+    ctx.register("appearance.driverSetting", "minex.markdown", {
+      driverId: "minex.markdown",
+      title: "Markdown 编辑器",
+      items: [{ key: "codeFont", label: "代码块字体", type: "font", enum: CODE_FONTS, default: "" }],
+    });
 
     // 工作区视图（惰性）
     ctx.register("workspace", "minex.markdown", {

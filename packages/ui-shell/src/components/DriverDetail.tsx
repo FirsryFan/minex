@@ -1,6 +1,6 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import type { ComponentType } from "react";
-import type { MinexKernel } from "@minex/kernel";
+import type { DriverManifest, MinexKernel } from "@minex/kernel";
 import { DriverIcon } from "./DriverIcon.js";
 import { SettingsForm } from "./SettingsForm.js";
 
@@ -48,6 +48,8 @@ export function DriverDetail({
             ← 返回
           </button>
         </div>
+        {/* 信息头部：图标 + 名称/开发者/状态/版本（settingsView 上方，与默认结构一致） */}
+        <DriverHeader manifest={m} state={state} />
         <Suspense fallback={<div className="muted">加载设置界面…</div>}>
           <SettingsView kernel={kernel} />
         </Suspense>
@@ -63,24 +65,7 @@ export function DriverDetail({
         </button>
       </div>
 
-      {/* 头部：固定大图 + 右侧介绍 */}
-      <div className="driver-header">
-        <div className="driver-header-icon">
-          <DriverIcon icon={m.icon} size={72} />
-        </div>
-        <div className="driver-header-info">
-          <div className="driver-header-name">
-            {m.name}
-            <span className="muted"> v{m.version}</span>
-          </div>
-          <div className="driver-header-meta">
-            <span>来源：{m.source ?? "本地"}</span>
-            <span>最小内核：{m.minKernelVersion ?? "-"}</span>
-            <span>状态：{state}</span>
-          </div>
-          <div className="driver-header-desc">{m.description ?? "（无简介）"}</div>
-        </div>
-      </div>
+      <DriverHeader manifest={m} state={state} />
 
       <div className="detail-tabs">
         <button className={`detail-tab${tab === "about" ? " active" : ""}`} onClick={() => setTab("about")}>
@@ -111,6 +96,29 @@ export function DriverDetail({
       ) : (
         <SettingsForm kernel={kernel} driverId={m.id} schema={m.settingsSchema} />
       )}
+    </div>
+  );
+}
+
+/** 驱动信息头部：图标 + 名称/开发者(来源)/状态/版本（settingsView 与默认结构共用） */
+function DriverHeader({ manifest: m, state }: { manifest: DriverManifest; state: string }) {
+  return (
+    <div className="driver-header">
+      <div className="driver-header-icon">
+        <DriverIcon icon={m.icon} size={72} />
+      </div>
+      <div className="driver-header-info">
+        <div className="driver-header-name">
+          {m.name}
+          <span className="muted"> v{m.version}</span>
+        </div>
+        <div className="driver-header-meta">
+          <span>来源：{m.source ?? "本地"}</span>
+          <span>状态：{state}</span>
+          <span>最小内核：{m.minKernelVersion ?? "-"}</span>
+        </div>
+        <div className="driver-header-desc">{m.description ?? ""}</div>
+      </div>
     </div>
   );
 }
