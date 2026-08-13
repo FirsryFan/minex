@@ -1,29 +1,46 @@
-import type { LLMChunk, LLMProvider, LLMRequest, LLMUsage, ToolDef } from "./types.js";
+import type { LLMChunk, LLMProvider, LLMRequest, LLMUsage, ToolCallDelta, ToolDef } from "./types.js";
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 
+/** 解析结果联合类型 */
+export type ParsedSse = { delta: string } | { toolCall: ToolCallDelta } | { usage: LLMUsage } | { done: true } | null;
+
 /**
- * 解析 SSE 行 → 增量 / usage / 结束标记 / null。
+ * 解析 SSE 行 → 增量 / 工具调用分片 / usage / 结束标记 / null。
  * DeepSeek 流式每行形如 `data: {json}`；`data: [DONE]` 结束；流末 chunk 含 usage。
  * 纯函数可测。
  */
-export function parseSseLine(line: string): { delta: string } | { done: true } | { usage: LLMUsage } | null {
+export function parseSseLine(line: string): ParsedSse {
   const trimmed = line.trim();
   if (!trimmed.startsWith("data:")) return null;
   const data = trimmed.slice(5).trim();
   if (data === "[DONE]") return { done: true };
   try {
     const obj = JSON.parse(data) as {
-      choices?: Array<{ delta?: { content?: unknown } }>;
+      choices?: Array<{ delta?: { content?: unknown; tool_calls?: unknown[] } }>;
       usage?: Record<string, unknown>;
     };
-    // usage chunk（流末，choices 空 / finish_reason）优先提取（审查 MAJOR-1）
+    // usage chunk（流末）优先提取（审查 MAJOR-1）
     if (obj.usage && (obj.usage.prompt_tokens !== undefined || obj.usage.completion_tokens !== undefined)) {
       return { usage: extractUsage(obj) };
     }
-    const delta = obj.choices?.[0]?.delta?.content;
-    if (typeof delta === "string") return { delta };
-    return null; // 无 content（可能仅 reasoning）
+    const delta = obj.choices?.[0]?.delta;
+    // 工具调用分片（delta.tool_calls[0]）
+    const tc = delta?.tool_calls?.[0] as
+      | { index?: number; id?: string; function?: { name?: string; arguments?: string } }
+      | undefined;
+    if (tc) {
+      return {
+        toolCall: {
+          index: typeof tc.index === "number" ? tc.index : 0,
+          ...(tc.id !== undefined ? { id: tc.id } : {}),
+          ...(tc.function?.name !== undefined ? { name: tc.function.name } : {}),
+          ...(tc.function?.arguments !== undefined ? { arguments: tc.function.arguments } : {}),
+        },
+      };
+    }
+    if (typeof delta?.content === "string") return { delta: delta.content };
+    return null; // 无 content / tool_calls（可能仅 reasoning）
   } catch {
     return null;
   }
@@ -91,6 +108,10 @@ export function createDeepSeekProvider(apiKey: string): LLMProvider {
         }
         if ("usage" in parsed) {
           lastUsage = parsed.usage;
+          continue;
+        }
+        if ("toolCall" in parsed) {
+          yield { delta: "", done: false, toolCallDelta: parsed.toolCall };
           continue;
         }
         if (parsed.delta) yield { delta: parsed.delta, done: false };

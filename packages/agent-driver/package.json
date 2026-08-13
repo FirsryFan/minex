@@ -1,0 +1,15 @@
+{
+  "name": "minex-agent-driver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minex agent 驱动：ReAct loop + 工具回灌 + 再加工 hook",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.2.3",
+    "minex-llm-driver": "^0.1.0"
+  }
+}

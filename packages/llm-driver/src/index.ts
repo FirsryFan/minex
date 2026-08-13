@@ -3,6 +3,13 @@ import { createDeepSeekProvider } from "./deepseek.js";
 import type { LLMMetricsEntry, LLMPrices } from "./metrics.js";
 import type { LLMChunk, LLMProvider, LLMRequest } from "./types.js";
 
+// 纯函数与类型 re-export（供 agent 驱动跨包复用，避免重复实现）
+export { buildMessages, assembleWorkMemory, serializeToolDef } from "./assembler.js";
+export { computeCost, computeHitRate } from "./metrics.js";
+export type { LLMMetricsEntry, LLMPrices } from "./metrics.js";
+export { parseSseLine, extractUsage, createDeepSeekProvider } from "./deepseek.js";
+export type { ChatMessage, ChatRole, ToolCall, ToolCallDelta, ToolDef, LLMRequest, LLMChunk, LLMUsage, LLMProvider } from "./types.js";
+
 /** LLM 配置能力：apiKey / model / 默认参数 / 价格表（按模型区分，不写死默认） */
 interface LLMConfig {
   getApiKey(): string;

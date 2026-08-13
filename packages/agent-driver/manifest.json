@@ -1,0 +1,15 @@
+{
+  "id": "minex.agent",
+  "name": "Agent",
+  "version": "0.1.0",
+  "minKernelVersion": "0.2.3",
+  "entry": "./dist/index.js",
+  "reloadable": true,
+  "source": "本地",
+  "description": "Agent 驱动：ReAct loop + 工具调用 + 再加工 hook",
+  "tags": ["Agent"],
+  "kind": "driver",
+  "dependencies": [
+    "minex.llm"
+  ]
+}

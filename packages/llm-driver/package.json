@@ -4,6 +4,14 @@
   "private": true,
   "description": "Minex LLM 接入驱动：Provider 抽象 + DeepSeek 实现 + 消息装配 + 计量",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"

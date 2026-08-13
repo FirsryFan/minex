@@ -1,10 +1,22 @@
-/** LLM 接入层公共类型（S5a）。 */
+/** LLM 接入层公共类型（S5a/S5d）。 */
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
+
+/** 工具调用（role="assistant" 消息的 tool_calls） */
+export interface ToolCall {
+  id: string;
+  name: string;
+  /** JSON 字符串 */
+  arguments: string;
+}
 
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** role="tool" 消息关联的工具调用 id */
+  tool_call_id?: string;
+  /** role="assistant" 消息发起的工具调用 */
+  tool_calls?: ToolCall[];
 }
 
 /** 工具定义（函数 schema） */
@@ -22,11 +34,20 @@ export interface LLMRequest {
   stream?: boolean;
 }
 
-/** 流式输出分片：delta 为增量文本；done 为结束标记；usage 在 done 时产出（流末 usage chunk） */
+/** 流式工具调用分片（DeepSeek 按 index 分片返回，需累积重组） */
+export interface ToolCallDelta {
+  index: number;
+  id?: string;
+  name?: string;
+  arguments?: string;
+}
+
+/** 流式输出分片：delta 增量文本；done 结束；usage 流末产出；toolCallDelta 工具调用分片 */
 export interface LLMChunk {
   delta: string;
   done: boolean;
   usage?: LLMUsage;
+  toolCallDelta?: ToolCallDelta;
 }
 
 /** 用量统计（DeepSeek 缓存计费字段） */
