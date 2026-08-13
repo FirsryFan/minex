@@ -1,60 +1,57 @@
 import type { MinexKernel } from "@minex/kernel";
 import { useState } from "react";
-// Vite raw import：README.md 作为介绍页显示
 import readme from "../README.md?raw";
 
-/** 主题模型 */
 interface Theme {
   id: string;
   name: string;
   version: string;
   author: string;
-  /** 预览图 URL（v1 可空，显示占位） */
+  mode: "light" | "dark";
   preview?: string;
-  /** 下载主题不可修改 */
   readOnly?: boolean;
   settings?: Record<string, unknown>;
 }
 
-/** 全局设置字段 */
 const GLOBAL_COLORS = [
   { key: "primaryColor", label: "主题色" },
   { key: "backgroundColor", label: "背景色" },
   { key: "warningColor", label: "提示色" },
   { key: "dangerColor", label: "警告色" },
 ];
-const EN_FONTS = ["Arial", "Georgia", "Times New Roman", "Verdana", "Tahoma", "Trebuchet MS", "Segoe UI", "Roboto", "Open Sans", "Courier New", "Consolas", "Impact", "Comic Sans MS"];
+const EN_FONTS = ["Arial", "Georgia", "Times New Roman", "Verdana", "Tahoma", "Trebuchet MS", "Segoe UI", "Roboto", "Open Sans", "Courier New", "Consolas"];
 const ZH_FONTS = ["PingFang SC", "Microsoft YaHei", "SimHei", "SimSun", "Songti SC", "KaiTi", "FangSong", "Noto Sans CJK SC", "Source Han Sans SC"];
 const ICON_THEMES = ["默认", "简约"];
 
-const DEFAULT_THEME: Theme = {
-  id: "default",
-  name: "默认主题",
-  version: "1.0.0",
-  author: "Minex",
-  settings: {
-    primaryColor: "#2563eb",
-    backgroundColor: "#f3f6fb",
-    warningColor: "#f59e0b",
-    dangerColor: "#ef4444",
-    zhFont: "Microsoft YaHei",
-    enFont: "Arial",
-    iconTheme: "默认",
+const DEFAULT_THEMES: Theme[] = [
+  {
+    id: "default-light", name: "默认浅色", version: "1.0.0", author: "Minex", mode: "light",
+    settings: { primaryColor: "#2563eb", backgroundColor: "#f3f6fb", warningColor: "#f59e0b", dangerColor: "#ef4444", zhFont: "Microsoft YaHei", enFont: "Arial", iconTheme: "默认" },
   },
-};
+  {
+    id: "default-dark", name: "默认深色", version: "1.0.0", author: "Minex", mode: "dark",
+    settings: { primaryColor: "#3b82f6", backgroundColor: "#0f172a", warningColor: "#f59e0b", dangerColor: "#ef4444", zhFont: "Microsoft YaHei", enFont: "Arial", iconTheme: "默认" },
+  },
+];
 
 const THEMES_KEY = "themes";
 
-/** appearance 驱动的设置视图：介绍(README) / 管理主题 / 双击打开主题选项卡 */
-export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
-  const [tab, setTab] = useState<"about" | "manage">("about");
-  const [openThemeIds, setOpenThemeIds] = useState<string[]>([]);
-  const [themes, setThemes] = useState<Theme[]>(() => loadThemes(kernel));
+interface Tab {
+  id: string;
+  label: string;
+  closable?: boolean;
+}
 
-  function loadThemes(k: MinexKernel): Theme[] {
-    const saved = k.storage.namespace("minex.appearance").get<Theme[]>(THEMES_KEY);
-    return saved && saved.length > 0 ? saved : [DEFAULT_THEME];
-  }
+export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
+  const [tabs, setTabs] = useState<Tab[]>([
+    { id: "about", label: "介绍" },
+    { id: "manage", label: "管理主题" },
+  ]);
+  const [activeTab, setActiveTab] = useState("about");
+  const [themes, setThemes] = useState<Theme[]>(() => {
+    const saved = kernel.storage.namespace("minex.appearance").get<Theme[]>(THEMES_KEY);
+    return saved && saved.length > 0 ? saved : DEFAULT_THEMES;
+  });
 
   function persistThemes(next: Theme[]): void {
     kernel.storage.namespace("minex.appearance").set(THEMES_KEY, next);
@@ -62,73 +59,73 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
     kernel.events.emit("minex:dataChanged", { driverId: "minex.appearance" });
   }
 
-  function openTheme(id: string): void {
-    setOpenThemeIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
-    setTab("manage");
+  // 双击主题 → 打开新选项卡（可关闭），不原地叠加
+  function openTheme(theme: Theme): void {
+    const tabId = `theme:${theme.id}`;
+    setTabs((prev) => (prev.some((t) => t.id === tabId) ? prev : [...prev, { id: tabId, label: theme.name, closable: true }]));
+    setActiveTab(tabId);
   }
-  function closeTheme(id: string): void {
-    setOpenThemeIds((ids) => ids.filter((x) => x !== id));
+  function closeTab(id: string): void {
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.id !== id);
+      if (activeTab === id) setActiveTab(next.length > 0 ? next[next.length - 1].id : "manage");
+      return next;
+    });
   }
+
+  const activeTheme = activeTab.startsWith("theme:")
+    ? themes.find((t) => `theme:${t.id}` === activeTab)
+    : undefined;
 
   return (
     <div>
-      {/* 主选项卡：介绍 / 管理主题 */}
       <div className="detail-tabs">
-        <button className={`detail-tab${tab === "about" ? " active" : ""}`} onClick={() => setTab("about")}>
-          介绍
-        </button>
-        <button className={`detail-tab${tab === "manage" ? " active" : ""}`} onClick={() => setTab("manage")}>
-          管理主题
-        </button>
+        {tabs.map((t) => (
+          <span key={t.id} className={`detail-tab${activeTab === t.id ? " active" : ""}`} onClick={() => setActiveTab(t.id)}>
+            {t.label}
+            {t.closable && (
+              <span
+                className="tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(t.id);
+                }}
+              >
+                ×
+              </span>
+            )}
+          </span>
+        ))}
       </div>
 
-      {tab === "about" ? (
+      {activeTab === "about" && (
         <div className="card readme-card">
           <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-content)" }}>{readme}</pre>
         </div>
-      ) : (
-        <ThemeGrid themes={themes} onOpen={openTheme} />
       )}
-
-      {/* 双击打开的主题选项卡（右侧可关闭） */}
-      {openThemeIds.map((id) => {
-        const theme = themes.find((t) => t.id === id);
-        if (!theme) return null;
-        return (
-          <div className="theme-open-panel" key={id}>
-            <div className="theme-open-head">
-              <strong>{theme.name}</strong>
-              <button className="icon-btn" onClick={() => closeTheme(id)}>
-                ×
-              </button>
-            </div>
-            <ThemeSettings
-              kernel={kernel}
-              theme={theme}
-              onSave={(settings) => {
-                persistThemes(themes.map((t) => (t.id === id ? { ...t, settings } : t)));
-              }}
-            />
-          </div>
-        );
-      })}
+      {activeTab === "manage" && <ThemeGrid themes={themes} onOpen={openTheme} />}
+      {activeTheme && (
+        <ThemeSettings
+          theme={activeTheme}
+          onSave={(settings) => {
+            persistThemes(themes.map((t) => (t.id === activeTheme.id ? { ...t, settings } : t)));
+          }}
+        />
+      )}
     </div>
   );
 }
 
-/** 主题卡片网格 + 虚线框加号（市场占位） */
-function ThemeGrid({ themes, onOpen }: { themes: Theme[]; onOpen: (id: string) => void }) {
+function ThemeGrid({ themes, onOpen }: { themes: Theme[]; onOpen: (t: Theme) => void }) {
   return (
     <div className="theme-grid">
-      {/* 虚线框加号 → 主题商店（占位） */}
-      <div className="theme-card theme-add" title="主题商店（后续）">
+      <div className="theme-card theme-add" title="主题商店">
         <div className="theme-add-plus">＋</div>
-        <div className="muted">前往主题商店</div>
       </div>
       {themes.map((t) => (
-        <div key={t.id} className="theme-card" onDoubleClick={() => onOpen(t.id)} title="双击打开主题设置">
+        <div key={t.id} className="theme-card" onDoubleClick={() => onOpen(t)} title={t.name}>
           <div className="theme-preview">
-            {t.preview ? <img src={t.preview} alt={t.name} /> : <div className="theme-preview-placeholder">{t.name}</div>}
+            <div className="theme-preview-placeholder">{t.mode === "dark" ? "深色" : "浅色"}</div>
           </div>
           <div className="theme-meta">
             <span className="theme-name">{t.name}</span>
@@ -141,13 +138,10 @@ function ThemeGrid({ themes, onOpen }: { themes: Theme[]; onOpen: (id: string) =
   );
 }
 
-/** 主题全局设置表单（颜色/字体/图标），自动保存语义（手动重载由外层驱动决定） */
 function ThemeSettings({
-  kernel,
   theme,
   onSave,
 }: {
-  kernel: MinexKernel;
   theme: Theme;
   onSave: (settings: Record<string, unknown>) => void;
 }) {
@@ -167,39 +161,67 @@ function ThemeSettings({
         <div className="field" key={c.key}>
           <label>{c.label}</label>
           <div className="field-control">
-            <input
-              type="color"
-              value={String(settings[c.key] ?? "#000000")}
-              disabled={readonly}
-              onChange={(e) => {
-                if (/^#[0-9a-fA-F]{3,8}$/.test(e.target.value)) setField(c.key, e.target.value);
-              }}
-            />
+            <ColorField value={String(settings[c.key] ?? "#000000")} disabled={readonly} onChange={(v) => setField(c.key, v)} />
           </div>
         </div>
       ))}
 
-      <div className="section-title" style={{ marginTop: 12 }}>字体设置</div>
+      <div className="section-title">字体设置</div>
       <FontRow label="全局中文" fonts={ZH_FONTS} value={String(settings.zhFont ?? "")} readonly={readonly} onChange={(v) => setField("zhFont", v)} />
       <FontRow label="全局英文" fonts={EN_FONTS} value={String(settings.enFont ?? "")} readonly={readonly} onChange={(v) => setField("enFont", v)} />
 
-      <div className="section-title" style={{ marginTop: 12 }}>图标设置</div>
+      <div className="section-title">图标设置</div>
       <div className="field">
         <label>图标体系</label>
         <div className="field-control">
-          <select
-            value={String(settings.iconTheme ?? "默认")}
-            disabled={readonly}
-            onChange={(e) => setField("iconTheme", e.target.value)}
-          >
+          <select value={String(settings.iconTheme ?? "默认")} disabled={readonly} onChange={(e) => setField("iconTheme", e.target.value)}>
             {ICON_THEMES.map((o) => (
               <option key={o} value={o}>{o}</option>
             ))}
           </select>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {readonly && <div className="hint">下载主题不可修改；修改需先复制为新主题</div>}
+/** 颜色选择：色块点击展开，内部滑块拖动调节（非系统取色器） */
+function ColorField({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const r = Number.parseInt(value.slice(1, 3), 16) || 0;
+  const g = Number.parseInt(value.slice(3, 5), 16) || 0;
+  const b = Number.parseInt(value.slice(5, 7), 16) || 0;
+  function toHex(n: number): string {
+    return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  }
+  return (
+    <div className="color-field">
+      <button className="color-swatch" style={{ background: value }} disabled={disabled} onClick={() => setOpen((o) => !o)} />
+      {open && !disabled && (
+        <div className="color-popover">
+          {(["r", "g", "b"] as const).map((ch, i) => {
+            const v = [r, g, b][i];
+            return (
+              <label key={ch} className="color-slider">
+                <span>{ch.toUpperCase()}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={255}
+                  value={v}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    const arr = [r, g, b];
+                    arr[i] = n;
+                    onChange(`#${toHex(arr[0])}${toHex(arr[1])}${toHex(arr[2])}`);
+                  }}
+                />
+                <span className="muted">{v}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -224,7 +246,7 @@ function FontRow({
       <div className="field-control">
         <div className="driver-selector">
           <button className="select-btn" disabled={readonly} onClick={() => setOpen((o) => !o)}>
-            <span style={{ fontFamily: value ? `"${value}"` : undefined }}>{value || "（默认）"}</span>
+            <span style={{ fontFamily: value ? `"${value}"` : undefined }}>{value}</span>
           </button>
           {open && (
             <div className="dropdown">
@@ -239,7 +261,6 @@ function FontRow({
                     }}
                   >
                     <span style={{ fontFamily: `"${f}"` }}>{f}</span>
-                    <span className="muted" style={{ fontFamily: `"${f}"` }}>预览 Preview</span>
                   </div>
                 ))}
               </div>

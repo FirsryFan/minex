@@ -49,8 +49,8 @@
   --font-code: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 
   /* 提示色（未完成/报错，外观驱动可覆盖） */
-  --color-unfinished: #f59e0b;
-  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
 }
 
 /**

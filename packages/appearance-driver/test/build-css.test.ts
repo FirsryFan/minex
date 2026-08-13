@@ -40,4 +40,11 @@ describe("buildCss", () => {
     expect(css).toContain('"Fira Code"');
     expect(css).not.toContain('""Fira Code""');
   });
+
+  it("background color derives surface (card) and hover colors", () => {
+    const css = buildCss("light", { backgroundColor: "#123456" });
+    expect(css).toContain("--color-bg: #123456;");
+    expect(css).toContain("--color-card: color-mix(in srgb, #123456 92%, white);");
+    expect(css).toContain("--color-hover: color-mix(in srgb, #123456 96%, white);");
+  });
 });

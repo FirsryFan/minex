@@ -183,7 +183,7 @@ function Select({
   return (
     <div className="driver-selector" ref={ref}>
       <button className="select-btn" onClick={() => setOpen((o) => !o)}>
-        {value || "（默认）"}
+        {value}
       </button>
       {open && (
         <div className="dropdown">

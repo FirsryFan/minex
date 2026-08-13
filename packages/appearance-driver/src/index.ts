@@ -21,7 +21,12 @@ export function buildCss(mode: "dark" | "light", s: AppearanceSettings): string 
   const sel = mode === "dark" ? '[data-theme="dark"]' : ":root";
   const lines: string[] = [];
   if (s.primaryColor) lines.push(`  --color-primary: ${s.primaryColor};`);
-  if (s.backgroundColor) lines.push(`  --color-bg: ${s.backgroundColor};`);
+  if (s.backgroundColor) {
+    lines.push(`  --color-bg: ${s.backgroundColor};`);
+    // 背景色联动：表面色(card)/悬停色(hover)从背景派生（比背景更亮/更白）
+    lines.push(`  --color-card: color-mix(in srgb, ${s.backgroundColor} 92%, white);`);
+    lines.push(`  --color-hover: color-mix(in srgb, ${s.backgroundColor} 96%, white);`);
+  }
   if (s.warningColor) lines.push(`  --color-warning: ${s.warningColor};`);
   if (s.dangerColor) lines.push(`  --color-danger: ${s.dangerColor};`);
 
@@ -50,21 +55,21 @@ export default {
   async activate(ctx: DriverContext) {
     const apply = (): void => {
       const themes = (ctx.storage.get("themes") ?? []) as Theme[];
-      const activeId = (ctx.storage.get("activeThemeId") ?? "default") as string;
-      const theme = themes.find((t) => t.id === activeId) ?? themes[0];
-      const settings = (theme?.settings ?? {}) as AppearanceSettings;
+      // 浅/深各自取对应 mode 的主题设置（默认浅色/默认深色）
+      const lightSettings = (themes.find((t) => t.mode === "light")?.settings ?? {}) as AppearanceSettings;
+      const darkSettings = (themes.find((t) => t.mode === "dark")?.settings ?? {}) as AppearanceSettings;
 
       ctx.register("theme", "minex.appearance.light", {
         id: "minex.appearance.light",
         name: "Appearance Light",
         mode: "light" as const,
-        css: buildCss("light", settings),
+        css: buildCss("light", lightSettings),
       });
       ctx.register("theme", "minex.appearance.dark", {
         id: "minex.appearance.dark",
         name: "Appearance Dark",
         mode: "dark" as const,
-        css: buildCss("dark", settings),
+        css: buildCss("dark", darkSettings),
       });
     };
 

@@ -22,6 +22,14 @@ code {
   font-family: var(--font-code);
 }
 
+/* 表单元素默认不继承 body 字体，需显式继承（字体全局一致） */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
+
 /* 布局：flex（顶栏 + 工作区）。侧栏可拖拽宽度；折叠为窄条；主区抬升圆角。 */
 .shell {
   display: flex;
@@ -591,8 +599,8 @@ code {
   font-size: 11px;
 }
 .pending-badge.unfinished {
-  background: color-mix(in srgb, var(--color-unfinished, #f59e0b) 15%, transparent);
-  color: var(--color-unfinished, #f59e0b);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 15%, transparent);
+  color: var(--color-warning, #f59e0b);
 }
 
 /* —— appearance 驱动：主题管理 —— */
@@ -686,4 +694,79 @@ code {
 .readme-card pre {
   font-size: 13px;
   line-height: 1.6;
+}
+
+/* —— 交互反馈 + 颜色滑块 —— */
+.btn, .btn-ghost, .icon-btn, .list-item, .dropdown-item, .select-btn, .theme-card, .folder-item, .folder-head {
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.btn:hover, .btn-ghost:hover, .icon-btn:hover {
+  transform: translateY(-1px);
+}
+.theme-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+.list-item:hover, .dropdown-item:hover, .folder-item:hover, .folder-head:hover {
+  background: var(--color-hover);
+}
+
+/* 选项卡关闭按钮 */
+.tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+}
+.tab-close:hover {
+  background: var(--color-hover);
+}
+
+/* 颜色选择：色块 + 滑块拖动（非系统取色器） */
+.color-field {
+  position: relative;
+  display: inline-block;
+}
+.color-swatch {
+  width: 40px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.color-swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.color-popover {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  width: 220px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-floating);
+  padding: var(--spacing-sm);
+  z-index: 200;
+}
+.color-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 12px;
+}
+.color-slider span:first-child {
+  width: 14px;
+  color: var(--color-text-muted);
+}
+.color-slider input[type="range"] {
+  flex: 1;
+  accent-color: var(--color-primary);
 }
