@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   addLink,
   addNode,
+  buildLinearLinks,
   createSession,
   filterByTag,
+  parseMainChain,
+  rebuildFromMarkdown,
   removeNode,
   searchSessions,
   toIndexEntry,
@@ -154,5 +157,52 @@ describe("validateSession / validateSessionIndex / validateType", () => {
     expect(validateType("a/b")).toBe(false); // 路径分隔拒绝
     expect(validateType("")).toBe(false);
     expect(validateType("a".repeat(33))).toBe(false); // 超长
+  });
+  it("rejects invalid meta.type（自包含校验，审查 m1）", () => {
+    const bad = createSession({ id: "a", type: "chat", now: NOW });
+    bad.meta.type = "A/../../evil";
+    expect(validateSession(bad)).toBe(false);
+  });
+});
+
+describe("parseMainChain / buildLinearLinks / rebuildFromMarkdown（markdown ↔ 主链）", () => {
+  it("parseMainChain splits user/assistant blocks by ##", () => {
+    const nodes = parseMainChain("# 标题\n\n## 你\n\n你好\n\n## mist.agent.assistant\n\n**回复**", NOW);
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0].kind).toBe("user");
+    expect(nodes[0].content).toBe("你好");
+    expect(nodes[1].kind).toBe("assistant");
+    expect(nodes[1].agentId).toBe("mist.agent.assistant");
+    expect(nodes[1].content).toBe("**回复**");
+  });
+  it("empty doc / title-only produce no nodes", () => {
+    expect(parseMainChain("")).toEqual([]);
+    expect(parseMainChain("# 只有标题")).toEqual([]);
+  });
+  it("non-## lines join current block (tool text becomes content)", () => {
+    const nodes = parseMainChain("## 你\n\n一\n### 工具调用：x\n```json\n{}\n```", NOW);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].content).toContain("### 工具调用：x");
+  });
+  it("buildLinearLinks chains responds edges", () => {
+    expect(buildLinearLinks([])).toEqual([]);
+    const single = parseMainChain("## 你\n1", NOW);
+    expect(buildLinearLinks(single)).toEqual([]);
+    const nodes = parseMainChain("## 你\n1\n\n## 助手\n2\n\n## 你\n3", NOW);
+    const links = buildLinearLinks(nodes);
+    expect(links).toHaveLength(2);
+    expect(links[0].from).toBe(nodes[1].id);
+    expect(links[0].to).toBe(nodes[0].id);
+    expect(links[0].type).toBe("responds");
+  });
+  it("rebuildFromMarkdown preserves meta/activeAgents and rebuilds nodes+links", () => {
+    const base = createSession({ id: "s1", type: "chat", title: "标题", tags: ["md"], activeAgents: ["a1"], now: NOW });
+    const rebuilt = rebuildFromMarkdown(base, "## 你\nhi", "2026-08-13T03:00:00.000Z");
+    expect(rebuilt.meta.title).toBe("标题");
+    expect(rebuilt.meta.id).toBe("s1");
+    expect(rebuilt.meta.type).toBe("chat");
+    expect(rebuilt.activeAgents).toEqual(["a1"]);
+    expect(rebuilt.nodes).toHaveLength(1);
+    expect(rebuilt.meta.updatedAt).toBe("2026-08-13T03:00:00.000Z");
   });
 });

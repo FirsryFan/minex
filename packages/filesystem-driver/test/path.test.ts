@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseName, isMarkdownFile, joinPath, parentPath, resolveSafePath } from "../src/path.js";
+import { baseName, isMarkdownFile, isSessionFile, joinPath, parentPath, resolveSafePath } from "../src/path.js";
 
 describe("resolveSafePath", () => {
   it("normalizes relative path", () => {
@@ -50,5 +50,18 @@ describe("isMarkdownFile", () => {
     expect(isMarkdownFile("a.")).toBe(false);
     expect(isMarkdownFile("a")).toBe(false);
     expect(isMarkdownFile("")).toBe(false);
+  });
+});
+
+describe("isSessionFile", () => {
+  it("recognizes .ses ignoring case", () => {
+    expect(isSessionFile("abc.ses")).toBe(true);
+    expect(isSessionFile("a/b/note.SES")).toBe(true);
+  });
+  it("rejects other / no extension / hidden", () => {
+    expect(isSessionFile("a.md")).toBe(false);
+    expect(isSessionFile("a")).toBe(false);
+    expect(isSessionFile(".ses")).toBe(false);
+    expect(isSessionFile("a.")).toBe(false);
   });
 });

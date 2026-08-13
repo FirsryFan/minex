@@ -48,6 +48,16 @@ interface FileSystemOps {
   writeFile(path: string, content: string): Promise<void>;
 }
 
+/** .ses 会话文件判断（本地实现，避免跨包 import 受 rootDir 限制） */
+const isSessionPath = (p: string): boolean => p.toLowerCase().endsWith(".ses");
+
+/** session 视图能力结构类型（session 驱动注册 `session.md`，markdown 按结构消费，零源码 import） */
+interface SessionMdView {
+  toMarkdown(s: unknown): string;
+  isSession(s: unknown): boolean;
+  saveMarkdown(s: unknown, doc: string): Promise<unknown>;
+}
+
 const MODES: { id: Mode; title: string; Icon: LucideIcon }[] = [
   { id: "edit", title: "编辑", Icon: Pen },
   { id: "preview", title: "预览", Icon: Eye },
@@ -70,9 +80,17 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const docRef = useRef(doc);
   const pathRef = useRef(currentPath);
+  const sessionRef = useRef<unknown>(null); // 当前打开的 .ses 会话（结构由 session 能力持有）
+  const didEditRef = useRef(false); // 是否真编辑过（打开文件不算；防止打开即触发无意义自动保存，审查 m1）
 
   const fs = useMemo<FileSystemOps | undefined>(
     () => kernel.registry.get<FileSystemOps>("filesystem", "default")?.value,
+    [kernel],
+  );
+
+  // session 视图能力（.ses 主链 markdown 转换 + 保存，索引一致性由 session 驱动保证）
+  const sessionMd = useMemo<SessionMdView | undefined>(
+    () => kernel.registry.get<SessionMdView>("session.md", "default")?.value,
     [kernel],
   );
 
@@ -116,9 +134,9 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [kernel]);
 
-  // 自动保存：有打开文件时，编辑停顿 AUTO_SAVE_DELAY 后写回文件
+  // 自动保存：有打开文件且真编辑过时，编辑停顿 AUTO_SAVE_DELAY 后写回文件（didEdit 防「打开即保存」，审查 m1）
   useEffect(() => {
-    if (!currentPath) return;
+    if (!currentPath || !didEditRef.current) return;
     setSaveStatus("编辑中…");
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => {
@@ -133,10 +151,25 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
   async function openPath(path: string): Promise<void> {
     if (!fs) return;
     const seq = ++openSeqRef.current;
+    didEditRef.current = false; // 打开文件不算编辑
     try {
+      if (isSessionPath(path)) {
+        // .ses：读会话 → 主链渲染为 markdown（markdown 编辑器原生打开）
+        const raw = await fs.readFile(path);
+        if (seq !== openSeqRef.current) return;
+        const parsed = JSON.parse(raw) as unknown;
+        if (!sessionMd?.isSession(parsed)) throw new Error("会话文件格式不合法");
+        if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+        sessionRef.current = parsed;
+        setCurrentPath(path);
+        setDoc(sessionMd.toMarkdown(parsed));
+        setSaveStatus("会话主链（markdown 视图）");
+        return;
+      }
       const content = await fs.readFile(path);
       if (seq !== openSeqRef.current) return; // 期间又请求了别的文件，丢弃过期结果
       if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+      sessionRef.current = null;
       setCurrentPath(path);
       setDoc(content);
       setSaveStatus("");
@@ -147,12 +180,21 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
     }
   }
 
-  /** 写回当前文件（自动保存 / Ctrl+S 共用；用 ref 取最新 doc 与 path） */
+  /** 写回当前文件（自动保存 / Ctrl+S 共用；.ses 走会话能力保持索引一致） */
   async function persistDoc(): Promise<void> {
     if (!fs || !pathRef.current) return;
     try {
+      if (isSessionPath(pathRef.current)) {
+        if (!sessionRef.current || !sessionMd) throw new Error("会话未加载");
+        const updated = await sessionMd.saveMarkdown(sessionRef.current, docRef.current);
+        sessionRef.current = updated;
+        didEditRef.current = false;
+        setSaveStatus("会话已保存");
+        return;
+      }
       await fs.writeFile(pathRef.current, docRef.current);
       kernel.events.emit(FILE_SAVED_TOPIC, { path: pathRef.current });
+      didEditRef.current = false;
       setSaveStatus("已保存");
     } catch (err) {
       setSaveStatus(`保存失败：${err instanceof Error ? err.message : String(err)}`);
@@ -168,6 +210,7 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
   }, [mode]);
 
   function updateDoc(text: string): void {
+    didEditRef.current = true;
     setDoc(text);
     kernel.storage.namespace("minex.markdown").set(DOC_KEY, text);
   }
@@ -189,6 +232,7 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
   // 即时模式：编辑渲染结果 → turndown 转回 markdown 存源码
   function onWysiwygInput(): void {
     if (wysiwygRef.current) {
+      didEditRef.current = true;
       const md = turndown.turndown(wysiwygRef.current.innerHTML);
       setDoc(md);
       kernel.storage.namespace("minex.markdown").set(DOC_KEY, md);

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight, File, FileCode, FileCog, FileImage, FileText } from "lucide-react";
 import type { FileSystemAbility, FsEntry } from "./fs.js";
-import { isMarkdownFile } from "./path.js";
+import { isMarkdownFile, isSessionFile } from "./path.js";
 
 interface FsNode extends FsEntry {
   children?: FsNode[];
@@ -55,7 +55,7 @@ export default function SidebarView({ kernel }: { kernel: MinexKernel }) {
       void toggle(node);
       return;
     }
-    if (!isMarkdownFile(node.name)) return;
+    if (!isMarkdownFile(node.name) && !isSessionFile(node.name)) return;
     // lastOpenPath 供 markdown 工作区挂载时补开（首次点击时 markdown 可能尚未挂载，事件会丢）
     kernel.storage.namespace("minex.filesystem").set("lastOpenPath", node.path);
     kernel.events.emit("filesystem:openFile", { path: node.path });

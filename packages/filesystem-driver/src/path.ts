@@ -47,3 +47,12 @@ export function isMarkdownFile(name: string): boolean {
   if (idx <= 0 || idx === name.length - 1) return false; // 隐藏文件 / 空扩展名
   return MARKDOWN_EXTENSIONS.has(name.slice(idx + 1).toLowerCase());
 }
+
+const SESSION_EXTENSIONS = new Set(["ses"]);
+
+/** 是否为 Mist 会话文件（.ses，供 markdown 编辑器原生打开）。 */
+export function isSessionFile(name: string): boolean {
+  const idx = name.lastIndexOf(".");
+  if (idx <= 0 || idx === name.length - 1) return false;
+  return SESSION_EXTENSIONS.has(name.slice(idx + 1).toLowerCase());
+}

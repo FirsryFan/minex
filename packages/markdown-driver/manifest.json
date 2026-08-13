@@ -6,7 +6,8 @@
   "minKernelVersion": "0.2.3",
   "entry": "./dist/index.js",
   "dependencies": [
-    "minex.filesystem"
+    "minex.filesystem",
+    "mist.session"
   ],
   "reloadable": true,
   "hasWorkspace": true,

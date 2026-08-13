@@ -1,11 +1,13 @@
 import type { DriverContext } from "@minex/kernel";
+import { rebuildFromMarkdown, toMarkdown, validateSession, type Session } from "./session.js";
 import { createSessionStore, type SessionFsOps, type SessionStore } from "./store.js";
 
 /**
  * Mist 会话驱动（id: mist.session）。
- * S1：纯数据层——注册 `session` 能力（store：.ses 读写 + 索引 + 总览查询）。
+ * S1：注册 `session` 能力（store：.ses 读写 + 索引 + 总览查询）。
+ * S2：注册 `session.md` 能力（会话主链的 markdown 视图：渲染 / 校验 / 保存）——
+ *      供 markdown 驱动打开 .ses 时消费（结构类型接，跨包零源码 import）。
  * 依赖 minex.filesystem（FileSystemAbility.ensureDir 建会话文件夹）。
- * UI（总览面板 / 会话视图 / 画布）后续阶段接入。
  */
 export default {
   async activate(ctx: DriverContext) {
@@ -15,6 +17,17 @@ export default {
     }
     const store: SessionStore = createSessionStore(fs);
     ctx.register("session", "default", store);
+
+    // 会话 markdown 视图（.ses 主链渲染 + 保存；保存走 store 保证索引一致）
+    ctx.register("session.md", "default", {
+      toMarkdown,
+      isSession: validateSession,
+      async saveMarkdown(session: unknown, doc: string): Promise<unknown> {
+        const updated = rebuildFromMarkdown(session as Session, doc);
+        await store.saveSession(updated);
+        return updated;
+      },
+    });
     return () => {};
   },
 };

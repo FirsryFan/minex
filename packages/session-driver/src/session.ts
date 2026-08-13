@@ -184,14 +184,76 @@ export function toMarkdown(s: Session): string {
   return parts.join("\n\n");
 }
 
-/** 校验 .ses 文件内容是否为合法 Session（结构校验；v1 检查必填字段与数组元素形状）。 */
+/**
+ * markdown → 主链节点（供 markdown 编辑器编辑 .ses 后回写）。
+ * 约定与 toMarkdown 互逆：`## 你` = user 块，`## <agentId>` = assistant 块；一级 `# 标题` 忽略。
+ * v1：`### 工具调用` 等非标题行并入当前块 content（工具/事件节点的图内编辑走画布视图）。
+ */
+export function parseMainChain(doc: string, ts?: string): SessionNode[] {
+  const stamp = ts ?? new Date().toISOString();
+  const nodes: SessionNode[] = [];
+  let block: { kind: SessionNodeKind; agentId?: string; content: string[] } | null = null;
+
+  const flush = (): void => {
+    if (!block) return;
+    nodes.push({
+      id: randomId(),
+      kind: block.kind,
+      ...(block.agentId ? { agentId: block.agentId } : {}),
+      content: block.content.join("\n").trim(),
+      ts: stamp,
+    });
+    block = null;
+  };
+
+  for (const line of doc.split("\n")) {
+    const head = line.match(/^##\s+(.*)$/);
+    if (head) {
+      flush();
+      const who = head[1].trim();
+      if (who === "你") {
+        block = { kind: "user", content: [] };
+      } else {
+        block = { kind: "assistant", agentId: who, content: [] };
+      }
+    } else if (block) {
+      block.content.push(line);
+    }
+  }
+  flush();
+  return nodes;
+}
+
+/** 线性 responds 链：后一节点 responds 前一节点。 */
+export function buildLinearLinks(nodes: SessionNode[]): SessionLink[] {
+  const links: SessionLink[] = [];
+  for (let i = 1; i < nodes.length; i++) {
+    links.push({ from: nodes[i].id, to: nodes[i - 1].id, type: "responds" });
+  }
+  return links;
+}
+
+/** 从 markdown 主链整体重建会话：保留 meta（title/tags/type/id）与 activeAgents，替换 nodes 并重建线性 links。 */
+export function rebuildFromMarkdown(s: Session, doc: string, now?: string): Session {
+  const updatedAt = now ?? new Date().toISOString();
+  const nodes = parseMainChain(doc, updatedAt);
+  return {
+    ...s,
+    nodes,
+    links: buildLinearLinks(nodes),
+    meta: { ...s.meta, updatedAt },
+  };
+}
+
+/** 校验 .ses 文件内容是否为合法 Session（结构校验；meta.type 必须为合法路径段，自包含防穿越）。 */
 export function validateSession(data: unknown): data is Session {
   if (typeof data !== "object" || data === null) return false;
   const s = data as Record<string, unknown>;
   const m = s.meta;
   if (typeof m !== "object" || m === null) return false;
   const meta = m as Record<string, unknown>;
-  if (typeof meta.id !== "string" || typeof meta.type !== "string" || typeof meta.title !== "string") return false;
+  if (typeof meta.id !== "string" || typeof meta.title !== "string") return false;
+  if (typeof meta.type !== "string" || !validateType(meta.type)) return false;
   if (!Array.isArray(meta.tags) || (meta.tags as unknown[]).some((t) => typeof t !== "string")) return false;
   if (!Array.isArray(s.activeAgents) || (s.activeAgents as unknown[]).some((a) => typeof a !== "string")) return false;
   if (!Array.isArray(s.nodes) || !Array.isArray(s.links)) return false;
