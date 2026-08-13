@@ -201,13 +201,14 @@ export default function WorkspaceView({ kernel }: { kernel: MinexKernel }) {
     }
   }
 
-  // 进入即时模式时，把渲染结果写入 contentEditable（仅进入时同步，避免编辑中光标重置）
+  // 进入即时模式 / 切换文件（currentPath 变化）时，把渲染结果写入 contentEditable。
+  // doc 变化不触发（编辑中避免光标重置与内容覆盖）；currentPath 变化 = 切换文件，须刷新。
   useEffect(() => {
     if (mode === "wysiwyg" && wysiwygRef.current) {
       wysiwygRef.current.innerHTML = renderMarkdown(doc, renderOpts);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 有意依赖 currentPath 而非 doc：编辑中不重写，切文件才重写
+  }, [mode, currentPath]);
 
   function updateDoc(text: string): void {
     didEditRef.current = true;
