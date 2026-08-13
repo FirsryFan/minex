@@ -1,5 +1,5 @@
 import type { MinexKernel } from "@minex/kernel";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import readme from "../README.md?raw";
 import { hexToHsv, hsvToHex, type Hsv } from "./color.js";
 import { DEFAULT_THEMES, THEMES_KEY, type Theme } from "./theme.js";
@@ -81,11 +81,7 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
         ))}
       </div>
 
-      {activeTab === "about" && (
-        <div className="card readme-card">
-          <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-content)" }}>{readme}</pre>
-        </div>
-      )}
+      {activeTab === "about" && <AboutView kernel={kernel} />}
       {activeTab === "manage" && <ThemeGrid themes={themes} onOpen={openTheme} />}
       {activeTheme && (
         <ThemeSettings
@@ -96,6 +92,21 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** 介绍页：用 markdown 驱动的通用渲染能力（无 markdown 驱动则回退纯文本） */
+function AboutView({ kernel }: { kernel: MinexKernel }) {
+  const renderer = kernel.registry.get<{ render: (md: string) => string }>("markdown", "render");
+  const html = useMemo(() => (renderer ? renderer.value.render(readme) : null), [renderer]);
+
+  if (html) {
+    return <div className="card readme-card markdown-body" dangerouslySetInnerHTML={{ __html: html }} />;
+  }
+  return (
+    <div className="card readme-card">
+      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-content)" }}>{readme}</pre>
     </div>
   );
 }

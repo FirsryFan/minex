@@ -92,5 +92,8 @@
     ]
   },
   "source": "本地",
-  "description": "外观驱动：主题管理 + 全局外观设置（颜色/字体/图标），贡献 theme 给外壳"
+  "description": "外观驱动：主题管理 + 全局外观设置（颜色/字体/图标），贡献 theme 给外壳",
+  "dependencies": [
+    "minex.markdown"
+  ]
 }

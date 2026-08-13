@@ -23,6 +23,6 @@ const markdownManifest = markdownManifestRaw as unknown as DriverManifest;
  */
 export const DRIVERS: DriverModule[] = [
   { manifest: { ...demoManifest, icon: demoIconUrl }, activate: demoModule.activate },
-  { manifest: { ...appearanceManifest, icon: appearanceIconUrl }, activate: appearanceModule.activate },
   { manifest: { ...markdownManifest, icon: markdownIconUrl }, activate: markdownModule.activate },
+  { manifest: { ...appearanceManifest, icon: appearanceIconUrl }, activate: appearanceModule.activate },
 ];
