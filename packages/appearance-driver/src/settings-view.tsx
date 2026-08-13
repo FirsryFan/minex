@@ -162,6 +162,19 @@ function ThemeSettings({
           </select>
         </div>
       </div>
+
+      <div className="section-title">CSS 代码</div>
+      <div className="field">
+        <label>自定义 CSS</label>
+        <div className="field-control">
+          <textarea
+            rows={8}
+            disabled={readonly}
+            value={String(settings.customCss ?? "")}
+            onChange={(e) => setField("customCss", e.target.value)}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -230,7 +243,7 @@ function ColorField({ value, disabled, onChange }: { value: string; disabled: bo
           <div
             className="sv-plane"
             ref={svRef}
-            style={{ background: hueCss }}
+            style={{ backgroundColor: hueCss }}
             onMouseDown={(e) => startDrag("sv", e)}
           >
             <div className="sv-thumb" style={{ left: `${hsv.s}%`, top: `${100 - hsv.v}%` }} />
