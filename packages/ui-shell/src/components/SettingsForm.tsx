@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 
-type FieldType = "string" | "number" | "boolean" | "color" | "textarea";
+type FieldType = "string" | "number" | "boolean" | "color" | "textarea" | "font";
 interface SchemaProp {
   type?: FieldType;
   /** 有 enum 时渲染「带搜索的下拉」 */
@@ -16,6 +16,14 @@ interface SettingsGroup {
 interface SettingsSchema {
   groups?: SettingsGroup[];
   properties?: Record<string, SchemaProp>;
+}
+
+/** 驼峰转空格显示：primaryColor → "primary color" */
+export function humanize(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .toLowerCase();
 }
 
 /**
@@ -79,9 +87,11 @@ export function SettingsForm({
           <div className="section-title">{g.title}</div>
           {Object.entries(g.properties).map(([key, p]) => (
             <div className="field" key={key}>
-              <label>{key}</label>
-              <Field prop={p} value={values[key]} onChange={(v) => setField(key, v)} />
-              {p.description && <div className="hint">{p.description}</div>}
+              <label title={key}>{humanize(key)}</label>
+              <div className="field-control">
+                <Field prop={p} value={values[key]} onChange={(v) => setField(key, v)} />
+                {p.description && <div className="hint">{p.description}</div>}
+              </div>
             </div>
           ))}
         </div>
@@ -118,6 +128,9 @@ function Field({
   if (t === "textarea") {
     return <textarea rows={6} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
   }
+  if (t === "font") {
+    return <Select value={String(value ?? "")} options={prop.enum ?? []} onChange={onChange} preview />;
+  }
   if (prop.enum && prop.enum.length > 0) {
     return <Select value={String(value ?? "")} options={prop.enum} onChange={onChange} />;
   }
@@ -133,15 +146,17 @@ function Field({
   return <input type="text" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
 }
 
-/** 带搜索的下拉（字体/图标体系等）。W6：点外部/Esc 关闭（与 DriverSelector 一致） */
+/** 带搜索的下拉（字体/图标体系等）。W6：点外部/Esc 关闭；preview 时选项用自身字体渲染 */
 function Select({
   value,
   options,
   onChange,
+  preview = false,
 }: {
   value: string;
   options: string[];
   onChange: (v: unknown) => void;
+  preview?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -191,7 +206,9 @@ function Select({
                   setQuery("");
                 }}
               >
-                {o}
+                {/* 修复4：字体预览——选项用自身字体渲染 */}
+                <span style={preview ? { fontFamily: `"${o}"` } : undefined}>{o}</span>
+                {preview && <span style={{ fontFamily: `"${o}"`, color: "var(--color-text-muted)" }}>Preview 字体预览</span>}
               </div>
             ))}
           </div>

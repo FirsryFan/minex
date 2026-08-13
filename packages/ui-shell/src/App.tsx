@@ -100,7 +100,11 @@ export function App({ problems }: { problems: string[] }) {
           />
         </div>
         {!collapsed.left && (
-          <Resizer side="left" onResize={(dx) => setWidths((w) => ({ ...w, left: clamp(w.left + dx, 160, 480) }))} />
+          <Resizer
+            side="left"
+            initialWidth={widths.left}
+            onResize={(target) => setWidths((w) => ({ ...w, left: clamp(target, 160, 480) }))}
+          />
         )}
         <MainArea
           collapsed={collapsed}
@@ -109,7 +113,11 @@ export function App({ problems }: { problems: string[] }) {
           selectedPanelId={selectedPanelId}
         />
         {!collapsed.right && (
-          <Resizer side="right" onResize={(dx) => setWidths((w) => ({ ...w, right: clamp(w.right - dx, 160, 480) }))} />
+          <Resizer
+            side="right"
+            initialWidth={widths.right}
+            onResize={(target) => setWidths((w) => ({ ...w, right: clamp(target, 160, 480) }))}
+          />
         )}
         <div
           className={`rightbar${collapsed.right ? " collapsed" : ""}`}
@@ -127,13 +135,24 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 /** 可拖拽分隔条：左右栏宽度的拖拽把手。W5：window blur 兜底 + 卸载清理 */
-function Resizer({ side, onResize }: { side: "left" | "right"; onResize: (dx: number) => void }) {
+function Resizer({
+  side,
+  initialWidth,
+  onResize,
+}: {
+  side: "left" | "right";
+  initialWidth: number;
+  onResize: (targetWidth: number) => void;
+}) {
   const cleanupRef = React.useRef<(() => void) | null>(null);
 
   function onMouseDown(e: React.MouseEvent): void {
     e.preventDefault();
     const startX = e.clientX;
-    const move = (ev: MouseEvent) => onResize(ev.clientX - startX);
+    const base = initialWidth; // 修复1：以按下时宽度为基准，避免累计位移叠加放大
+    // 左栏向右拖增宽（+dx）；右栏向左拖增宽（-dx）
+    const dir = side === "left" ? 1 : -1;
+    const move = (ev: MouseEvent) => onResize(base + dir * (ev.clientX - startX));
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);

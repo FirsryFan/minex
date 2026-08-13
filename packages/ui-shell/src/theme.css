@@ -10,10 +10,8 @@
   --color-on-primary: #ffffff;         /* 主色按钮上的文字 */
   --mask-bg: rgba(15, 23, 42, 0.45);   /* 浮窗遮罩 */
 
-  /* 背景分层：顶/左/右栏同底色（最底层），主区在其上（--color-main） */
-  --color-bg: #f3f6fb;      /* 应用外层底色 */
-  --color-bars: #ffffff;    /* 顶/左/右栏 */
-  --color-main: #ffffff;    /* 主区 */
+  /* 背景层：所有底色（顶/左/右栏/主区）用 --color-bg；卡片（表面层）用 --color-card */
+  --color-bg: #f3f6fb;
   --color-card: #ffffff;
 
   /* 文本 / 边框 */
@@ -67,8 +65,6 @@
   --mask-bg: rgba(0, 0, 0, 0.6);
 
   --color-bg: #0f172a;
-  --color-bars: #1e293b;
-  --color-main: #1e293b;
   --color-card: #253244;
 
   --color-text: #e2e8f0;

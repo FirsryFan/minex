@@ -38,7 +38,7 @@
         "title": "字体设置",
         "properties": {
           "uiEnFont": {
-            "type": "string",
+            "type": "font",
             "enum": [
               "Arial",
               "Helvetica",
@@ -47,26 +47,58 @@
               "Verdana",
               "Tahoma",
               "Trebuchet MS",
-              "Courier New"
+              "Courier New",
+              "Segoe UI",
+              "Roboto",
+              "Open Sans",
+              "Lato",
+              "Montserrat",
+              "Merriweather",
+              "Source Sans Pro",
+              "Noto Sans",
+              "PT Sans",
+              "Ubuntu",
+              "Futura",
+              "Garamond",
+              "Palatino",
+              "Cambria",
+              "Calibri",
+              "Consolas",
+              "Impact",
+              "Comic Sans MS",
+              "Candara",
+              "Constantia",
+              "Corbel"
             ],
             "default": "",
             "description": "UI 英文字体（留空用默认）"
           },
           "uiZhFont": {
-            "type": "string",
+            "type": "font",
             "enum": [
               "PingFang SC",
               "Microsoft YaHei",
               "SimHei",
               "SimSun",
               "Songti SC",
-              "Noto Sans CJK SC"
+              "Noto Sans CJK SC",
+              "Noto Serif CJK SC",
+              "Source Han Sans SC",
+              "Source Han Serif SC",
+              "WenQuanYi Micro Hei",
+              "KaiTi",
+              "FangSong",
+              "STHeiti",
+              "STSong",
+              "STKaiti",
+              "STFangsong",
+              "Hiragino Sans GB"
             ],
             "default": "",
             "description": "UI 中文字体"
           },
           "contentEnFont": {
-            "type": "string",
+            "type": "font",
             "enum": [
               "Arial",
               "Helvetica",
@@ -75,32 +107,71 @@
               "Verdana",
               "Tahoma",
               "Trebuchet MS",
-              "Courier New"
+              "Courier New",
+              "Segoe UI",
+              "Roboto",
+              "Open Sans",
+              "Lato",
+              "Montserrat",
+              "Merriweather",
+              "Source Sans Pro",
+              "Noto Sans",
+              "PT Sans",
+              "Ubuntu",
+              "Futura",
+              "Garamond",
+              "Palatino",
+              "Cambria",
+              "Calibri",
+              "Consolas",
+              "Impact",
+              "Comic Sans MS",
+              "Candara",
+              "Constantia",
+              "Corbel"
             ],
             "default": "",
             "description": "内容英文字体"
           },
           "contentZhFont": {
-            "type": "string",
+            "type": "font",
             "enum": [
               "PingFang SC",
               "Microsoft YaHei",
               "SimHei",
               "SimSun",
               "Songti SC",
-              "Noto Sans CJK SC"
+              "Noto Sans CJK SC",
+              "Noto Serif CJK SC",
+              "Source Han Sans SC",
+              "Source Han Serif SC",
+              "WenQuanYi Micro Hei",
+              "KaiTi",
+              "FangSong",
+              "STHeiti",
+              "STSong",
+              "STKaiti",
+              "STFangsong",
+              "Hiragino Sans GB"
             ],
             "default": "",
             "description": "内容中文字体"
           },
           "codeFont": {
-            "type": "string",
+            "type": "font",
             "enum": [
               "Cascadia Code",
               "JetBrains Mono",
               "Consolas",
               "Courier New",
-              "Fira Code"
+              "Fira Code",
+              "Source Code Pro",
+              "Ubuntu Mono",
+              "Menlo",
+              "Monaco",
+              "DejaVu Sans Mono",
+              "Inconsolata",
+              "Hack"
             ],
             "default": "",
             "description": "代码字体"

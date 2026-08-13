@@ -33,7 +33,7 @@ code {
   align-items: center;
   gap: var(--spacing-md);
   padding: 0 var(--spacing-lg);
-  background: var(--color-bars);
+  background: var(--color-bg);
   height: var(--topbar-h);
   flex: 0 0 auto;
 }
@@ -44,7 +44,7 @@ code {
 }
 .sidebar,
 .rightbar {
-  background: var(--color-bars);
+  background: var(--color-bg);
   overflow-y: auto;
   overflow-x: hidden;
   flex: 0 0 auto;
@@ -78,7 +78,7 @@ code {
   position: relative;
   z-index: 1;
   margin: var(--main-gap);
-  background: var(--color-main);
+  background: var(--color-bg);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
@@ -94,7 +94,7 @@ code {
   height: var(--main-strip-h);
   padding: 0 var(--spacing-md);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-card);
+  background: transparent;
 }
 .main-content {
   flex: 1;
@@ -189,15 +189,22 @@ code {
   margin-bottom: var(--spacing-sm);
 }
 
-/* 表单 */
+/* 表单：label 左、控件右（简洁大气） */
 .field {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
   margin-bottom: var(--spacing-md);
 }
 .field label {
-  display: block;
+  flex: 0 0 140px;
   font-size: 13px;
-  margin-bottom: var(--spacing-xs);
+  line-height: 30px;
   color: var(--color-text);
+}
+.field-control {
+  flex: 1;
+  min-width: 0;
 }
 .field input,
 .field select {
@@ -238,7 +245,7 @@ code {
   height: fit-content;
   max-height: calc(100vh - 2 * var(--spacing-xl));
   overflow-y: auto;
-  background: var(--color-main);
+  background: var(--color-card);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-floating);
   padding: var(--spacing-lg);
@@ -355,7 +362,7 @@ code {
 }
 .settings-nav {
   border-right: 1px solid var(--color-border);
-  background: var(--color-bars);
+  background: var(--color-bg);
   padding: var(--spacing-md);
   overflow-y: auto;
 }
@@ -569,9 +576,9 @@ code {
   width: 48px;
   height: 30px;
   padding: 2px;
-  border: 1px solid var(--color-border);
+  border: none; /* 颜色选择器不加框线，更简洁 */
   border-radius: var(--radius-sm);
-  background: var(--color-card);
+  background: transparent;
   cursor: pointer;
 }
 
