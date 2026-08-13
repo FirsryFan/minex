@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import type { ComponentType } from "react";
 import { MainArea } from "./components/MainArea.js";
 import { RightBar } from "./components/RightBar.js";
 import { SettingsPage } from "./components/SettingsPage.js";
@@ -77,6 +78,12 @@ export function App({ problems }: { problems: string[] }) {
     );
   }
 
+  // 活动驱动的工作区贡献（有则渲染驱动工作区，否则默认布局）
+  const workspaceView = activeDriverId
+    ? kernel.registry.get<{ load: () => Promise<{ default: ComponentType<{ kernel: typeof kernel }> }> }>("workspace", activeDriverId)
+    : undefined;
+  const WorkspaceView = useMemo(() => (workspaceView ? lazy(workspaceView.value.load) : null), [workspaceView, activeDriverId]);
+
   return (
     <div className="shell">
       <ThemeManager dark={dark} />
@@ -88,6 +95,13 @@ export function App({ problems }: { problems: string[] }) {
         onToggleTheme={() => setDark((d) => !d)}
         onOpenSettings={() => setView("settings")}
       />
+      {WorkspaceView ? (
+        <div className="workspace">
+          <Suspense fallback={<div className="loading">加载工作区…</div>}>
+            <WorkspaceView kernel={kernel} />
+          </Suspense>
+        </div>
+      ) : (
       <div className="workspace">
         <div
           className={`sidebar${collapsed.left ? " collapsed" : ""}`}
@@ -126,6 +140,7 @@ export function App({ problems }: { problems: string[] }) {
           <RightBar />
         </div>
       </div>
+      )}
     </div>
   );
 }

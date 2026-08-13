@@ -1,0 +1,12 @@
+{
+  "id": "minex.markdown",
+  "name": "Markdown 编辑器",
+  "icon": "./assets/icon.svg",
+  "version": "0.1.0",
+  "minKernelVersion": "0.2.3",
+  "entry": "./dist/index.js",
+  "reloadable": true,
+  "hasWorkspace": true,
+  "source": "本地",
+  "description": "Markdown 编辑器驱动：编辑 / 预览 / 分屏三模式，并贡献通用 markdown 渲染能力（供 README 等其他位置复用）"
+}

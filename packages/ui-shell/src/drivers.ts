@@ -6,11 +6,16 @@ import appearanceIconUrl from "../../appearance-driver/assets/icon.svg";
 import demoManifestRaw from "../../demo-driver/manifest.json";
 import demoModuleRaw from "../../demo-driver/src/index.js";
 import demoIconUrl from "../../demo-driver/assets/icon.svg";
+import markdownManifestRaw from "../../markdown-driver/manifest.json";
+import markdownModuleRaw from "../../markdown-driver/src/index.js";
+import markdownIconUrl from "../../markdown-driver/assets/icon.svg";
 
 const demoModule = demoModuleRaw as unknown as { activate: DriverModule["activate"] };
 const demoManifest = demoManifestRaw as unknown as DriverManifest;
 const appearanceModule = appearanceModuleRaw as unknown as { activate: DriverModule["activate"] };
 const appearanceManifest = appearanceManifestRaw as unknown as DriverManifest;
+const markdownModule = markdownModuleRaw as unknown as { activate: DriverModule["activate"] };
+const markdownManifest = markdownManifestRaw as unknown as DriverManifest;
 
 /**
  * v1：显式驱动清单（浏览器无法读文件系统，驱动经 Vite 打包加载）。
@@ -19,4 +24,5 @@ const appearanceManifest = appearanceManifestRaw as unknown as DriverManifest;
 export const DRIVERS: DriverModule[] = [
   { manifest: { ...demoManifest, icon: demoIconUrl }, activate: demoModule.activate },
   { manifest: { ...appearanceManifest, icon: appearanceIconUrl }, activate: appearanceModule.activate },
+  { manifest: { ...markdownManifest, icon: markdownIconUrl }, activate: markdownModule.activate },
 ];

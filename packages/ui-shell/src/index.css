@@ -801,3 +801,93 @@ button {
   color: var(--color-text-muted);
   text-align: center;
 }
+
+/* —— markdown 编辑器工作区 —— */
+.md-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.md-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+.md-mode {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.md-mode:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.md-mode.active {
+  color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+.md-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.md-editor {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  padding: var(--spacing-lg);
+  resize: none;
+  font-family: var(--font-content);
+  font-size: 14px;
+  line-height: 1.6;
+  background: transparent;
+  color: var(--color-text);
+  outline: none;
+}
+.md-preview {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  border-left: 1px solid var(--color-border);
+}
+/* markdown 渲染内容样式 */
+.markdown-body {
+  font-family: var(--font-content);
+  line-height: 1.6;
+  color: var(--color-text);
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  margin: 0.8em 0 0.4em;
+}
+.markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body blockquote {
+  margin: 0.4em 0;
+}
+.markdown-body code {
+  font-family: var(--font-code);
+  background: var(--color-hover);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+.markdown-body pre {
+  background: var(--color-hover);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.markdown-body blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: var(--spacing-md);
+  color: var(--color-text-muted);
+}
