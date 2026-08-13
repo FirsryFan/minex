@@ -179,6 +179,12 @@ describe("parseMainChain / buildLinearLinks / rebuildFromMarkdown（markdown ↔
     expect(parseMainChain("")).toEqual([]);
     expect(parseMainChain("# 只有标题")).toEqual([]);
   });
+  it("## 助手 normalizes to assistant without agentId（审查 phase25 m1）", () => {
+    const nodes = parseMainChain("## 助手\n\nhi", NOW);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].kind).toBe("assistant");
+    expect(nodes[0].agentId).toBeUndefined();
+  });
   it("non-## lines join current block (tool text becomes content)", () => {
     const nodes = parseMainChain("## 你\n\n一\n### 工具调用：x\n```json\n{}\n```", NOW);
     expect(nodes).toHaveLength(1);

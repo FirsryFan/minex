@@ -214,7 +214,8 @@ export function parseMainChain(doc: string, ts?: string): SessionNode[] {
       if (who === "你") {
         block = { kind: "user", content: [] };
       } else {
-        block = { kind: "assistant", agentId: who, content: [] };
+        // `## 助手` 归一化为无 agentId（与 toMarkdown 的无 agentId 渲染互逆，审查 phase25 m1）
+        block = { kind: "assistant", ...(who === "助手" ? {} : { agentId: who }), content: [] };
       }
     } else if (block) {
       block.content.push(line);

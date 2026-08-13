@@ -1,18 +1,30 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
-import { RightBar } from "./components/RightBar.js";
+import { FloatingPanel } from "./components/FloatingPanel.js";
 import { SettingsPage } from "./components/SettingsPage.js";
-import { Sidebar } from "./components/Sidebar.js";
 import { ThemeManager } from "./components/ThemeManager.js";
 import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
+import { queryPanels, type PanelContribution } from "./panels.js";
 
 const ACTIVE_DRIVER_KEY = "minex.activeDriver";
 const THEME_KEY = "minex.theme";
 
+interface FloatingState {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /**
- * 外壳：view = workspace（顶栏 + 工作区）| settings（全屏设置页）。
- * 活动驱动决定工作区内容（v1 为默认通用结构；驱动工作区贡献留待后续）。
+ * 外壳（S3 面板化）：驱动贡献「面板」（内容 + 默认停靠位），外壳渲染停靠面板（左/右/主区）+ 浮窗。
+ * - 左栏：defaultDock "left" 的面板（tab 切换，双击 tab 浮起）
+ * - 主区：活动驱动的 defaultDock "main" 面板（无则留空）
+ * - 右栏：defaultDock "right" 的面板
+ * - 浮窗层：defaultDock "floating" 或用户浮起的面板（FloatingPanel 拖拽/缩放/关闭回停靠）
+ * 工作视图多开（多实例切换）留待后续阶段。
  */
 export function App({ problems }: { problems: string[] }) {
   const kernel = useKernel();
@@ -21,14 +33,14 @@ export function App({ problems }: { problems: string[] }) {
     typeof localStorage !== "undefined" ? localStorage.getItem(ACTIVE_DRIVER_KEY) : null,
   );
   const [collapsed, setCollapsed] = useState({ left: false, right: false });
-  // 左右栏宽度（可拖拽调整，受最小宽度约束）；collapsed 时由 CSS 收缩为窄条
   const [widths, setWidths] = useState({ left: 220, right: 220 });
-  const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
   const [dark, setDark] = useState<boolean>(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem(THEME_KEY) : null;
     return saved ? saved === "dark" : false; // 默认浅色
   });
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
+  const [activeLeftPanelId, setActiveLeftPanelId] = useState<string | null>(null);
+  const [floating, setFloating] = useState<FloatingState[]>([]);
 
   // 事件驱动重渲染（驱动列表/状态/贡献变化）
   useEffect(() => {
@@ -69,7 +81,7 @@ export function App({ problems }: { problems: string[] }) {
     }
   }
 
-  // 顶栏驱动选择器只列「已启用且有主界面」的驱动（纯设置驱动 / 被禁用的驱动不出现）
+  // 顶栏驱动选择器只列「已启用且有主界面」的驱动
   const drivers = kernel.drivers
     .list()
     .filter((m) => m.manifest.hasWorkspace && kernel.drivers.getState(m.manifest.id) === "activated")
@@ -79,19 +91,49 @@ export function App({ problems }: { problems: string[] }) {
       icon: m.manifest.icon,
     }));
 
-  // 活动驱动的工作区贡献（有则渲染驱动工作区，否则默认布局）。
-  // 注意：useMemo 必须在条件 return 之前（Hooks 规则，否则切设置视图时 hooks 数量变化导致崩溃）
-  const workspaceView = activeDriverId
-    ? kernel.registry.get<{ load: () => Promise<{ default: ComponentType<{ kernel: typeof kernel }> }> }>("workspace", activeDriverId)
-    : undefined;
-  const WorkspaceView = useMemo(() => (workspaceView ? lazy(workspaceView.value.load) : null), [workspaceView, activeDriverId]);
+  // 面板收集与分层（随注册表变化重查）
+  const panels = useMemo<PanelContribution[]>(() => queryPanels(kernel), [kernel, tick]);
+  const floatingIds = new Set(floating.map((f) => f.id));
+  const floatingAll = panels.filter((p) => p.defaultDock === "floating" || floatingIds.has(p.id));
+  const docked = panels.filter((p) => p.defaultDock !== "floating" && !floatingIds.has(p.id));
+  const leftPanels = docked.filter((p) => p.defaultDock === "left");
+  const rightPanels = docked.filter((p) => p.defaultDock === "right");
+  const mainPanel = docked.find((p) => p.defaultDock === "main" && p.driverId === activeDriverId);
+  const leftPanel = leftPanels.find((p) => p.id === activeLeftPanelId) ?? leftPanels[0];
 
-  // 侧边栏贡献（文件系统驱动的文件树常驻左栏，不依赖活动驱动）
-  const sidebarView = kernel.registry.get<{ load: () => Promise<{ default: ComponentType<{ kernel: typeof kernel }> }> }>("sidebar", "minex.filesystem");
-  const SidebarContribution = useMemo(() => (sidebarView ? lazy(sidebarView.value.load) : null), [sidebarView]);
+  // lazy 面板缓存（lazy 必须稳定，否则每次渲染重挂载）
+  const panelLazy = useMemo(() => {
+    const map = new Map<string, ComponentType<{ kernel: typeof kernel }>>();
+    for (const p of panels) map.set(p.id, lazy(p.load) as ComponentType<{ kernel: typeof kernel }>);
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panels]);
+
+  function floatPanel(id: string): void {
+    setFloating((prev) => (prev.some((f) => f.id === id) ? prev : [...prev, { id, x: 140, y: 90, w: 360, h: 480 }]));
+  }
+  function dockPanel(id: string): void {
+    setFloating((prev) => prev.filter((f) => f.id !== id));
+  }
+  function patchFloating(id: string, patch: Partial<FloatingState>): void {
+    setFloating((prev) =>
+      prev.some((f) => f.id === id)
+        ? prev.map((f) => (f.id === id ? { ...f, ...patch } : f))
+        : [...prev, { id, x: 140, y: 90, w: 360, h: 480, ...patch }],
+    );
+  }
+
+  function renderPanel(p: PanelContribution, fallback?: string): React.ReactNode {
+    const Comp = panelLazy.get(p.id);
+    if (!Comp) return null;
+    return (
+      <Suspense fallback={<div className="loading">{fallback ?? "加载面板…"}</div>}>
+        <Comp kernel={kernel} />
+      </Suspense>
+    );
+  }
 
   if (view === "settings") {
-    // T1：ThemeManager 常驻（两种视图都挂载），设置页改主题即时生效
     return (
       <>
         <ThemeManager dark={dark} />
@@ -115,53 +157,85 @@ export function App({ problems }: { problems: string[] }) {
         onToggleRight={() => setCollapsed((c) => ({ ...c, right: !c.right }))}
       />
       <div className="workspace">
+        {/* 左侧栏：停靠面板（tab 切换；双击 tab 浮起） */}
         <div
           className={`sidebar${collapsed.left ? " collapsed" : ""}`}
           style={{ width: collapsed.left ? undefined : widths.left }}
         >
-          {SidebarContribution ? (
-            <Suspense fallback={<div className="muted">加载侧边栏…</div>}>
-              <SidebarContribution kernel={kernel} />
-            </Suspense>
-          ) : (
-            <Sidebar
-              selectedPanelId={selectedPanelId}
-              onSelect={(id) => setSelectedPanelId(id === selectedPanelId ? null : id)}
-              problems={problems}
-            />
+          {leftPanels.length > 0 && (
+            <div className="panel-tabs">
+              {leftPanels.map((p) => (
+                <button
+                  key={p.id}
+                  className={`panel-tab${leftPanel?.id === p.id ? " active" : ""}`}
+                  onClick={() => setActiveLeftPanelId(p.id)}
+                  onDoubleClick={() => floatPanel(p.id)}
+                  title={`浮起「${p.title}」（双击）`}
+                >
+                  {p.title}
+                </button>
+              ))}
+            </div>
           )}
+          {leftPanel && <div className="dock-panel">{renderPanel(leftPanel)}</div>}
         </div>
         {!collapsed.left && (
-          <Resizer
-            side="left"
-            initialWidth={widths.left}
-            onResize={(target) => setWidths((w) => ({ ...w, left: clamp(target, 160, 480) }))}
-          />
+          <Resizer side="left" initialWidth={widths.left} onResize={(t) => setWidths((w) => ({ ...w, left: clamp(t, 160, 480) }))} />
         )}
+
+        {/* 主区：活动驱动的主面板 */}
         <div className="main">
-          {WorkspaceView ? (
-            <Suspense fallback={<div className="loading">加载工作区…</div>}>
-              <WorkspaceView kernel={kernel} />
-            </Suspense>
+          {mainPanel ? (
+            renderPanel(mainPanel, "加载工作区…")
           ) : (
             /* 无活动/已启用驱动工作区时：主体留空，不显示任何占位文字 */
             <div className="main-empty" />
           )}
         </div>
+
         {!collapsed.right && (
-          <Resizer
-            side="right"
-            initialWidth={widths.right}
-            onResize={(target) => setWidths((w) => ({ ...w, right: clamp(target, 160, 480) }))}
-          />
+          <Resizer side="right" initialWidth={widths.right} onResize={(t) => setWidths((w) => ({ ...w, right: clamp(t, 160, 480) }))} />
         )}
+
+        {/* 右侧栏：停靠面板 */}
         <div
           className={`rightbar${collapsed.right ? " collapsed" : ""}`}
           style={{ width: collapsed.right ? undefined : widths.right }}
         >
-          <RightBar />
+          {rightPanels.length > 0 && (
+            <div className="panel-tabs">
+              {rightPanels.map((p) => (
+                <button key={p.id} className="panel-tab active" onDoubleClick={() => floatPanel(p.id)} title={`浮起「${p.title}」（双击）`}>
+                  {p.title}
+                </button>
+              ))}
+            </div>
+          )}
+          {rightPanels.map((p) => (
+            <div key={p.id} className="dock-panel">{renderPanel(p)}</div>
+          ))}
         </div>
       </div>
+
+      {/* 浮窗层 */}
+      {floatingAll.map((p) => {
+        const fs = floating.find((f) => f.id === p.id);
+        return (
+          <FloatingPanel
+            key={p.id}
+            title={p.title}
+            x={fs?.x ?? 140}
+            y={fs?.y ?? 90}
+            w={fs?.w ?? 360}
+            h={fs?.h ?? 480}
+            onMove={(x, y) => patchFloating(p.id, { x, y })}
+            onResize={(w, h) => patchFloating(p.id, { w, h })}
+            onClose={() => dockPanel(p.id)}
+          >
+            {renderPanel(p)}
+          </FloatingPanel>
+        );
+      })}
     </div>
   );
 }

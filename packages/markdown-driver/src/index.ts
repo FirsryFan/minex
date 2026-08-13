@@ -83,7 +83,14 @@ export default {
       ],
     });
 
-    ctx.register("workspace", "minex.markdown", { load: () => import("./workspace-view.js") });
+    // 面板：markdown 工作区（主区，活动驱动为 markdown 时显示）
+    ctx.register("panel", "minex.markdown.workspace", {
+      driverId: "minex.markdown",
+      id: "minex.markdown.workspace",
+      title: "Markdown",
+      defaultDock: "main",
+      load: () => import("./workspace-view.js"),
+    });
     ctx.register("settingsView", "minex.markdown", { load: () => import("./settings-view.js") });
 
     const off = ctx.on("minex:dataChanged", () => applyCss());
