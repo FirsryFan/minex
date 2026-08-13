@@ -41,6 +41,7 @@ export function App({ problems }: { problems: string[] }) {
   const [tick, setTick] = useState(0);
   const [activeLeftPanelId, setActiveLeftPanelId] = useState<string | null>(null);
   const [floating, setFloating] = useState<FloatingState[]>([]);
+  const [hiddenPanels, setHiddenPanels] = useState<string[]>([]); // 默认浮窗（defaultDock:"floating"）关闭后永久隐藏
 
   // 事件驱动重渲染（驱动列表/状态/贡献变化）
   useEffect(() => {
@@ -94,7 +95,7 @@ export function App({ problems }: { problems: string[] }) {
   // 面板收集与分层（随注册表变化重查）
   const panels = useMemo<PanelContribution[]>(() => queryPanels(kernel), [kernel, tick]);
   const floatingIds = new Set(floating.map((f) => f.id));
-  const floatingAll = panels.filter((p) => p.defaultDock === "floating" || floatingIds.has(p.id));
+  const floatingAll = panels.filter((p) => !hiddenPanels.includes(p.id) && (p.defaultDock === "floating" || floatingIds.has(p.id)));
   const docked = panels.filter((p) => p.defaultDock !== "floating" && !floatingIds.has(p.id));
   const leftPanels = docked.filter((p) => p.defaultDock === "left");
   const rightPanels = docked.filter((p) => p.defaultDock === "right");
@@ -113,7 +114,13 @@ export function App({ problems }: { problems: string[] }) {
     setFloating((prev) => (prev.some((f) => f.id === id) ? prev : [...prev, { id, x: 140, y: 90, w: 360, h: 480 }]));
   }
   function dockPanel(id: string): void {
-    setFloating((prev) => prev.filter((f) => f.id !== id));
+    // 默认浮窗（defaultDock:"floating"）关闭 = 永久隐藏；浮起的面板关闭 = 回 defaultDock（审查 m1）
+    const p = panels.find((x) => x.id === id);
+    if (p?.defaultDock === "floating") {
+      setHiddenPanels((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    } else {
+      setFloating((prev) => prev.filter((f) => f.id !== id));
+    }
   }
   function patchFloating(id: string, patch: Partial<FloatingState>): void {
     setFloating((prev) =>
