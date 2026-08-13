@@ -33,6 +33,7 @@ export function FloatingPanel({
   const resizeRef = useRef<{ px: number; py: number; w: number; h: number } | null>(null);
   const movedRef = useRef(false); // 是否真拖动过（mouseup 时区分「点击」与「拖动结束」）
   const posRef = useRef({ x, y, w, h });
+  const latestRef = useRef({ x, y, w, h }); // 同步更新的最新位置（onDrop 用，避免 useEffect 异步时序，审查 m3）
   const onMoveRef = useRef(onMove);
   const onResizeRef = useRef(onResize);
   const onDropRef = useRef(onDrop);
@@ -56,6 +57,7 @@ export function FloatingPanel({
         const nx = dragRef.current.x + (e.clientX - dragRef.current.px);
         const ny = dragRef.current.y + (e.clientY - dragRef.current.py);
         movedRef.current = true;
+        latestRef.current = { x: nx, y: ny, w: posRef.current.w, h: posRef.current.h }; // 同步最新（审查 m3）
         onMoveRef.current(nx, ny, posRef.current.w, posRef.current.h);
       } else if (resizeRef.current) {
         onResizeRef.current(
@@ -65,7 +67,7 @@ export function FloatingPanel({
       }
     };
     const up = () => {
-      if (movedRef.current) onDropRef.current(posRef.current.x, posRef.current.y);
+      if (movedRef.current) onDropRef.current(latestRef.current.x, latestRef.current.y);
       // 只清理拖拽/缩放状态，不移除监听——监听常驻，保证可反复拖拽
       dragRef.current = null;
       resizeRef.current = null;

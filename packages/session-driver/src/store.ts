@@ -25,6 +25,8 @@ export interface SessionStore {
   loadSession(id: string): Promise<Session | undefined>;
   saveSession(s: Session): Promise<void>;
   deleteSession(id: string): Promise<void>;
+  /** 会话 .ses 文件路径（供打开路由复用路径约定，审查 phase28 m2） */
+  sessionPath(type: string, id: string): string;
 }
 
 const MIST_DIR = ".mist";
@@ -90,6 +92,7 @@ export function createSessionStore(fs: SessionFsOps): SessionStore {
     loadSession,
     saveSession,
     deleteSession,
+    sessionPath: (type, id) => sessionPath(type, id),
   };
 }
 

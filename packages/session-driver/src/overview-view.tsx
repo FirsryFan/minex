@@ -46,7 +46,9 @@ export default function OverviewView({ kernel }: { kernel: MinexKernel }) {
   }
 
   function openSession(type: string, id: string): void {
-    kernel.events.emit("filesystem:openFile", { path: `.mist/sessions/${type}/${id}.ses` });
+    // 用 store.sessionPath 复用路径约定（审查 phase28 m2），避免硬编码 .ses 路径
+    const path = store?.sessionPath(type, id);
+    if (path) kernel.events.emit("filesystem:openFile", { path });
   }
 
   return (

@@ -6,7 +6,7 @@ import { SettingsPage } from "./components/SettingsPage.js";
 import { ThemeManager } from "./components/ThemeManager.js";
 import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
-import { queryPanels, type PanelContribution } from "./panels.js";
+import { queryPanels, type PanelContribution, type PanelDock } from "./panels.js";
 
 const ACTIVE_DRIVER_KEY = "minex.activeDriver";
 const THEME_KEY = "minex.theme";
@@ -19,7 +19,10 @@ interface FloatingState {
   h: number;
 }
 
-/** 一个工作视图（S4 多开实例）的全部布局状态：活动驱动 + 栏宽折叠 + 面板 + 浮窗 */
+/** 面板运行时停靠状态：left/right/main/floating，或 hidden（默认浮窗关闭后隐藏） */
+type DockState = PanelDock | "hidden";
+
+/** 一个工作视图（S4 多开实例）的全部布局状态：活动驱动 + 栏宽折叠 + 面板停靠态 + 浮窗位置 */
 interface InstanceState {
   id: number;
   name: string;
@@ -27,8 +30,10 @@ interface InstanceState {
   collapsed: { left: boolean; right: boolean };
   widths: { left: number; right: number };
   activeLeftPanelId: string | null;
-  floating: FloatingState[];
-  hiddenPanels: string[];
+  /** 面板运行时停靠状态：defaultDock 为回退；浮起/吸附/关闭改之（审查 BLOCKER：吸附决定 dock 位置） */
+  dockState: Record<string, DockState>;
+  /** 浮窗位置（仅 floating 面板记录） */
+  floatingPos: Record<string, FloatingState>;
 }
 
 function makeInstance(id: number, name: string): InstanceState {
@@ -39,15 +44,15 @@ function makeInstance(id: number, name: string): InstanceState {
     collapsed: { left: false, right: false },
     widths: { left: 220, right: 220 },
     activeLeftPanelId: null,
-    floating: [],
-    hiddenPanels: [],
+    dockState: {},
+    floatingPos: {},
   };
 }
 
 /**
- * 外壳（S3 面板化 + S4 多开）：驱动贡献「面板」，外壳渲染停靠面板（左/右/主区）+ 浮窗层。
- * - 工作视图多开：每个实例独立布局状态（活动驱动/折叠/宽度/浮窗），顶部 view-strip 切换/新建/关闭
- * - 面板浮起（双击 dock tab）、贴靠 dock（拖到边缘回停靠）、浮窗拖拽/缩放
+ * 外壳（S3 面板化 + S4 多开）：驱动贡献「面板」，外壳按运行时 dockState 渲染停靠面板（左/右/主区）+ 浮窗层。
+ * - 工作视图多开：每实例独立布局状态，view-strip 切换/新建/关闭
+ * - 面板浮起（双击 dock tab）、吸附 dock（拖到目标槽，释放停靠到吸附目标）、浮窗拖拽/缩放
  */
 export function App({ problems }: { problems: string[] }) {
   void problems; // 保留 bootstrap 签名；默认 Sidebar 已由面板化取代
@@ -61,7 +66,6 @@ export function App({ problems }: { problems: string[] }) {
   const [activeInstanceId, setActiveInstanceId] = useState(1);
   const activeInstance = instances.find((i) => i.id === activeInstanceId) ?? instances[0];
 
-  // 主题：应用 data-theme + 持久化
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     try {
@@ -71,7 +75,6 @@ export function App({ problems }: { problems: string[] }) {
     }
   }, [dark]);
 
-  // 文件树点击 markdown 文件 → 当前工作视图切到 markdown 工作区
   useEffect(() => {
     return kernel.events.on("filesystem:openFile", () => {
       updateInstance(activeInstanceId, { activeDriverId: "minex.markdown" });
@@ -106,7 +109,6 @@ export function App({ problems }: { problems: string[] }) {
     }
   }
 
-  // 顶栏驱动选择器只列「已启用且有主界面」的驱动
   const drivers = kernel.drivers
     .list()
     .filter((m) => m.manifest.hasWorkspace && kernel.drivers.getState(m.manifest.id) === "activated")
@@ -167,7 +169,7 @@ export function App({ problems }: { problems: string[] }) {
   );
 }
 
-/** 一个工作视图实例：渲染停靠面板（左/右/主区）+ 浮窗层（布局状态在 instance，S4 多开） */
+/** 一个工作视图实例：按运行时 dockState 渲染停靠面板（左/右/主区）+ 浮窗层（S4 多开） */
 function WorkspaceInstance({
   kernel,
   instance,
@@ -178,9 +180,8 @@ function WorkspaceInstance({
   onUpdate: (patch: Partial<InstanceState>) => void;
 }) {
   const [tick, setTick] = useState(0);
-  const [snapTarget, setSnapTarget] = useState<"left" | "right" | "main" | null>(null);
+  const [snapTarget, setSnapTarget] = useState<PanelDock | null>(null);
 
-  // 事件驱动重渲染（驱动列表/状态/贡献变化）
   useEffect(() => {
     const offs: Array<() => void> = [];
     offs.push(kernel.registry.onChange("*", () => setTick((t) => t + 1)));
@@ -189,15 +190,15 @@ function WorkspaceInstance({
   }, [kernel]);
 
   const panels = useMemo<PanelContribution[]>(() => queryPanels(kernel), [kernel, tick]);
-  const floatingIds = new Set(instance.floating.map((f) => f.id));
-  const floatingAll = panels.filter((p) => !instance.hiddenPanels.includes(p.id) && (p.defaultDock === "floating" || floatingIds.has(p.id)));
-  const docked = panels.filter((p) => p.defaultDock !== "floating" && !floatingIds.has(p.id));
-  const leftPanels = docked.filter((p) => p.defaultDock === "left");
-  const rightPanels = docked.filter((p) => p.defaultDock === "right");
-  const mainPanel = docked.find((p) => p.defaultDock === "main" && p.driverId === instance.activeDriverId);
+
+  // 面板运行时停靠状态（defaultDock 回退；"hidden" 不渲染）
+  const dockOf = (p: PanelContribution): DockState => instance.dockState[p.id] ?? p.defaultDock;
+  const leftPanels = panels.filter((p) => dockOf(p) === "left");
+  const rightPanels = panels.filter((p) => dockOf(p) === "right");
+  const mainPanel = panels.find((p) => dockOf(p) === "main" && p.driverId === instance.activeDriverId);
+  const floatingAll = panels.filter((p) => dockOf(p) === "floating");
   const leftPanel = leftPanels.find((p) => p.id === instance.activeLeftPanelId) ?? leftPanels[0];
 
-  // lazy 面板缓存（lazy 必须稳定，否则每次渲染重挂载）
   const panelLazy = useMemo(() => {
     const map = new Map<string, ComponentType<{ kernel: ReturnType<typeof useKernel> }>>();
     for (const p of panels) map.set(p.id, lazy(p.load) as ComponentType<{ kernel: ReturnType<typeof useKernel> }>);
@@ -205,41 +206,45 @@ function WorkspaceInstance({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panels]);
 
+  /** 浮起：dockState → floating（并初始化浮窗位置） */
   function floatPanel(id: string): void {
-    if (instance.floating.some((f) => f.id === id)) return;
-    onUpdate({ floating: [...instance.floating, { id, x: 140, y: 90, w: 360, h: 480 }] });
-  }
-  function dockPanel(id: string): void {
     const p = panels.find((x) => x.id === id);
-    if (p?.defaultDock === "floating") {
-      onUpdate({ hiddenPanels: instance.hiddenPanels.includes(id) ? instance.hiddenPanels : [...instance.hiddenPanels, id] });
-    } else {
-      onUpdate({ floating: instance.floating.filter((f) => f.id !== id) });
-    }
-  }
-  function patchFloating(id: string, patch: Partial<FloatingState>): void {
+    if (!p || dockOf(p) === "floating") return;
     onUpdate({
-      floating: instance.floating.some((f) => f.id === id)
-        ? instance.floating.map((f) => (f.id === id ? { ...f, ...patch } : f))
-        : [...instance.floating, { id, x: 140, y: 90, w: 360, h: 480, ...patch }],
+      dockState: { ...instance.dockState, [id]: "floating" },
+      floatingPos: {
+        ...instance.floatingPos,
+        [id]: { id, x: 140, y: 90, w: 360, h: 480 },
+      },
     });
   }
+  /** 停靠到目标槽：吸附 → 吸附目标；关闭 → defaultDock（默认浮窗关闭 = hidden） */
+  function dockPanel(id: string, target?: PanelDock): void {
+    const p = panels.find((x) => x.id === id);
+    const to: DockState = target ?? (p?.defaultDock === "floating" ? "hidden" : p?.defaultDock ?? "left");
+    onUpdate({ dockState: { ...instance.dockState, [id]: to } });
+  }
+  /** 浮窗位置更新（拖拽/缩放） */
+  function patchFloating(id: string, patch: Partial<FloatingState>): void {
+    const cur = instance.floatingPos[id] ?? { id, x: 140, y: 90, w: 360, h: 480 };
+    onUpdate({ floatingPos: { ...instance.floatingPos, [id]: { ...cur, ...patch } } });
+  }
 
-  /** 拖拽中：更新位置 + 计算吸附目标（贴靠 dock 预览，m2） */
+  /** 拖拽中：更新位置 + 吸附目标（按槽位几何，审查 m1） */
   function handleFloatMove(id: string, x: number, y: number, w: number, h: number): void {
     patchFloating(id, { x, y, w, h });
     setSnapTarget(computeSnap(x, y, w, h));
   }
-  /** 拖拽结束：吸附目标存在 → 回停靠；否则保持浮窗 */
+  /** 拖拽结束：吸附 → 停靠到吸附目标（BLOCKER 修复：吸附决定 dock 位置） */
   function handleFloatDrop(id: string): void {
-    if (snapTarget) dockPanel(id);
+    if (snapTarget) dockPanel(id, snapTarget);
     setSnapTarget(null);
   }
-  /** 吸附判断：靠近左/右栏槽或主区上缘 → 对应目标（m2 浮窗贴靠） */
-  function computeSnap(x: number, y: number, w: number, h: number): "left" | "right" | "main" | null {
+  /** 吸附判断：靠近左栏 / 右栏槽（按右栏左边缘几何）/ 主区上缘 */
+  function computeSnap(x: number, y: number, w: number, h: number): PanelDock | null {
     const vw = window.innerWidth;
     if (x < 60) return "left";
-    if (x + w > vw - 60) return "right";
+    if (x + w > vw - instance.widths.right - 20) return "right"; // 靠近右栏槽（非窗口边缘，审查 m1）
     if (y < 48) return "main";
     return null;
   }
@@ -256,7 +261,7 @@ function WorkspaceInstance({
 
   return (
     <div className="workspace">
-      {/* 左侧栏：停靠面板（tab 切换；双击 tab 浮起） */}
+      {/* 左侧栏 */}
       <div
         className={`sidebar${instance.collapsed.left ? " collapsed" : ""}`}
         style={{ width: instance.collapsed.left ? undefined : instance.widths.left }}
@@ -282,7 +287,7 @@ function WorkspaceInstance({
         <Resizer side="left" initialWidth={instance.widths.left} onResize={(t) => onUpdate({ widths: { ...instance.widths, left: clamp(t, 160, 480) } })} />
       )}
 
-      {/* 主区：活动驱动的主面板 */}
+      {/* 主区 */}
       <div className="main">
         {mainPanel ? renderPanel(mainPanel, "加载工作区…") : <div className="main-empty" />}
       </div>
@@ -291,7 +296,7 @@ function WorkspaceInstance({
         <Resizer side="right" initialWidth={instance.widths.right} onResize={(t) => onUpdate({ widths: { ...instance.widths, right: clamp(t, 160, 480) } })} />
       )}
 
-      {/* 右侧栏：停靠面板 */}
+      {/* 右侧栏 */}
       <div
         className={`rightbar${instance.collapsed.right ? " collapsed" : ""}`}
         style={{ width: instance.collapsed.right ? undefined : instance.widths.right }}
@@ -312,7 +317,7 @@ function WorkspaceInstance({
 
       {/* 浮窗层 */}
       {floatingAll.map((p) => {
-        const fs = instance.floating.find((f) => f.id === p.id);
+        const fs = instance.floatingPos[p.id];
         return (
           <FloatingPanel
             key={p.id}
@@ -355,13 +360,13 @@ function Resizer({
   function onMouseDown(e: React.MouseEvent): void {
     e.preventDefault();
     const startX = e.clientX;
-    const base = initialWidth; // 修复1：以按下时宽度为基准，避免累计位移叠加放大
+    const base = initialWidth;
     const dir = side === "left" ? 1 : -1;
     const move = (ev: MouseEvent) => onResize(base + dir * (ev.clientX - startX));
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
-      window.removeEventListener("blur", up); // 窗口失焦视为释放
+      window.removeEventListener("blur", up);
       cleanupRef.current = null;
     };
     window.addEventListener("mousemove", move);
