@@ -34,6 +34,13 @@ function defaultHeuristic<T>(a: Task<T>, b: Task<T>): number {
  * 纯函数可测。
  */
 export function buildPlan<T>(tasks: Task<T>[], heuristic?: Heuristic<T>): ScheduleStep<T>[] {
+  // 依赖缺失检测（区别于环）：deps 指向不存在的任务（审查 MINOR-2）
+  const ids = new Set(tasks.map((t) => t.id));
+  for (const t of tasks) {
+    for (const d of t.deps) {
+      if (!ids.has(d)) throw new Error(`依赖缺失：${t.id} → ${d}`);
+    }
+  }
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const indegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
@@ -66,7 +73,7 @@ export function buildPlan<T>(tasks: Task<T>[], heuristic?: Heuristic<T>): Schedu
     current = next;
   }
 
-  // 环检测：还有任务 indegree > 0（依赖永远无法满足）
+  // 环检测：还有任务 indegree > 0（依赖永远无法满足，且依赖均在 tasks 内 → 真环）
   if (processed < tasks.length) {
     const cyclic = tasks.filter((t) => (indegree.get(t.id) ?? 0) > 0).map((t) => t.id);
     throw new Error(`存在循环依赖：${cyclic.join(", ")}`);
@@ -114,8 +121,9 @@ export async function execute<T, R>(
         batch.map(async (task) => {
           try {
             results.set(task.id, await run(task));
-          } catch {
-            results.set(task.id, undefined as unknown as R); // 失败记录、继续
+          } catch (err) {
+            // 失败记录 Error 对象（可精确判定，区别于「成功返回 undefined」，审查 MINOR-1）
+            results.set(task.id, (err instanceof Error ? err : new Error(String(err))) as unknown as R);
           }
         }),
       );

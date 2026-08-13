@@ -22,6 +22,9 @@ describe("buildPlan", () => {
   it("环检测抛错（附环上任务）", () => {
     expect(() => buildPlan([t("a", ["b"]), t("b", ["a"])])).toThrow(/循环依赖/);
   });
+  it("依赖缺失报「依赖缺失」而非「循环依赖」（审查 MINOR-2）", () => {
+    expect(() => buildPlan([t("a", ["nonexistent"])])).toThrow(/依赖缺失：a → nonexistent/);
+  });
   it("同层排序：priority 降序 → estimatedTime 降序", () => {
     const plan = buildPlan([
       t("a", [], { priority: 1 }),
@@ -89,13 +92,36 @@ describe("execute", () => {
     expect(elapsed).toBeGreaterThanOrEqual(40); // 3×15 串行
   });
 
-  it("单任务失败不中断整层", async () => {
+  it("单任务失败不中断整层（失败存 Error，审查 MINOR-1）", async () => {
     const results = await execute([t("a"), t("b"), t("c")], async (task) => {
       if (task.id === "b") throw new Error("boom");
       return task.id;
     });
     expect(results.get("a")).toBe("a");
-    expect(results.get("b")).toBeUndefined(); // 失败记录 undefined
+    expect(results.get("b")).toBeInstanceOf(Error); // 失败存 Error，可精确判定
     expect(results.get("c")).toBe("c");
+  });
+  it("成功返回 undefined 与失败可区分（审查 MINOR-1）", async () => {
+    const results = await execute([t("ok"), t("fail")], async (task) => {
+      if (task.id === "fail") throw new Error("x");
+      return undefined;
+    });
+    expect(results.get("ok")).toBeUndefined(); // 成功返回 undefined
+    expect(results.get("fail")).toBeInstanceOf(Error); // 失败是 Error
+  });
+  it("混合场景：B 在 A 后、C 与 A 并行、耗时≈max(A,C)+B（审查 INFO-4）", async () => {
+    const order: string[] = [];
+    const start = Date.now();
+    await execute([t("a"), t("b", ["a"]), t("c")], async (task) => {
+      if (task.id === "a") await sleep(20);
+      if (task.id === "b") await sleep(10);
+      if (task.id === "c") await sleep(20);
+      order.push(task.id);
+      return task.id;
+    });
+    const elapsed = Date.now() - start;
+    expect(order.indexOf("b")).toBeGreaterThan(order.indexOf("a")); // B 在 A 后
+    expect(order.indexOf("c")).toBeLessThan(order.indexOf("b")); // C 与 A 同层（并行）
+    expect(elapsed).toBeLessThan(48); // ≈30（max(20,20)+10），非 50（串行求和）
   });
 });
