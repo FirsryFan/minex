@@ -30,6 +30,7 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const centeredRef = useRef(false); // 反馈 3：初始居中只做一次，后续数据刷新不抢视角
   const transformRef = useRef(transform);
   useEffect(() => {
     transformRef.current = transform;
@@ -43,19 +44,26 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
     const ok = loaded.filter((s): s is Session => Boolean(s));
     setSessions(ok);
     setGraph(buildSessionGraph(index.sessions, (id) => ok.find((s) => s.meta.id === id)?.meta));
-    setCurrentSessionId(index.sessions[0]?.id ?? null);
+    // 反馈 3：刷新不得覆盖用户选中的会话（否则点击子会话会被 refresh 闪回索引首位=主会话）；
+    // 仅首次（null）或选中项已被删除时回落到索引首位。
+    setCurrentSessionId((cur) => {
+      if (cur === null) return index.sessions[0]?.id ?? null;
+      return index.sessions.some((e) => e.id === cur) ? cur : (index.sessions[0]?.id ?? null);
+    });
   }, [store]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  // R-A 反馈 2：订阅刷新（保存/新建/删除会话后图谱立即更新，无需重开面板；订阅卸载清理）
+  // R-A 反馈 2：订阅刷新（保存/新建/删除会话后图谱立即更新，无需重开面板；订阅卸载清理）。
+  // 反馈 3：不再订阅 minex:openSession——openSession 是本面板节点点击自己 emit 的事件，
+  // 订阅它会形成「点击 → emit → refresh → 覆盖选中/重算图 → 初始居中 effect 再把视角拉回根」的闪退链；
+  // 数据新鲜度已由 registry.onChange + minex:dataChanged（store 所有保存/删除路径统一 emit）覆盖。
   useEffect(() => {
     const offs: Array<() => void> = [];
     offs.push(kernel.registry.onChange("*", () => void refresh()));
     offs.push(kernel.events.on("minex:dataChanged", () => void refresh()));
-    offs.push(kernel.events.on("minex:openSession", () => void refresh()));
     return () => offs.forEach((off) => off());
   }, [kernel, refresh]);
 
@@ -98,10 +106,16 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
     });
   }
 
-  // 打开时当前会话默认居中 + 缩放适应（单节点 1.2 / 多节点 0.9）
+  // 打开时当前会话默认居中 + 缩放适应（单节点 1.2 / 多节点 0.9）。
+  // 反馈 3：只做一次（centeredRef 守卫）——后续数据刷新（minex:dataChanged → 重算图）不得把用户
+  // 点击/拖拽/缩放后的视角抢回 0.9/1.2；点击会话的居中由 openSession 显式 centerOn(id, 1) 承担。
+  // checker minor：空图时重臂守卫——删空全部会话后新建首个会话，仍能以新会话为中心（而非左上角）。
   useEffect(() => {
-    if (graph && graph.nodes.length > 0) {
+    if (graph && graph.nodes.length > 0 && !centeredRef.current) {
+      centeredRef.current = true;
       centerOn(currentSessionId, graph.nodes.length <= 1 ? 1.2 : 0.9);
+    } else if (graph && graph.nodes.length === 0) {
+      centeredRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph]);
