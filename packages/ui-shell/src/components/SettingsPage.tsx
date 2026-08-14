@@ -4,12 +4,14 @@ import { useKernel } from "../kernel-context.js";
 import { planApply } from "../plan-apply.js";
 import { DriverDetail } from "./DriverDetail.js";
 import { DriverIcon } from "./DriverIcon.js";
+import { LeftNavLayout } from "./LeftNavLayout.js";
 import { OverviewView } from "./OverviewView.js";
 
 type Section = "download" | "manage" | "overview";
 
 /**
- * 主设置页：全屏大界面（无顶栏）。左栏文件夹式导航，主体为对应设置。
+ * 主设置页：全屏大界面（无顶栏）。F6 反馈 6：左栏改为可复用 LeftNavLayout（固定、不可拆卸、
+ * 不显示面板 tab / 拆放入口）；驱动详情 = 独立全屏页（LeftNavLayout 第二消费方）。
  * v1：驱动管理（暂存式启用/禁用 + 依赖警告）；下载/总览为占位。
  */
 export function SettingsPage({ onBack }: { onBack: () => void }) {
@@ -27,74 +29,77 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     return () => offs.forEach((off) => off());
   }, [kernel]);
 
-  return (
-    <div className="settings-page">
-      <nav className="settings-nav">
-        <div className="settings-nav-head">
-          <button className="icon-btn" onClick={onBack}>
-            ← 返回
-          </button>
-          <strong>设置</strong>
-        </div>
-        <div className="folder-head" onClick={() => setFolderOpen((o) => !o)}>
-          {folderOpen ? "▾" : "▸"} 驱动设置
-        </div>
-        {folderOpen && (
-          <div className="folder-children">
-            {/* 点左栏导航 → 切区并退出驱动详情（若开着） */}
-            <div
-              className={`folder-item${section === "download" ? " active" : ""}`}
-              onClick={() => {
-                setSection("download");
-                setSelectedDriverId(null);
-              }}
-            >
-              驱动下载
-            </div>
-            <div
-              className={`folder-item${section === "manage" ? " active" : ""}`}
-              onClick={() => {
-                setSection("manage");
-                setSelectedDriverId(null);
-              }}
-            >
-              驱动管理
-            </div>
-            <div
-              className={`folder-item${section === "overview" ? " active" : ""}`}
-              onClick={() => {
-                setSection("overview");
-                setSelectedDriverId(null);
-              }}
-            >
-              驱动总览
-            </div>
-          </div>
-        )}
-      </nav>
-
-      <div className="settings-main">
-        {selectedDriverId ? (
+  // F6：驱动详情 = 独立全屏页（左栏 = 返回 + 驱动名，主体 = settingsView；左栏固定无拆放入口）
+  if (selectedDriverId) {
+    const driver = kernel.drivers.list().find((d) => d.manifest.id === selectedDriverId);
+    return (
+      <LeftNavLayout
+        title={driver?.manifest.name ?? "驱动"}
+        onBack={() => setSelectedDriverId(null)}
+        main={
           <DriverDetail
             kernel={kernel}
             driverId={selectedDriverId}
             onBack={() => setSelectedDriverId(null)}
           />
-        ) : section === "manage" ? (
-          <ManageView
-            kernel={kernel}
-            search={search}
-            onSearch={setSearch}
-            onOpenDetail={setSelectedDriverId}
-            onApplied={() => setTick((t) => t + 1)}
-          />
-        ) : section === "download" ? (
-          <div className="card muted">驱动下载（暂未实现，留待后续）</div>
-        ) : (
-          <OverviewView kernel={kernel} onOpenDetail={setSelectedDriverId} />
-        )}
-      </div>
-    </div>
+        }
+      />
+    );
+  }
+
+  return (
+    <LeftNavLayout
+      title="设置"
+      onBack={onBack}
+      width={220} // 沿用原 .settings-page 左栏宽，外观不变
+      nav={
+        <nav className="settings-nav">
+          <div className="folder-head" onClick={() => setFolderOpen((o) => !o)}>
+            {folderOpen ? "▾" : "▸"} 驱动设置
+          </div>
+          {folderOpen && (
+            <div className="folder-children">
+              {/* 点左栏导航 → 切区（详情页已独立返回，无需再退详情） */}
+              <div
+                className={`folder-item${section === "download" ? " active" : ""}`}
+                onClick={() => setSection("download")}
+              >
+                驱动下载
+              </div>
+              <div
+                className={`folder-item${section === "manage" ? " active" : ""}`}
+                onClick={() => setSection("manage")}
+              >
+                驱动管理
+              </div>
+              <div
+                className={`folder-item${section === "overview" ? " active" : ""}`}
+                onClick={() => setSection("overview")}
+              >
+                驱动总览
+              </div>
+            </div>
+          )}
+        </nav>
+      }
+      main={
+        <div className="settings-main">
+          {section === "manage" ? (
+            <ManageView
+              kernel={kernel}
+              search={search}
+              onSearch={setSearch}
+              onOpenDetail={setSelectedDriverId}
+              onApplied={() => setTick((t) => t + 1)}
+            />
+          ) : section === "download" ? (
+            <div className="card muted">驱动下载（暂未实现，留待后续）</div>
+          ) : (
+            <OverviewView kernel={kernel} onOpenDetail={setSelectedDriverId} />
+          )}
+        </div>
+      }
+    />
   );
 }
 
