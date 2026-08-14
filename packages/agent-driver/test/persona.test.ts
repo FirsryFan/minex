@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validatePersona, type Persona } from "../src/persona.js";
+import { BUILTIN_PERSONAS, validatePersona, type Persona } from "../src/persona.js";
 
 function ok(extra: Partial<Persona> = {}): Persona {
   return {
@@ -43,5 +43,14 @@ describe("validatePersona", () => {
     expect(validatePersona({ ...ok(), description: 1 })).toBe(false);
     expect(validatePersona({ ...ok(), autoAdopt: "yes" })).toBe(false);
     expect(validatePersona({ ...ok(), slots: { nested: { a: [1, 2] } } })).toBe(true);
+  });
+
+  it("内置 4 persona 全部通过校验；预读助教（tutor）systemPrompt 覆盖教学场景", () => {
+    expect(BUILTIN_PERSONAS).toHaveLength(4);
+    for (const p of BUILTIN_PERSONAS) expect(validatePersona(p)).toBe(true);
+    const tutor = BUILTIN_PERSONAS.find((p) => p.id === "minex.persona.tutor");
+    expect(tutor?.name).toBe("预读助教");
+    expect(tutor?.systemPrompt).toContain("1v1 助教");
+    expect(tutor?.systemPrompt).toContain("预演");
   });
 });

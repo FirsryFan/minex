@@ -12,6 +12,8 @@
   "kind": "driver",
   "dependencies": [
     "minex.llm",
-    "mist.session"
+    "mist.session",
+    "minex.filesystem",
+    "minex.markdown"
   ]
 }

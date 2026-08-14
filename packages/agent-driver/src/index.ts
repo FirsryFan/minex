@@ -5,9 +5,10 @@ import { onEnvelope, parseEnvelope, sendEnvelope, serializeEnvelope, type Envelo
 import { executeWorkflow } from "./interpreter.js";
 import { createBuiltinRegistry } from "./operations.js";
 import { createPool } from "./pool.js";
-import { echoTool, type AgentTool } from "./tool.js";
+import type { AgentTool } from "./tool.js";
 import { validateWorkflow, type Workflow } from "./workflow.js";
 import { BUILTIN_PERSONAS } from "./persona.js";
+import { registerRealTools } from "./real-tools.js";
 
 /** llm.config 结构类型子集（agent 用到的部分） */
 interface ConfigLike {
@@ -20,15 +21,22 @@ interface MetricsLike {
   record(entry: LLMMetricsEntry): void;
 }
 
+/** agent.run 的 opts（3-1：toolWhitelist 工具白名单；后续 task 扩展） */
+interface RunOpts {
+  onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
+  /** 工具白名单（persona.tools 消费；缺省 = 全部工具） */
+  toolWhitelist?: string[];
+}
+
 /**
  * Agent 驱动（id: minex.agent）。
- * 注册示例工具 `echo` + `agent` 能力（run：ReAct loop，串行工具执行）。
- * 依赖 minex.llm（llm / llm.config / llm.metrics / tool）。
+ * 注册 7 个真实工具（real-tools）+ `agent` 能力（run：ReAct loop，串行工具执行）。
+ * 依赖 minex.llm / mist.session / minex.filesystem / minex.markdown（manifest dependencies）。
  */
 export default {
   async activate(ctx: DriverContext) {
-    // 示例工具（后续接 filesystem 等真实工具）
-    ctx.register("tool", "echo", echoTool);
+    // 3-1 工具插件化：注册 7 个真实工具（read_file/list_dir/write_file/render_markdown/list_sessions/load_session/save_session）
+    registerRealTools(ctx);
 
     // 协议信封能力（parse/serialize/send/on，纯数据层）
     ctx.register("envelope", "default", {
@@ -51,19 +59,23 @@ export default {
       },
     });
 
-    // agent 能力：从内核收集依赖 → runAgent（opts.onContext 透传，2-4 大纲记忆加工 hook）
+    // agent 能力：从内核收集依赖 → runAgent（opts.onContext 透传，2-4 大纲记忆加工 hook；
+    // 3-1 toolWhitelist 按 persona.tools 白名单过滤工具，缺省 = 全部）
     ctx.register("agent", "default", {
       run(
         systemPrompt: string,
         history: ChatMessage[],
         maxIterations?: number,
-        opts?: { onContext?: (contextItems: Array<{ ref: string; content: string }>) => void },
+        opts?: RunOpts,
       ) {
         const provider = ctx.get<LLMProvider>("llm", "deepseek");
         if (!provider) throw new Error("未找到 llm 能力（deepseek）");
         const config = ctx.get<ConfigLike>("llm.config", "default");
         const metrics = ctx.get<MetricsLike>("llm.metrics", "default");
-        const tools = ctx.query<AgentTool>("tool");
+        const allTools = ctx.query<AgentTool>("tool");
+        const whitelist = opts?.toolWhitelist;
+        const tools =
+          whitelist && whitelist.length > 0 ? allTools.filter((t) => whitelist.includes(t.name)) : allTools;
         const model = config?.getModel() || "deepseek-chat";
         const prices = config?.getPrices()[model] ?? { inputHit: 0, inputMiss: 0, output: 0 };
 

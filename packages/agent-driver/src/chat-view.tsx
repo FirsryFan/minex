@@ -26,7 +26,11 @@ interface AgentCap {
     systemPrompt: string,
     history: unknown[],
     maxIterations?: number,
-    opts?: { onContext?: (contextItems: Array<{ ref: string; content: string }>) => void },
+    opts?: {
+      onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
+      /** 3-1：工具白名单（persona.tools 消费；缺省 = 全部） */
+      toolWhitelist?: string[];
+    },
   ): AsyncIterable<AgentEvent>;
 }
 
@@ -70,6 +74,8 @@ interface PersonaLike {
   name: string;
   description?: string;
   systemPrompt: string;
+  /** 3-1：工具白名单（缺省 = 全部工具） */
+  tools?: string[];
 }
 
 /** 上下文条目（2-3：子对话初始 context / 手动追加） */
@@ -304,8 +310,11 @@ export default function ChatView({
     const history = [...messages, userMsg]
       .filter((m) => (m.role === "user" || m.role === "assistant") && !m.error)
       .map((m) => ({ role: m.role, content: m.content }));
+    // 3-1：persona.tools 白名单（缺省 = 全部工具）
+    const personaTools = currentPersona?.tools;
+    const runOpts = personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : undefined;
     try {
-      for await (const ev of agent.run(SYSTEM_PROMPT, history)) {
+      for await (const ev of agent.run(SYSTEM_PROMPT, history, undefined, runOpts)) {
         if (cancelledRef.current) break;
         if (ev.kind === "text") {
           setMessages((prev) => appendAssistantDelta(prev, ev.delta ?? ""));
@@ -360,8 +369,14 @@ export default function ChatView({
     const deltas: string[] = [];
     const toolCalls: Array<{ name: string; args: unknown }> = [];
     let errorMsg: string | undefined;
+    // 3-1：persona.tools 白名单（缺省 = 全部工具）
+    const personaTools = currentPersona?.tools;
+    const runOpts = {
+      ...(onContext ? { onContext } : {}),
+      ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
+    };
     try {
-      for await (const ev of agent.run(systemPrompt, history, undefined, onContext ? { onContext } : undefined)) {
+      for await (const ev of agent.run(systemPrompt, history, undefined, runOpts)) {
         if (cancelledRef.current) break;
         if (ev.kind === "text") {
           deltas.push(ev.delta ?? "");
