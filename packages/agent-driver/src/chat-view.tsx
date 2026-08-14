@@ -4,6 +4,7 @@ import {
   AUTO_SAVE_THRESHOLD,
   buildChildSystemPrompt,
   loadChatHistory,
+  mapContextToMessages,
   newId,
   saveAsSession,
   saveChatHistory,
@@ -247,12 +248,13 @@ export default function ChatView({
   }, [session]);
 
   // P5：立即保存当前会话（子对话 → saveSession 子会话 + 父会话带 branch 链接）+ 状态变 saved
+  // 3-6 自动保存原子性：先父后子——父会话先落盘 branch 关系真相源；父失败仍继续子保存
   const saveCurrent = useCallback(async (): Promise<void> => {
     if (savedRef.current) return;
     const s = sessionRef.current;
     if (!s || !store) return;
-    await store.saveSession(s).catch(() => {});
     if (parentRef.current) await store.saveSession(parentRef.current).catch(() => {});
+    await store.saveSession(s).catch(() => {});
     savedRef.current = true;
     setSaved(true);
   }, [store]);
@@ -438,9 +440,10 @@ export default function ChatView({
     if (saved) await store.saveSession(s2);
 
     // 2) agent.run history = 子对话上下文（contextItems 注入/手动追加）+ buildContext（当前分支，tail 默认 10）
+    // 3-6：buildContext 产物按 ref 查节点 kind 映射 role（assistant 消息 role:"assistant"，tool/event 跳过）
     const history = [
       ...extraContext.map((c) => ({ role: "user" as const, content: c.content })),
-      ...tree.buildContext(s2, branchId).map((c) => ({ role: "user" as const, content: c.content })),
+      ...mapContextToMessages(tree.buildContext(s2, branchId), s2),
     ];
     // 2-R1 + R-A 反馈 8：基础 prompt 优先级 = 会话级 settings.systemPrompt ?? persona.systemPrompt ?? 默认常量
     const basePrompt = session.meta.settings?.systemPrompt ?? currentPersona?.systemPrompt ?? SYSTEM_PROMPT;
@@ -526,13 +529,14 @@ export default function ChatView({
     setSession(s3);
     setMessages(sessionToChatMessages(s3));
     // 3b) P5 自动保存状态机：已保存 → 每轮落盘；未保存（子对话草稿）→ 轮数（用户消息数）达阈值自动保存
+    // 3-6 原子性：先父后子（父会话先落盘 branch 关系真相源；父失败仍继续子保存）
     if (saved) {
       await store.saveSession(s3);
     } else if (
       shouldAutoSave(s3.nodes.filter((n) => n.kind === "user").length, AUTO_SAVE_THRESHOLD)
     ) {
-      await store.saveSession(s3).catch(() => {});
       if (parentRef.current) await store.saveSession(parentRef.current).catch(() => {});
+      await store.saveSession(s3).catch(() => {});
       savedRef.current = true;
       setSaved(true);
     }

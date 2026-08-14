@@ -9,8 +9,9 @@ import { useKernel } from "./kernel-context.js";
 import { queryPanels, type PanelContribution, type PanelDock } from "./panels.js";
 import { panelIcon } from "./panel-icons.js";
 import { setPendingOpenSessionId } from "../../agent-driver/src/session-open.js";
-import ChatView from "../../agent-driver/src/chat-view.js";
 import type { SessionLike } from "../../agent-driver/src/chat-history.js";
+// 3-6：ChatView 静态 import 改 lazy（消 vite 双 import 警告；使用处包 Suspense）
+const ChatView = lazy(() => import("../../agent-driver/src/chat-view.js"));
 
 const ACTIVE_DRIVER_KEY = "minex.activeDriver";
 const THEME_KEY = "minex.theme";
@@ -305,16 +306,18 @@ export function App({ problems }: { problems: string[] }) {
             else setChildChat(null);
           }}
         >
-          <ChatView
-            kernel={kernel}
-            session={childChat.childSession}
-            contextItems={childChat.contextItems}
-            parentSession={childChat.parentSession}
-            selectionText={childChat.selectionText}
-            onStateChange={(h) => {
-              childHandleRef.current = h;
-            }}
-          />
+          <Suspense fallback={<div className="loading">加载聊天…</div>}>
+            <ChatView
+              kernel={kernel}
+              session={childChat.childSession}
+              contextItems={childChat.contextItems}
+              parentSession={childChat.parentSession}
+              selectionText={childChat.selectionText}
+              onStateChange={(h) => {
+                childHandleRef.current = h;
+              }}
+            />
+          </Suspense>
         </FloatingPanel>
       )}
 

@@ -5,6 +5,7 @@ import {
   buildChildSystemPrompt,
   chatMessagesToSession,
   loadChatHistory,
+  mapContextToMessages,
   newId,
   saveAsSession,
   saveChatHistory,
@@ -227,5 +228,52 @@ describe("shouldAutoSave（P5 自动保存状态机）", () => {
 
   it("负数消息数 → false", () => {
     expect(shouldAutoSave(-1, 3)).toBe(false);
+  });
+});
+
+describe("mapContextToMessages（3-6 history 角色增强）", () => {
+  const session: SessionLike = {
+    meta: {
+      id: "s1",
+      type: "chat",
+      title: "t",
+      tags: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    activeAgents: [],
+    nodes: [
+      { id: "u1", kind: "user", content: "问题", ts: "2026-01-01T00:00:00.000Z" },
+      { id: "a1", kind: "assistant", content: "回答", ts: "2026-01-01T00:00:00.000Z" },
+      { id: "t1", kind: "tool", toolName: "echo", output: "x", ts: "2026-01-01T00:00:00.000Z" },
+    ],
+    links: [],
+  };
+
+  it("user / assistant 节点 → 对应 role；tool 节点跳过", () => {
+    const out = mapContextToMessages(
+      [
+        { ref: "u1", content: "问题" },
+        { ref: "a1", content: "回答" },
+        { ref: "t1", content: "x" },
+      ],
+      session,
+    );
+    expect(out).toEqual([
+      { role: "user", content: "问题" },
+      { role: "assistant", content: "回答" },
+    ]);
+  });
+
+  it("ref 非节点 id（parent:tail）/ 节点不存在 → 按 user（兼容旧行为）", () => {
+    const out = mapContextToMessages([{ ref: "parent:tail", content: "旧消息" }, { ref: "zzz", content: "y" }], session);
+    expect(out).toEqual([
+      { role: "user", content: "旧消息" },
+      { role: "user", content: "y" },
+    ]);
+  });
+
+  it("空 contextItems → 空数组", () => {
+    expect(mapContextToMessages([], session)).toEqual([]);
   });
 });

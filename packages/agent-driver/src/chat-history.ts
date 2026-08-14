@@ -109,6 +109,31 @@ export function buildChildSystemPrompt(
 export const AUTO_SAVE_THRESHOLD = 3;
 
 /**
+ * 3-6：buildContext 产物 → LLM history 消息（按 ref 查节点 kind 映射 role，不动 buildContext）。
+ * ref = 节点 id → 查 kind：user→"user" / assistant→"assistant"；tool/event 等跳过；
+ * ref 非节点 id（如 "parent:tail"）或节点不存在 → 按 "user"（内容来源默认视为用户输入，兼容旧行为）。
+ */
+export function mapContextToMessages(
+  contextItems: Array<{ ref: string; content: string }>,
+  session: SessionLike,
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const byId = new Map(session.nodes.map((n) => [n.id, n]));
+  const out: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const c of contextItems) {
+    const node = byId.get(c.ref);
+    if (!node) {
+      out.push({ role: "user", content: c.content });
+      continue;
+    }
+    if (node.kind === "user" || node.kind === "assistant") {
+      out.push({ role: node.kind, content: c.content });
+    }
+    // tool / event / agent-msg 跳过
+  }
+  return out;
+}
+
+/**
  * 自动保存判定（P5 状态机）：messageCount ≥ threshold 且 threshold > 0。
  * messageCount 语义 = 轮数（用户消息数）；threshold ≤ 0 视为关闭自动保存（防御）。
  */
