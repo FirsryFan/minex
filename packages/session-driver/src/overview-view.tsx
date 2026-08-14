@@ -3,16 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { createSession, type Session, type SessionIndexEntry } from "./session.js";
 import type { SessionStore } from "./store.js";
 
-interface PersonaLike {
-  id: string;
-  name: string;
-}
-
-/** 会话设置表单（R-A 反馈 8：标签 / 默认 agent / persona / systemPrompt；3-2：权限模式；3-3：模型/温度；F-C：agentProfileId） */
+/** 会话设置表单（R-A 反馈 8 / 用户去重反馈：标签 + agent(档案) + 会话级 systemPrompt；3-2 权限；3-3 模型/温度；F-C agentProfileId） */
 interface SettingsForm {
   tags: string[];
   agentProfileId: string;
-  personaId: string;
   systemPrompt: string;
   permissionMode: "auto" | "edit" | "manual";
   model: string;
@@ -129,7 +123,6 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
       loadAgentProfiles(k: unknown): Record<string, { id: string; name: string; personaId?: string }>;
     }>("agent.profile", "default")?.value;
   const profiles = profileCap ? Object.values(profileCap.loadAgentProfiles(kernel)) : [];
-  const personaOptions = kernel.registry.query<PersonaLike>("role").map((c) => c.value);
 
   async function createNew(): Promise<void> {
     if (!store) return;
@@ -161,7 +154,6 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     setSettingsForm({
       tags: [...s.meta.tags],
       agentProfileId: s.meta.agentProfileId ?? "",
-      personaId: s.meta.personaId ?? "",
       systemPrompt: s.meta.settings?.systemPrompt ?? "",
       permissionMode: s.meta.settings?.permissionMode ?? "auto",
       model: s.meta.settings?.model ?? "",
@@ -169,7 +161,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     });
   }
 
-  /** 保存会话设置：不可变合并（tags / agentProfileId / personaId / settings）→ saveSession */
+  /** 保存会话设置：不可变合并（tags / agentProfileId / settings）→ saveSession */
   async function saveSettings(): Promise<void> {
     if (!store || !settingsId || !settingsForm) return;
     const s = await store.loadSession(settingsId);
@@ -181,7 +173,6 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
         ...s.meta,
         tags: settingsForm.tags,
         ...(settingsForm.agentProfileId ? { agentProfileId: settingsForm.agentProfileId } : {}), // F-C
-        ...(settingsForm.personaId ? { personaId: settingsForm.personaId } : {}),
         settings: {
           ...(s.meta.settings ?? {}),
           ...(settingsForm.systemPrompt ? { systemPrompt: settingsForm.systemPrompt } : {}),
@@ -397,29 +388,12 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
               </div>
             </div>
             <div className="field">
-              <label>persona</label>
-              <div className="field-control">
-                <select
-                  value={
-                    settingsForm.personaId ||
-                    (profiles.find((p) => p.id === settingsForm.agentProfileId)?.personaId ?? "")
-                  }
-                  onChange={(e) => setSettingsForm((f) => (f ? { ...f, personaId: e.target.value } : f))}
-                >
-                  <option value="">（不指定）</option>
-                  {personaOptions.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="field">
-              <label>systemPrompt</label>
+              <label>systemPrompt（会话级，覆盖 agent 档案的）</label>
               <div className="field-control">
                 <textarea
                   rows={4}
                   value={settingsForm.systemPrompt}
-                  placeholder="留空 = 使用 persona 的默认提示词"
+                  placeholder="留空 = 使用 agent 档案 / persona 的默认提示词"
                   onChange={(e) => setSettingsForm((f) => (f ? { ...f, systemPrompt: e.target.value } : f))}
                 />
               </div>

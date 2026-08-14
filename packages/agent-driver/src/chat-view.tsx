@@ -219,16 +219,20 @@ export default function ChatView({
     const pid = session?.meta.agentProfileId;
     return pid ? loadAgentProfiles(kernel)[pid] : undefined;
   })();
+  // 用户反馈（会话设置去重）：会话选了 agent 即继承其 persona——生效 persona 优先级 =
+  // 会话 meta.personaId（显式选择/子对话继承）> profile.personaId（agent 档案内嵌）> personaId 状态（默认助手）
+  const effectivePersona =
+    personas.find((p) => p.id === (session?.meta.personaId ?? profile?.personaId ?? personaId)) ?? currentPersona;
 
   /** F-A：消息行 icon（tool 🔧 / code </> / think 💭 / user 💬） */
   function msgIcon(cls: MessageClass): string {
     return cls.kind === "tool" ? "🔧" : cls.kind === "code" ? "</>" : cls.kind === "think" ? "💭" : "💬";
   }
 
-  /** F-C：工具白名单 = profile.tools（null=全部）?? persona 自带 tools（缺省 = 全部） */
+  /** F-C：工具白名单 = profile.tools（null=全部）?? 生效 persona 自带 tools（缺省 = 全部） */
   function toolWhitelistOf(): string[] | undefined {
     const t = profile?.tools;
-    return t !== undefined ? (t ?? undefined) : currentPersona?.tools;
+    return t !== undefined ? (t ?? undefined) : effectivePersona?.tools;
   }
 
   // F-A 反馈 4：Agent 配置面板「设为当前会话 persona」→ 本聊天实例切换
@@ -503,11 +507,11 @@ export default function ChatView({
       ...mapContextToMessages(tree.buildContext(s2, branchId), s2),
     ];
     // 2-R1 + R-A 反馈 8 + F-A/F-C：基础 prompt 优先级 =
-    // settings.systemPrompt ?? profile.systemPrompt ?? persona.systemPrompt ?? agent 全局默认 ?? 常量
+    // settings.systemPrompt ?? profile.systemPrompt ?? 生效 persona.systemPrompt ?? agent 全局默认 ?? 常量
     const basePrompt =
       session.meta.settings?.systemPrompt ??
       profile?.systemPrompt ??
-      currentPersona?.systemPrompt ??
+      effectivePersona?.systemPrompt ??
       loadAgentConfig(kernel)?.defaultSystemPrompt ??
       SYSTEM_PROMPT;
     // G-B 反馈 7：自动继承候选 = 当前来源会话大纲（迁移面板可换来源）
