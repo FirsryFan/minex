@@ -36,6 +36,13 @@ export interface SessionLink {
   type: SessionLinkType;
 }
 
+/** 会话级设置（2-2：v1 只存不用——阶段 3 模型参数接线时消费；缺省默认） */
+export interface SessionSettings {
+  model?: string;
+  temperature?: number;
+  contextStrategy?: "branch" | "full";
+}
+
 export interface SessionMeta {
   id: string;
   type: string;
@@ -47,6 +54,8 @@ export interface SessionMeta {
   currentBranchId?: string;
   /** 大纲记忆（D4 Envelope 式条目，task 2-1；可选，旧数据兼容） */
   outlines?: OutlineEntry[];
+  /** 会话级设置（2-2；可选，旧数据兼容） */
+  settings?: SessionSettings;
 }
 
 export interface Session {
@@ -270,6 +279,14 @@ export function validateSession(data: unknown): data is Session {
     (!Array.isArray(meta.outlines) || !(meta.outlines as unknown[]).every(validateOutlineEntry))
   ) {
     return false;
+  }
+  // 2-2 扩展：settings 可选形状校验（model string / temperature number / contextStrategy 枚举）
+  if (meta.settings !== undefined) {
+    const st = meta.settings as Record<string, unknown>;
+    if (typeof st !== "object" || st === null) return false;
+    if (st.model !== undefined && typeof st.model !== "string") return false;
+    if (st.temperature !== undefined && typeof st.temperature !== "number") return false;
+    if (st.contextStrategy !== undefined && st.contextStrategy !== "branch" && st.contextStrategy !== "full") return false;
   }
   if (!Array.isArray(s.activeAgents) || (s.activeAgents as unknown[]).some((a) => typeof a !== "string")) return false;
   if (!Array.isArray(s.nodes) || !Array.isArray(s.links)) return false;

@@ -1,5 +1,6 @@
 import type { DriverContext } from "@minex/kernel";
-import { rebuildFromMarkdown, toMarkdown, validateSession, type Session } from "./session.js";
+import { addLink, addNode, rebuildFromMarkdown, toMarkdown, validateSession, type Session } from "./session.js";
+import { buildContext, deriveBranches } from "./session-tree.js";
 import { createSessionStore, type SessionFsOps, type SessionStore } from "./store.js";
 
 /**
@@ -7,6 +8,8 @@ import { createSessionStore, type SessionFsOps, type SessionStore } from "./stor
  * S1：注册 `session` 能力（store：.ses 读写 + 索引 + 总览查询）。
  * S2：注册 `session.md` 能力（会话主链的 markdown 视图：渲染 / 校验 / 保存）——
  *      供 markdown 驱动打开 .ses 时消费（结构类型接，跨包零源码 import）。
+ * 2-2：注册 `session.tree` 能力（会话树纯函数：buildContext/deriveBranches/addNode/addLink）——
+ *      供 agent 聊天等驱动跨包消费（同「跨包零源码 import」约定，纯函数经能力桥接）。
  * 依赖 minex.filesystem（FileSystemAbility.ensureDir 建会话文件夹）。
  */
 export default {
@@ -17,6 +20,9 @@ export default {
     }
     const store: SessionStore = createSessionStore(fs);
     ctx.register("session", "default", store);
+
+    // 会话树纯函数（2-1）：buildContext / deriveBranches / addNode / addLink（agent 聊天消费）
+    ctx.register("session.tree", "default", { buildContext, deriveBranches, addNode, addLink });
 
     // 面板：会话总览（右栏；搜索 / 标签筛选 / 列表 / 新建，点击打开 .ses）
     ctx.register("panel", "mist.session.overview", {

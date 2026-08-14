@@ -1,8 +1,46 @@
 /**
- * 聊天历史持久化与迁移纯函数（task 1-3）。
- * 存储：内核 storage 命名空间 "minex.agent"，key = `chatHistory@<instanceId>`（阶段 2 会话隔离预留）。
- * D11 定案：localStorage 落盘（刷新不丢）；chatMessagesToSession 为阶段 2 迁移预留。
+ * 聊天历史持久化与迁移纯函数（task 1-3 / 2-2）。
+ * - 草稿（1-3）：localStorage 落盘（D11：刷新不丢），key = `chatHistory@<instanceId>`。
+ * - 会话（2-2）：session = 唯一真相源（.ses 节点 append）；chatMessagesToSession / sessionToChatMessages 互为逆过程。
+ * 跨包约定：Session 形状用结构类型本地声明（跨包零源码 import，session-driver 的 SessionFsOps 同模式）；
+ * 运行时的树纯函数（buildContext/addNode/addLink）经 `session.tree` 能力桥接。
  */
+
+/** Session 形状结构类型（与 session-driver 的 Session 结构一致，跨包零源码 import） */
+export interface SessionLike {
+  meta: {
+    id: string;
+    type: string;
+    title: string;
+    tags: string[];
+    createdAt: string;
+    updatedAt: string;
+    currentBranchId?: string;
+    outlines?: unknown[];
+    settings?: unknown;
+  };
+  activeAgents: string[];
+  nodes: SessionNodeLike[];
+  links: SessionLinkLike[];
+}
+
+export interface SessionNodeLike {
+  id: string;
+  kind: string;
+  agentId?: string;
+  content?: string;
+  toolName?: string;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+  ts: string;
+}
+
+export interface SessionLinkLike {
+  from: string;
+  to: string;
+  type: string;
+}
 
 /** UI 消息结构（流式聊天视图消费） */
 export interface ChatMessageView {
@@ -14,7 +52,7 @@ export interface ChatMessageView {
   error?: boolean;
 }
 
-/** kernel 最小结构（chat-history 只用 storage） */
+/** kernel 最小结构（chat-history 只用 storage + registry 取 session 能力） */
 export interface ChatHistoryKernel {
   storage: {
     namespace(name: string): {
@@ -22,10 +60,25 @@ export interface ChatHistoryKernel {
       set<T = unknown>(key: string, value: T): void;
     };
   };
+  registry: {
+    get<T = unknown>(type: string, id: string): { value: T } | undefined;
+  };
+}
+
+/** session 能力最小结构（结构类型，跨包零源码 import） */
+export interface SessionStoreLike {
+  hasRoot(): boolean;
+  loadSession(id: string): Promise<SessionLike | undefined>;
+  saveSession(s: SessionLike): Promise<void>;
 }
 
 function chatKey(instanceId: number | undefined): string {
   return `chatHistory@${instanceId ?? 0}`;
+}
+
+/** 新节点/会话 id（时间戳 + 随机后缀）。 */
+export function newId(): string {
+  return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /** 读取聊天历史：JSON.parse，缺失/损坏返回 []（try/catch 不抛错）。 */
@@ -50,7 +103,7 @@ export function saveChatHistory(
 }
 
 /**
- * 阶段 2 迁移预留：ChatMessageView[] → Session 节点/链接结构。
+ * 阶段 2 迁移/持久化：ChatMessageView[] → Session 节点/链接结构。
  * user/assistant → { kind, content }；tool → { kind, toolName, input: args, output: content }；
  * 线性 responds 链接（i → i-1）。id 用自增 msg-<i>；ts 用当前时间。
  */
@@ -69,4 +122,57 @@ export function chatMessagesToSession(messages: ChatMessageView[]): { nodes: unk
     if (i > 0) links.push({ from: id, to: `msg-${i - 1}`, type: "responds" });
   }
   return { nodes, links };
+}
+
+/**
+ * chatMessagesToSession 的逆过程：Session 节点 → ChatMessageView[]（2-2 会话模式渲染历史）。
+ * user/assistant → { role, content }；tool → { role:"tool", content: output, toolName, args: input }；
+ * agent-msg / event 等未知节点类型不渲染为聊天消息。
+ */
+export function sessionToChatMessages(session: SessionLike): ChatMessageView[] {
+  const out: ChatMessageView[] = [];
+  for (const n of session.nodes) {
+    if (n.kind === "user" || n.kind === "assistant") {
+      out.push({ role: n.kind, content: n.content ?? "" });
+    } else if (n.kind === "tool") {
+      out.push({
+        role: "tool",
+        content: n.output !== undefined ? String(n.output) : "",
+        toolName: n.toolName,
+        args: n.input,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * 草稿 → 会话（2-2）：chatMessagesToSession 产物包装成 Session（type "chat"、activeAgents ["minex.agent"]）
+ * → session 能力 saveSession（.value 纪律）→ 调用方清空草稿（chatHistory）。
+ * 无 session 能力 / 无 filesystem 根目录 → 抛错（UI 提示，不崩）。
+ */
+export async function saveAsSession(
+  kernel: ChatHistoryKernel,
+  messages: ChatMessageView[],
+  title?: string,
+): Promise<void> {
+  const store = kernel.registry.get<SessionStoreLike>("session", "default")?.value;
+  if (!store) throw new Error("未找到 session 能力");
+  if (!store.hasRoot()) throw new Error("请先选择文件夹以启用会话保存");
+  const { nodes, links } = chatMessagesToSession(messages);
+  const now = new Date().toISOString();
+  const session: SessionLike = {
+    meta: {
+      id: newId(),
+      type: "chat",
+      title: title ?? "新会话",
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    },
+    activeAgents: ["minex.agent"],
+    nodes: nodes as SessionNodeLike[],
+    links: links as SessionLinkLike[],
+  };
+  await store.saveSession(session);
 }

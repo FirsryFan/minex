@@ -7,6 +7,7 @@ import { ThemeManager } from "./components/ThemeManager.js";
 import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
 import { queryPanels, type PanelContribution, type PanelDock } from "./panels.js";
+import { setPendingOpenSessionId } from "../../agent-driver/src/session-open.js";
 
 const ACTIVE_DRIVER_KEY = "minex.activeDriver";
 const THEME_KEY = "minex.theme";
@@ -84,6 +85,22 @@ export function App({ problems }: { problems: string[] }) {
       updateInstance(targetId, { activeDriverId: "minex.markdown" });
       try {
         localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.markdown");
+      } catch {
+        /* localStorage 不可用 */
+      }
+    });
+  }, [kernel, activeInstanceId]);
+
+  // 会话总览「对话」点击 → 暂存会话 id（ChatView 挂载竞态桥接）+ 切到 Agent 驱动（2-2）
+  useEffect(() => {
+    return kernel.events.on("minex:openSession", (payload) => {
+      const p = payload as { id?: string; targetInstanceId?: number } | undefined;
+      if (!p?.id) return;
+      setPendingOpenSessionId(p.id);
+      const targetId = p.targetInstanceId ?? activeInstanceId;
+      updateInstance(targetId, { activeDriverId: "minex.agent" });
+      try {
+        localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.agent");
       } catch {
         /* localStorage 不可用 */
       }

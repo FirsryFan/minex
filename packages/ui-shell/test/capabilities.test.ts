@@ -131,8 +131,9 @@ describe("collectCapabilities", () => {
     expect(session.contributions.map((c) => c.type)).toContain("session");
     expect(session.contributions.map((c) => c.type)).toContain("session.md");
     expect(session.contributions.map((c) => c.type)).toContain("panel");
-    expect(session.contributions.map((c) => c.type).sort()).toEqual(["panel", "session", "session.md"]);
-    expect(session.contributions.map((c) => c.id).sort()).toEqual(["default", "default", "mist.session.overview"]);
+    expect(session.contributions.map((c) => c.type)).toContain("session.tree"); // 2-2 会话树能力
+    expect(session.contributions.map((c) => c.type).sort()).toEqual(["panel", "session", "session.md", "session.tree"]);
+    expect(session.contributions.map((c) => c.id).sort()).toEqual(["default", "default", "default", "mist.session.overview"]);
   });
 
   it("多驱动多 type 正常聚合（含目录外新 type：注册表驱动，无需目录）", () => {

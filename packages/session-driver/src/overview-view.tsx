@@ -42,11 +42,17 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     const s = createSession({ title: "新会话" });
     await store.saveSession(s);
     await refresh();
-    openSession(s.meta.type, s.meta.id);
+    openChat(s.meta.type, s.meta.id);
   }
 
-  function openSession(type: string, id: string): void {
-    // 用 store.sessionPath 复用路径约定（审查 phase28 m2）；openFile 定向本实例（phase30 第3步）
+  /** 对话模式（2-2 核心语义）：emit minex:openSession → 顶栏切 Agent + ChatView 会话模式打开 */
+  function openChat(type: string, id: string): void {
+    void type; // 打开按 id 加载，type 仅用于路径约定（markdown 入口用）
+    kernel.events.emit("minex:openSession", { id, targetInstanceId: instanceId });
+  }
+
+  /** Markdown 打开入口（保留原行为）：openFile 定向本实例 */
+  function openMarkdown(type: string, id: string): void {
     const path = store?.sessionPath(type, id);
     if (path) kernel.events.emit("filesystem:openFile", { path, targetInstanceId: instanceId });
   }
@@ -78,11 +84,21 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
           <div
             key={e.id}
             className="session-item"
-            onClick={() => openSession(e.type, e.id)}
-            title={`${e.type} · ${e.nodeCount} 节点 · ${e.updatedAt}`}
+            onClick={() => openChat(e.type, e.id)}
+            title={`对话：${e.type} · ${e.nodeCount} 节点 · ${e.updatedAt}`}
           >
             <div className="session-item-title">{e.title}</div>
             <div className="session-item-meta muted">{e.tags.length ? e.tags.join(" · ") : e.type} · {e.nodeCount} 节点</div>
+            <button
+              className="session-item-md"
+              title="Markdown 打开（主链编辑）"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                openMarkdown(e.type, e.id);
+              }}
+            >
+              MD
+            </button>
           </div>
         ))}
       </div>
