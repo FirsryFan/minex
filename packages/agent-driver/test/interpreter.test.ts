@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createBuiltinRegistry, createRegistry, type OperationRegistry } from "../src/operations.js";
+import type { DriverContext } from "@minex/kernel";
+import driver from "../src/index.js";
 import { executeWorkflow } from "../src/interpreter.js";
+import { createBuiltinRegistry, createRegistry, type OperationRegistry } from "../src/operations.js";
 import { echoTool } from "../src/tool.js";
 import type { Workflow } from "../src/workflow.js";
 
@@ -88,6 +90,22 @@ describe("executeWorkflow", () => {
     expect(calls).toBe(0); // when 不满足 → 前置 while 0 次
   });
 
+  it("loop + when 自引用：正常循环 N 次后停（when 变假即停）", async () => {
+    const r = createRegistry();
+    let calls = 0;
+    r.register("tick", async () => {
+      calls++;
+      return calls; // 第 n 次执行返回 n（迭代间唯一可变信号 = loop 自身结果，自引用）
+    });
+    // ne（不等）自引用：首轮 Number(undefined)=NaN 若用 gt/lt 恒假，故用 ne
+    const wf: Workflow = {
+      nodes: [{ id: "loop", op: "tick", loop: true, when: { field: "loop", op: "ne", value: 3 } }],
+    };
+    const results = await executeWorkflow(wf, undefined, { maxLoopIterations: 10, registry: r });
+    expect(calls).toBe(3); // 首轮 undefined≠3 → 执行；第 4 轮 3≠3 → 停，共 3 次
+    expect(results.get("loop")).toBe(3); // 停在最后一次执行结果
+  });
+
   it("双层上限：传 1e9 在 absoluteMax 处停止", async () => {
     const r = createRegistry();
     let calls = 0;
@@ -141,5 +159,59 @@ describe("executeWorkflow", () => {
     const wf: Workflow = { nodes: [{ id: "a", op: "callTool", args: { name: "echo", args: { text: "hi" } } }] };
     const results = await executeWorkflow(wf, ctx, { maxLoopIterations: 5, registry });
     expect(results.get("a")).toBe("hi");
+  });
+});
+
+describe("workflow 接线（index.ts 注册层：activate + workflow.run）", () => {
+  interface WorkflowCap {
+    run(wf: Workflow, opts?: { maxLoopIterations?: number }): Promise<Map<string, unknown>>;
+  }
+
+  /** 最小 DriverContext 桩：register 记录、query 只回 tool 能力、其余空实现。 */
+  function makeDriverStub(): DriverContext {
+    const registered = new Map<string, unknown>();
+    return {
+      manifest: { id: "minex.agent", name: "agent", version: "0.1.0" },
+      register: (type, id, value) => {
+        registered.set(`${type}/${id}`, value);
+      },
+      unregister: () => {},
+      query: <T>(type: string): T[] => (type === "tool" ? ([echoTool] as unknown as T[]) : []),
+      get: <T>(type: string, id: string): T | undefined => registered.get(`${type}/${id}`) as T | undefined,
+      on: () => () => {},
+      emit: () => {},
+      storage: {
+        get: () => undefined,
+        set: () => {},
+        delete: () => {},
+        list: () => [],
+      },
+      log: { info: () => {}, warn: () => {}, error: () => {} },
+    };
+  }
+
+  it("activate 注册 → 经 workflow.run 执行含 echo 工具的 workflow，结果 Map 键全", async () => {
+    const ctx = makeDriverStub();
+    await driver.activate(ctx);
+    const workflow = ctx.get<WorkflowCap>("workflow", "default")!;
+    const wf: Workflow = {
+      nodes: [
+        { id: "a", op: "callTool", args: { name: "echo", args: { text: "hi" } } },
+        { id: "b", op: "callTool", args: { name: "echo", args: { text: "yo" } } },
+      ],
+    };
+    const results = await workflow.run(wf);
+    expect(results.get("a")).toBe("hi");
+    expect(results.get("b")).toBe("yo");
+    expect([...results.keys()].sort()).toEqual(["a", "b"]); // 结果 Map 键全
+  });
+
+  it("eval workflow 经 workflow.run 被拒（安全命题不回退）", async () => {
+    const ctx = makeDriverStub();
+    await driver.activate(ctx);
+    const workflow = ctx.get<WorkflowCap>("workflow", "default")!;
+    const wf: Workflow = { nodes: [{ id: "a", op: "eval", args: { code: "x" } }] };
+    // run 内 validateWorkflow 同步抛错（注册层白名单无 eval）→ 用 toThrow 断言
+    expect(() => workflow.run(wf)).toThrow(/未注册操作：eval/);
   });
 });

@@ -117,14 +117,24 @@ describe("runAgent 工具并行执行", () => {
   it("多个无依赖 tool_calls 并行（并发计数）+ 结果按声明顺序回灌", async () => {
     let active = 0;
     let maxActive = 0;
-    async function* stream(): AsyncIterable<LLMChunk> {
-      // 一轮产出 2 个无依赖 tool_calls
-      yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c1", name: "slow", arguments: "{}" } };
-      yield { delta: "", done: false, toolCallDelta: { index: 1, id: "c2", name: "slow", arguments: "{}" } };
+    let calls = 0;
+    let secondRoundMessages: ChatMessage[] = [];
+    async function* stream(req: { messages: ChatMessage[] }): AsyncIterable<LLMChunk> {
+      calls++;
+      if (calls === 1) {
+        // 一轮产出 2 个无依赖 tool_calls（c1 声明在前、c2 在后）
+        yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c1", name: "slow-1", arguments: "{}" } };
+        yield { delta: "", done: false, toolCallDelta: { index: 1, id: "c2", name: "slow-2", arguments: "{}" } };
+      } else {
+        // 第二轮：捕获回灌后的 messages，产出最终答案（无 tool_call）
+        secondRoundMessages = req.messages;
+        yield { delta: "结束", done: false };
+      }
       yield { delta: "", done: true, usage: { promptTokens: 10, completionTokens: 2, cachedTokens: 0 } };
     }
-    const slow = {
-      name: "slow",
+    // 两个可区分工具：slow-1 返回 "r1"、slow-2 返回 "r2"（同耗时制造并行窗口）
+    const mkSlow = (name: string, result: string) => ({
+      name,
       description: "d",
       parameters: {},
       execute: async () => {
@@ -132,12 +142,20 @@ describe("runAgent 工具并行执行", () => {
         maxActive = Math.max(maxActive, active);
         await new Promise((r) => setTimeout(r, 20));
         active--;
-        return "done";
+        return result;
       },
-    };
-    const events = runAgent(makeDeps(stream, [slow]), { systemPrompt: "s", history: [], maxIterations: 1 });
+    });
+    const events = runAgent(makeDeps(stream, [mkSlow("slow-1", "r1"), mkSlow("slow-2", "r2")]), {
+      systemPrompt: "s",
+      history: [],
+      maxIterations: 2,
+    });
     await collect(events);
-    expect(maxActive).toBeGreaterThanOrEqual(2); // 并行执行
+    expect(maxActive).toBeGreaterThanOrEqual(2); // 并行执行（非串行）
+    // 结果按 toolCalls 声明序回灌：c1 的 r1 在前、c2 的 r2 在后（若被改成按完成序回灌，此断言必红）
+    const toolMsgs = secondRoundMessages.filter((m) => m.role === "tool");
+    expect(toolMsgs.map((m) => m.content)).toEqual(["r1", "r2"]);
+    expect(toolMsgs.map((m) => m.tool_call_id)).toEqual(["c1", "c2"]);
   });
 });
 
