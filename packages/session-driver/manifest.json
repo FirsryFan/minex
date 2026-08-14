@@ -5,6 +5,7 @@
   "minKernelVersion": "0.2.3",
   "entry": "./dist/index.js",
   "reloadable": true,
+  "hasWorkspace": true,
   "source": "本地",
   "description": "Mist 会话驱动：会话图数据（.ses 文件）+ 标签总览索引",
   "tags": ["会话"],

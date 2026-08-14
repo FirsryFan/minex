@@ -64,10 +64,14 @@ function makeInstance(
   };
 }
 
-/** 左栏面板可见性（F-A 反馈 5）：会话域面板（mist.session）仅在 agent 驱动下显示——「会话只在 agent 驱动下存在」；
- *  其余面板仅其所属驱动激活时显示；右栏/浮窗已拆放面板不受影响（P2 不回归）。 */
+/** 左栏面板可见性（F-H 定案）：文件系统常驻（任何驱动）；会话域面板（会话总览 + 图谱=会话树视图）
+ *  仅 session 驱动显示；agent 域面板仅 agent 驱动显示；其余按驱动匹配。右栏/浮窗已拆放面板不受影响（P2 不回归）。 */
 function leftPanelVisible(p: PanelContribution, activeDriverId: string | null): boolean {
-  if (p.driverId === "mist.session") return activeDriverId === "minex.agent"; // 会话总览/图谱同域
+  if (p.id === "minex.filesystem.sidebar") return true; // 文件系统常驻
+  if (p.driverId === "mist.session" || p.id === "minex.graph.view") {
+    return activeDriverId === "mist.session"; // 会话筛选仅会话驱动（图谱 = 会话树视图）
+  }
+  if (p.driverId === "minex.agent") return activeDriverId === "minex.agent"; // agent 相关仅 agent 驱动
   return p.driverId === activeDriverId;
 }
 
@@ -126,17 +130,17 @@ export function App({ problems }: { problems: string[] }) {
     });
   }, [kernel, activeInstanceId]);
 
-  // 会话总览「对话」点击 → 暂存会话 id（ChatView 挂载竞态桥接）+ 切到 Agent 驱动（2-2）
-  // F-G：写 openSessionId——agent 驱动主区 = 聊天会话模式（否则配置中心）
+  // 会话总览/图谱「打开会话」→ 暂存会话 id（ChatView 挂载竞态桥接）+ 切到会话驱动（2-2；F-H：mist.session）
+  // F-G：写 openSessionId——主区 = 聊天会话模式（驱动无关）
   useEffect(() => {
     return kernel.events.on("minex:openSession", (payload) => {
       const p = payload as { id?: string; targetInstanceId?: number } | undefined;
       if (!p?.id) return;
       setPendingOpenSessionId(p.id);
       const targetId = p.targetInstanceId ?? activeInstanceId;
-      updateInstance(targetId, { activeDriverId: "minex.agent", openSessionId: p.id });
+      updateInstance(targetId, { activeDriverId: "mist.session", openSessionId: p.id });
       try {
-        localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.agent");
+        localStorage.setItem(ACTIVE_DRIVER_KEY, "mist.session");
       } catch {
         /* localStorage 不可用 */
       }
@@ -182,11 +186,11 @@ export function App({ problems }: { problems: string[] }) {
         ...prev,
         makeInstance(nextId, `工作区 ${prev.length + 1}`, { sessionId: p.sessionId!, branchId: p.branchId }),
       ]);
-      updateInstance(nextId, { activeDriverId: "minex.agent", openSessionId: p.sessionId }); // F-G：新实例主区直接该会话聊天
+      updateInstance(nextId, { activeDriverId: "mist.session", openSessionId: p.sessionId }); // F-H：展开 = 会话驱动 + 主区聊天
       setActiveInstanceId(nextId);
       setChildChat(null); // 原浮窗关闭（内容已在新工作区）
       try {
-        localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.agent");
+        localStorage.setItem(ACTIVE_DRIVER_KEY, "mist.session");
       } catch {
         /* localStorage 不可用 */
       }
@@ -405,18 +409,23 @@ function WorkspaceInstance({
 
   // 面板运行时停靠状态（defaultDock 回退；"hidden" 不渲染）
   const dockOf = (p: PanelContribution): DockState => instance.dockState[p.id] ?? p.defaultDock;
-  // F-A 反馈 5：左栏按 activeDriverId 过滤（会话域面板仅 agent 驱动显示；右栏/浮窗已拆放面板不受影响）
+  // F-H：左栏按归属驱动过滤（文件常驻 / 会话面板仅会话驱动 / agent 面板仅 agent 驱动）
   const leftPanels = panels.filter((p) => dockOf(p) === "left" && leftPanelVisible(p, instance.activeDriverId));
   const rightPanels = panels.filter((p) => dockOf(p) === "right");
-  // F-G 概念修正：agent 驱动主区 = 配置中心（默认）；打开会话（openSessionId）→ 主区 = 聊天（会话模式）
+  // F-G/F-H 主区选择：打开会话（openSessionId）→ 主区 = 聊天（会话模式，驱动无关）；
+  // agent 驱动 → 配置中心（默认）；其余驱动 → 该驱动主面板
   const mains = panels.filter((p) => dockOf(p) === "main" && p.driverId === instance.activeDriverId);
   const mainPanel = (() => {
+    if (instance.openSessionId) {
+      return panels.find((p) => p.id === "minex.agent.chat" && dockOf(p) === "main") ?? mains[0];
+    }
     if (instance.activeDriverId === "minex.agent") {
-      if (instance.openSessionId) return mains.find((p) => p.id === "minex.agent.chat") ?? mains[0];
-      return mains.find((p) => p.id !== "minex.agent.chat") ?? mains[0];
+      return mains.find((p) => p.id !== "minex.agent.chat") ?? mains[0]; // 配置中心
     }
     return mains[0];
   })();
+  // F-H：会话驱动无打开会话 → 主区空态提示
+  const sessionEmpty = !mainPanel && instance.activeDriverId === "mist.session";
   const floatingAll = panels.filter((p) => dockOf(p) === "floating");
   const leftPanel = leftPanels.find((p) => p.id === instance.activeLeftPanelId) ?? leftPanels[0];
 
@@ -548,7 +557,14 @@ function WorkspaceInstance({
 
       {/* 主区 */}
       <div className="main">
-        {mainPanel ? renderPanel(mainPanel, "加载工作区…") : <div className="main-empty" />}
+        {mainPanel ? (
+          renderPanel(mainPanel, "加载工作区…")
+        ) : (
+          // F-H：会话驱动无打开会话 → 空态提示（在左侧会话列表或图谱选择会话打开）
+          <div className="main-empty">
+            {sessionEmpty ? <span className="muted">在左侧会话列表或图谱选择会话打开</span> : null}
+          </div>
+        )}
       </div>
 
       {!instance.collapsed.right && (
