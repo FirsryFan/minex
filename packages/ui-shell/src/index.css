@@ -1984,19 +1984,29 @@ button {
   color: var(--color-text-muted);
   font-size: 11px;
 }
-/* 3-5 通用图谱画布：source 切换器（下拉全部 graphSource 贡献） */
-.graph-source-switch {
+/* 3-5 通用图谱画布：F-B 连通块 tab（一个会话系 = 一个连通块；单块不显示） */
+.graph-block-tabs {
+  display: flex;
+  gap: 4px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--color-border);
 }
-.graph-source-switch select {
-  width: 100%;
-  padding: 4px 6px;
+.graph-block-tab {
+  padding: 3px 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-card);
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-size: 12px;
+  cursor: pointer;
+}
+.graph-block-tab:hover {
+  border-color: var(--color-primary);
+}
+.graph-block-tab.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 /* 3-5 §一：选中节点 = accent ring（主题无 --color-accent，用 primary） */
 .graph-node.selected {

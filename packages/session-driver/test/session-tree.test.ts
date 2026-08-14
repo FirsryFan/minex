@@ -6,6 +6,7 @@ import {
   checkout,
   deleteBranch,
   deriveBranches,
+  insertNodesAfter,
   layoutSessionGraph,
   listOutlines,
   redoToolResult,
@@ -500,5 +501,27 @@ describe("revertAt / redoToolResult（3-4 tool_call 级撤回/重做）", () => 
     expect(s2.links).toContainEqual({ from: "t1", to: "a1", type: "responds" });
     expect(s2.nodes.find((n) => n.id === "t1")?.output).toBe("新结果");
     expect(s.nodes).toHaveLength(2); // 原对象不变
+  });
+});
+
+describe("insertNodesAfter（F-B 反馈 1 批量插回）", () => {
+  it("多节点保序：nodes 按序 addNode，首个 responds 到 afterNodeId，链式相连", () => {
+    const s = chain(["u1", "a1"]);
+    const nodes = [
+      { id: "x1", kind: "assistant" as const, content: "旧分析一", ts: "2026-01-02T00:00:00.000Z" },
+      { id: "x2", kind: "assistant" as const, content: "旧分析二", ts: "2026-01-02T00:00:00.000Z" },
+      { id: "x3", kind: "assistant" as const, content: "旧分析三", ts: "2026-01-02T00:00:00.000Z" },
+    ];
+    const s2 = insertNodesAfter(s, nodes, "a1");
+    expect(s2.nodes.map((n) => n.id)).toEqual(["u1", "a1", "x1", "x2", "x3"]); // 按序插回
+    expect(s2.links).toContainEqual({ from: "x1", to: "a1", type: "responds" });
+    expect(s2.links).toContainEqual({ from: "x2", to: "x1", type: "responds" });
+    expect(s2.links).toContainEqual({ from: "x3", to: "x2", type: "responds" });
+    expect(s.nodes).toHaveLength(2); // 原对象不变
+  });
+
+  it("空 nodes → 原样返回（同一引用）", () => {
+    const s = chain(["a", "b"]);
+    expect(insertNodesAfter(s, [], "b")).toBe(s);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { encodeNodeRadius, MAX_RADIUS } from "../src/graph-encode.js";
-import { layoutGraph, translateGraph, type GraphData } from "../src/index.js";
+import { layoutGraph, splitGraph, translateGraph, type GraphData } from "../src/index.js";
 
 describe("encodeNodeRadius（3-5 大小编码）", () => {
   it("n=0 → 12（最小）", () => {
@@ -92,5 +92,73 @@ describe("translateGraph（3-5 默认转译器）", () => {
     const out = translateGraph({ nodes: [], edges: [] });
     expect(out).toContain("（无节点）");
     expect(out).toContain("（无边）");
+  });
+});
+
+describe("splitGraph（F-B 反馈 3 连通块）", () => {
+  it("单块树（全部连通）→ 1 块含全部节点与边", () => {
+    const data: GraphData = {
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C" },
+      ],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "b", to: "c" },
+      ],
+    };
+    const blocks = splitGraph(data);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].nodes.map((n) => n.id).sort()).toEqual(["a", "b", "c"]);
+    expect(blocks[0].edges).toHaveLength(2);
+  });
+
+  it("两个独立根各带子树 → 2 块（父子关系内部保留）", () => {
+    const data: GraphData = {
+      nodes: [
+        { id: "r1", label: "根1" },
+        { id: "c1", label: "子1" },
+        { id: "r2", label: "根2" },
+        { id: "c2", label: "子2" },
+      ],
+      edges: [
+        { from: "r1", to: "c1" },
+        { from: "r2", to: "c2" },
+      ],
+    };
+    const blocks = splitGraph(data);
+    expect(blocks).toHaveLength(2);
+    const ids = blocks.map((b) => b.nodes.map((n) => n.id).sort().join(",")).sort();
+    expect(ids).toEqual(["c1,r1", "c2,r2"]);
+    expect(blocks.every((b) => b.edges.length === 1)).toBe(true);
+  });
+
+  it("孤立节点 + 大树 → 2 块（孤立 = 单节点块）", () => {
+    const data: GraphData = {
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "iso", label: "孤立" },
+      ],
+      edges: [{ from: "a", to: "b" }],
+    };
+    const blocks = splitGraph(data);
+    expect(blocks).toHaveLength(2);
+    const sizes = blocks.map((b) => b.nodes.length).sort((x, y) => x - y);
+    expect(sizes).toEqual([1, 2]);
+    const iso = blocks.find((b) => b.nodes.length === 1)!;
+    expect(iso.nodes[0].id).toBe("iso");
+    expect(iso.edges).toEqual([]);
+  });
+
+  it("空图 → []；边引用未知节点被忽略不崩", () => {
+    expect(splitGraph({ nodes: [], edges: [] })).toEqual([]);
+    const blocks = splitGraph({
+      nodes: [{ id: "a", label: "A" }],
+      edges: [{ from: "a", to: "ghost" }],
+    });
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].edges).toEqual([]); // 未知节点边忽略
   });
 });

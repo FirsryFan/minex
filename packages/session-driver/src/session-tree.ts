@@ -227,12 +227,26 @@ export function revertAt(session: Session, nodeId: string): { session: Session; 
 }
 
 /**
+ * 批量插回节点（F-B 反馈 1）：nodes 按序 addNode，逐个 responds 到前一个（首个 responds 到 afterNodeId），
+ * 成为新链尾。空 nodes → 原样返回（同一引用）。不可变，刷新 updatedAt。redoToolResult 复用本实现。
+ */
+export function insertNodesAfter(session: Session, nodes: SessionNode[], afterNodeId: string): Session {
+  let s = session;
+  let prev = afterNodeId;
+  for (const n of nodes) {
+    s = addNode(s, n);
+    s = addLink(s, { from: n.id, to: prev, type: "responds" });
+    prev = n.id;
+  }
+  return s;
+}
+
+/**
  * 重做（3-4）：把工具重执行结果插回——插入 toolNode（responds 指向 afterNodeId，即撤前的链上前驱），
  * 成为新链尾；不重新生成后续 thinking（用户可继续指令）。不可变，刷新 updatedAt。
  */
 export function redoToolResult(session: Session, toolNode: SessionNode, afterNodeId: string): Session {
-  const s1 = addNode(session, toolNode);
-  return addLink(s1, { from: toolNode.id, to: afterNodeId, type: "responds" });
+  return insertNodesAfter(session, [toolNode], afterNodeId);
 }
 
 /** 会话系图谱（P3 拍板：推导不存文件，权威数据 = 各会话 meta.parentSessionId） */

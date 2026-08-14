@@ -99,6 +99,45 @@ export function translateGraph(data: GraphData): string {
   return lines.join("\n");
 }
 
+/**
+ * 连通块切分（F-B 反馈 3）：按 edges 无向连通分量（并查集），返回子图数组——
+ * 一个会话系 = 一个连通块；孤立节点 = 单节点块。边引用未知节点时忽略该边（防脏数据）。
+ * 纯函数可测（单块 / 多块 / 孤立节点 / 空图）。
+ */
+export function splitGraph(data: GraphData): GraphData[] {
+  const parent = new Map<string, string>();
+  for (const n of data.nodes) parent.set(n.id, n.id);
+  const find = (x: string): string => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    return r;
+  };
+  const union = (a: string, b: string): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  for (const e of data.edges) {
+    if (parent.has(e.from) && parent.has(e.to)) union(e.from, e.to);
+  }
+  const byRoot = new Map<string, GraphData>();
+  for (const n of data.nodes) {
+    const r = find(n.id);
+    let g = byRoot.get(r);
+    if (!g) {
+      g = { nodes: [], edges: [] };
+      byRoot.set(r, g);
+    }
+    g.nodes.push(n);
+  }
+  for (const e of data.edges) {
+    if (!parent.has(e.from) || !parent.has(e.to)) continue;
+    const g = byRoot.get(find(e.from));
+    if (g) g.edges.push(e);
+  }
+  return [...byRoot.values()];
+}
+
 export default {
   async activate(ctx: DriverContext) {
     // graph 能力：布局 + 转译（消费方 = 通用画布面板 / agent graph_query 工具）

@@ -1,6 +1,6 @@
 import type { DriverContext } from "@minex/kernel";
 import { addLink, addNode, createSession, rebuildFromMarkdown, toMarkdown, validateSession, type Session } from "./session.js";
-import { addOutlineEntry, buildContext, buildSessionGraph, deriveBranches, redoToolResult, revertAt } from "./session-tree.js";
+import { addOutlineEntry, buildContext, buildSessionGraph, deriveBranches, insertNodesAfter, redoToolResult, revertAt } from "./session-tree.js";
 import { createSessionStore, type SessionFsOps, type SessionStore } from "./store.js";
 
 /**
@@ -47,6 +47,7 @@ export default {
       addOutlineEntry,
       revertAt, // 3-4：tool_call 级撤回
       redoToolResult, // 3-4：工具重执行结果插回
+      insertNodesAfter, // F-B 反馈 1：批量插回（旧 thinking 恢复）
     });
 
     // 面板：会话总览（左栏；搜索 / 标签筛选 / 列表 / 新建，点击打开 .ses 对话模式）——P2：总览归左栏

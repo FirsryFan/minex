@@ -88,6 +88,8 @@ interface SessionTreeCap {
   revertAt(s: SessionLike, nodeId: string): { session: SessionLike; removed: SessionNodeLike[] };
   /** 3-4：工具重执行结果插回 */
   redoToolResult(s: SessionLike, node: SessionNodeLike, afterNodeId: string): SessionLike;
+  /** F-B 反馈 1：批量插回节点（旧 thinking 恢复） */
+  insertNodesAfter(s: SessionLike, nodes: SessionNodeLike[], afterNodeId: string): SessionLike;
 }
 
 /** persona 形状（role 贡献值，跨包零源码 import，结构类型） */
@@ -195,9 +197,17 @@ export default function ChatView({
   // 3-4：真停止（AbortController）+ 插入指令（挂起队列）+ tool_call 级撤回/重做
   const abortRef = useRef<AbortController | null>(null);
   const pendingRef = useRef<Array<{ role: string; content: string }>>([]);
+  // F-B 反馈 1：read 类工具结果缓存（key = name:JSON.stringify(args)，命中 redo 直接复用不重执行；会话内存态，刷新即失）
+  const toolCacheRef = useRef<Map<string, string>>(new Map());
   const [redoState, setRedoState] = useState<{
     toolNode: SessionNodeLike;
     afterNodeId: string;
+    staleNodes: SessionNodeLike[]; // F-B：被撤的后续非 tool 节点（旧 thinking，0 token 可恢复）
+  } | null>(null);
+  // F-B：重做完成后「恢复旧分析」条（staleNodes 非空才显示按钮）
+  const [restoreState, setRestoreState] = useState<{
+    staleNodes: SessionNodeLike[];
+    afterToolId: string;
   } | null>(null);
   // F-A 反馈 2：双击消息行 → 卡片显示全文
   const [detailMsg, setDetailMsg] = useState<ChatMessageView | null>(null);
@@ -692,8 +702,8 @@ export default function ChatView({
     await store.saveSession(s2).catch(() => {});
   }
 
-  // —— 3-4 tool_call 级撤回/重做（基元化，不整轮重跑） ——
-  /** 撤回：删该 tool 节点及其 responds 后继（含其后 thinking）；被撤 tool + 链上前驱存 redoState 供重做 */
+  // —— 3-4/F-B tool_call 级撤回/重做（基元化，不整轮重跑） ——
+  /** 撤回：删该 tool 节点及其 responds 后继（含其后 thinking）；被撤 tool + 链上前驱 + 旧 thinking 存 redoState */
   async function revertTo(nodeId: string | undefined): Promise<void> {
     if (!nodeId || !session || !tree || !store) return;
     const orig = session;
@@ -703,13 +713,22 @@ export default function ChatView({
     const afterNodeId = toolNode
       ? orig.links.find((l) => l.type === "responds" && l.from === toolNode.id)?.to
       : undefined;
-    setRedoState(toolNode && afterNodeId ? { toolNode, afterNodeId } : null);
+    setRestoreState(null);
+    setRedoState(
+      toolNode && afterNodeId
+        ? {
+            toolNode,
+            afterNodeId,
+            staleNodes: removed.filter((n) => n.id !== nodeId && n.kind !== "tool"), // F-B：旧 thinking
+          }
+        : null,
+    );
     setSession(s2);
     setMessages(sessionToChatMessages(s2));
     await store.saveSession(s2).catch(() => {});
   }
 
-  /** 重做：仅重跑该工具（走 3-2 权限裁决 + registry 工具能力重执行）→ redoToolResult 插回（不重新生成后续 thinking） */
+  /** 重做：read 类工具命中缓存直接复用（不重执行）；write/run 必重跑。结果插回（不重新生成后续 thinking） */
   async function redoTool(): Promise<void> {
     if (!redoState || !session || !tree || !store) return;
     const toolName = redoState.toolNode.toolName ?? "";
@@ -720,15 +739,35 @@ export default function ChatView({
     if (!tool) return;
     const canRun = buildCanRun();
     if (canRun && !(await canRun({ name: toolName, risk: tool.risk ?? "read" }))) return; // 拒绝 → 不重做
-    let output = "";
-    try {
-      output = await tool.execute((redoState.toolNode.input ?? {}) as Record<string, unknown>);
-    } catch (err) {
-      output = `Error: ${err instanceof Error ? err.message : String(err)}`;
+    const args = (redoState.toolNode.input ?? {}) as Record<string, unknown>;
+    const cacheKey = `${toolName}:${JSON.stringify(args)}`;
+    let output: string;
+    if (tool.risk === "read" && toolCacheRef.current.has(cacheKey)) {
+      output = toolCacheRef.current.get(cacheKey)!; // F-B：缓存命中，不重执行
+    } else {
+      try {
+        output = await tool.execute(args);
+      } catch (err) {
+        output = `Error: ${err instanceof Error ? err.message : String(err)}`;
+      }
+      if (tool.risk === "read") toolCacheRef.current.set(cacheKey, output); // read 类写缓存（write/run 不缓存）
     }
     const updated: SessionNodeLike = { ...redoState.toolNode, output, error: undefined };
     const s2 = tree.redoToolResult(session, updated, redoState.afterNodeId);
+    // F-B：重做完成 → 显示「恢复旧分析」条（0 token 复用旧 thinking）
+    setRestoreState({ staleNodes: redoState.staleNodes, afterToolId: updated.id });
     setRedoState(null);
+    setSession(s2);
+    setMessages(sessionToChatMessages(s2));
+    await store.saveSession(s2).catch(() => {});
+  }
+
+  /** F-B：恢复旧分析（0 token）——把被撤的后续 thinking 批量插回新工具结果之后（用户自行判断相关性） */
+  async function restoreStale(): Promise<void> {
+    if (!restoreState || !session || !tree || !store) return;
+    if (restoreState.staleNodes.length === 0) return;
+    const s2 = tree.insertNodesAfter(session, restoreState.staleNodes, restoreState.afterToolId);
+    setRestoreState(null);
     setSession(s2);
     setMessages(sessionToChatMessages(s2));
     await store.saveSession(s2).catch(() => {});
@@ -936,7 +975,7 @@ export default function ChatView({
         </div>
       )}
 
-      {/* 3-4：被撤区重做条（v1 redo 栈内存态，刷新即失）——仅重跑该工具，不重新生成后续 thinking */}
+      {/* 3-4/F-B：被撤区重做条（v1 redo 栈内存态，刷新即失）——仅重跑该工具，不重新生成后续 thinking */}
       {redoState && (
         <div className="chat-redo-bar">
           <span className="muted">
@@ -945,6 +984,17 @@ export default function ChatView({
           <button className="btn-ghost" onClick={() => void redoTool()}>
             重做（仅重跑该工具）
           </button>
+        </div>
+      )}
+      {/* F-B：重做完成 → 恢复旧分析（0 token 复用旧 thinking，用户自行判断） */}
+      {restoreState && (
+        <div className="chat-redo-bar">
+          <span className="muted">重做完成（仅重跑该工具，未重新生成后续）</span>
+          {restoreState.staleNodes.length > 0 && (
+            <button className="btn-ghost" onClick={() => void restoreStale()}>
+              恢复旧分析（0 token）
+            </button>
+          )}
         </div>
       )}
 
