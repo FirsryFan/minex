@@ -36,6 +36,8 @@ export interface CapabilityRegistry {
   unregisterByDriver(driverId: string, origin?: ContributionOrigin): void;
   /** 查询某类型的能力列表（有效值 = runtime ?? static），按 priority 降序；可用 { driver } 过滤 */
   query<T = unknown>(type: string, filter?: QueryFilter): Contribution<string, T>[];
+  /** 枚举全部有效贡献（effective = runtime ?? static，等价于各 type query 结果的并集）。只读新增，零语义变化 */
+  queryAll(): Contribution[];
   /** 精确取一个能力的有效值 */
   get<T = unknown>(type: string, id: string): Contribution<string, T> | undefined;
   /** 订阅某类型的注册/注销事件，返回取消订阅函数 */
@@ -140,6 +142,19 @@ export function createRegistry(): CapabilityRegistry {
       }
       if (filter?.driver) items = items.filter((c) => c.driverId === filter.driver);
       return items.sort((x, y) => y.priority - x.priority) as unknown as Contribution<string, T>[];
+    },
+    queryAll(): Contribution[] {
+      // 遍历 store 取 effective 非空项：与 query 同一 effective 语义（runtime ?? static）。
+      // 空注册表 → []；static-only 项 effective=static 出现一次（origin=static）；
+      // runtime 遮蔽后只出现一次（origin=runtime）；两层皆无的条目不出现。
+      const items: Contribution[] = [];
+      for (const b of store.values()) {
+        for (const entry of b.values()) {
+          const eff = effective(entry);
+          if (eff) items.push(eff);
+        }
+      }
+      return items;
     },
     get<T = unknown>(type: string, id: string): Contribution<string, T> | undefined {
       return effective(store.get(type)?.get(id)) as unknown as Contribution<string, T> | undefined;

@@ -110,4 +110,47 @@ describe("capability registry", () => {
     expect(() => r.register("tool", "a", 1, { driverId: "p1" })).not.toThrow();
     expect(events).toEqual(["a"]);
   });
+
+  it("queryAll: 空注册表 → []", () => {
+    const r = createRegistry();
+    expect(r.queryAll()).toEqual([]);
+  });
+
+  it("queryAll: runtime 遮蔽 static → 只出现一次且 origin=runtime", () => {
+    const r = createRegistry();
+    r.register("command", "c", { label: "static" }, { driverId: "p1", origin: "static" });
+    r.register("command", "c", { label: "runtime" }, { driverId: "p1" });
+    const all = r.queryAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ type: "command", id: "c", driverId: "p1", origin: "runtime" });
+    expect(all[0].value).toEqual({ label: "runtime" });
+  });
+
+  it("queryAll: static-only 项有效（effective=static，origin=static），与 query 语义一致", () => {
+    const r = createRegistry();
+    r.register("theme", "t", { css: "x" }, { driverId: "p1", origin: "static" });
+    const all = r.queryAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ type: "theme", id: "t", driverId: "p1", origin: "static" });
+    expect(all[0].value).toEqual({ css: "x" });
+    expect(r.query("theme")).toEqual(all); // queryAll = 各 type query 的并集
+  });
+
+  it("queryAll: 两层皆无的条目不出现（unregisterByDriver 全清后）", () => {
+    const r = createRegistry();
+    r.register("tool", "a", 1, { driverId: "p1", origin: "static" });
+    r.register("tool", "b", 2, { driverId: "p2" });
+    r.unregisterByDriver("p1"); // 清两层 → a 无 effective
+    const all = r.queryAll();
+    expect(all.map((c) => c.id)).toEqual(["b"]);
+  });
+
+  it("queryAll: 跨多 type 全部枚举", () => {
+    const r = createRegistry();
+    r.register("tool", "a", 1, { driverId: "p1" });
+    r.register("theme", "t1", { css: "x" }, { driverId: "p2" });
+    r.register("panel", "p", { title: "P" }, { driverId: "p1" });
+    expect(r.queryAll()).toHaveLength(3);
+    expect(r.queryAll().map((c) => `${c.type}/${c.id}`).sort()).toEqual(["panel/p", "theme/t1", "tool/a"]);
+  });
 });

@@ -15,12 +15,7 @@ import filesystemManifest from "../../filesystem-driver/manifest.json";
 import markdownManifest from "../../markdown-driver/manifest.json";
 import sessionManifest from "../../session-driver/manifest.json";
 import { bootDrivers } from "../src/boot.js";
-import {
-  collectCapabilities,
-  KNOWN_CAPABILITY_TYPES,
-  type CapabilityContribution,
-  type CapabilityOrigin,
-} from "../src/capabilities.js";
+import { collectCapabilities, type CapabilityContribution, type CapabilityOrigin } from "../src/capabilities.js";
 
 /**
  * 真实驱动清单（与 ui-shell drivers.ts 的 DRIVERS 同序同源，仅略去图标 URL——
@@ -50,8 +45,24 @@ function makeKernel(
   return kernel;
 }
 
+/** queryAll() 按 driverId 分组（裁决 #1 恒等式主断言的参照：collectCapabilities 输出必须 === 它）。 */
+function groupByDriver(kernel: MinexKernel): Map<string, CapabilityContribution[]> {
+  const m = new Map<string, CapabilityContribution[]>();
+  for (const c of kernel.registry.queryAll()) {
+    const list = m.get(c.driverId) ?? [];
+    list.push({ type: c.type, id: c.id, origin: c.origin });
+    m.set(c.driverId, list);
+  }
+  return m;
+}
+
+/** 顺序无关归一（交叉核对用：query 按 priority 排序、queryAll 按插入序，比较时归一）。 */
+function norm(list: CapabilityContribution[]): string[] {
+  return [...list].map((c) => `${c.type}/${c.id}/${c.origin}`).sort();
+}
+
 describe("collectCapabilities", () => {
-  it("真实驱动集成：filesystem/markdown/appearance 贡献清单与 registry.query(type,{driver}) 实际一致", async () => {
+  it("真实驱动集成：输出 === queryAll() 按 driver 分组（恒等式）；session/session.md/panel 全部可见", async () => {
     const kernel = createKernel({ storage: createInMemoryStorage() });
     const problems = await bootDrivers(kernel, realDrivers()); // 走真实入口：boot → register → activate
     expect(problems).toEqual([]);
@@ -64,18 +75,28 @@ describe("collectCapabilities", () => {
       "minex.appearance",
     ]);
 
-    // 交叉核对：输出 === 逐 (driver, type) 的 registry.query 聚合（验收 2 的一致性命题）
+    // 恒等式主断言（裁决 #1）：输出 === queryAll() 按 driver 分组——任何新 type 自动进聚合
+    const byDriver = groupByDriver(kernel);
     for (const d of caps) {
-      const expected: CapabilityContribution[] = [];
-      for (const type of KNOWN_CAPABILITY_TYPES) {
+      expect(d.contributions).toEqual(byDriver.get(d.driverId) ?? []);
+    }
+    // 无静默丢弃：聚合总数 === queryAll 总数
+    expect(caps.reduce((n, d) => n + d.contributions.length, 0)).toBe(kernel.registry.queryAll().length);
+
+    // queryAll 与逐 type query 交叉核对（type 全集从 queryAll 推导，不依赖目录快照）：
+    // 锁 queryAll ≡ 各 type query 并集（同一 effective 语义）
+    const allTypes = [...new Set(kernel.registry.queryAll().map((c) => c.type))];
+    for (const d of caps) {
+      const perQuery: CapabilityContribution[] = [];
+      for (const type of allTypes) {
         for (const c of kernel.registry.query<unknown>(type, { driver: d.driverId })) {
-          expected.push({ type: c.type, id: c.id, origin: c.origin });
+          perQuery.push({ type: c.type, id: c.id, origin: c.origin });
         }
       }
-      expect(d.contributions).toEqual(expected);
+      expect(norm(d.contributions)).toEqual(norm(perQuery));
     }
 
-    // 每个驱动贡献的 type 集合（与各驱动 index.ts 实际注册一致）
+    // 每驱动贡献的 type 集合（与各驱动 index.ts 实际注册一致）
     const typesOf = (id: string): string[] =>
       caps.find((d) => d.driverId === id)!.contributions.map((c) => c.type).sort();
     // filesystem：filesystem/default + 两个 panel（sidebar + workspace）
@@ -95,8 +116,6 @@ describe("collectCapabilities", () => {
     ]);
     // appearance：3 个 theme（light/dark/global）+ 1 个 settingsView
     expect(typesOf("minex.appearance")).toEqual(["settingsView", "theme", "theme", "theme"]);
-
-    // id + origin 抽查（appearance：3 个 theme + 1 个 settingsView）
     const appearance = caps.find((d) => d.driverId === "minex.appearance")!;
     expect(appearance.contributions.map((c) => c.id).sort()).toEqual([
       "minex.appearance",
@@ -107,26 +126,43 @@ describe("collectCapabilities", () => {
     // 真实驱动全部 runtime 贡献（manifest 无 contributes 静态声明）
     expect(appearance.contributions.every((c) => c.origin === "runtime")).toBe(true);
 
-    // 目录边界：session 的 session / session.md（KNOWN_CAPABILITY_TYPES 之外）不被采集，只采其 panel
+    // 裁决 #1 翻转断言：mist.session 的 session / session.md / panel 全部可见，不得静默丢弃
     const session = caps.find((d) => d.driverId === "mist.session")!;
-    expect(session.contributions.map((c) => c.type)).not.toContain("session");
-    expect(session.contributions.map((c) => c.type)).not.toContain("session.md");
-    expect(session.contributions.map((c) => c.type).sort()).toEqual(["panel"]);
+    expect(session.contributions.map((c) => c.type)).toContain("session");
+    expect(session.contributions.map((c) => c.type)).toContain("session.md");
+    expect(session.contributions.map((c) => c.type)).toContain("panel");
+    expect(session.contributions.map((c) => c.type).sort()).toEqual(["panel", "session", "session.md"]);
+    expect(session.contributions.map((c) => c.id).sort()).toEqual(["default", "default", "mist.session.overview"]);
   });
 
-  it("多驱动多 type 正常聚合", () => {
+  it("多驱动多 type 正常聚合（含目录外新 type：注册表驱动，无需目录）", () => {
     const kernel = makeKernel(["alpha.demo", "beta.demo"], [
       { type: "theme", id: "t1", driverId: "alpha.demo" },
       { type: "panel", id: "p1", driverId: "alpha.demo" },
+      { type: "command", id: "cmd1", driverId: "alpha.demo" }, // 目录外 type（旧目录机制会漏）
       { type: "panel", id: "p2", driverId: "beta.demo" },
       { type: "settingsView", id: "sv", driverId: "beta.demo" },
+      { type: "custom.brandNew", id: "x", driverId: "beta.demo" }, // 未来新增 type 自动进聚合
     ]);
     const caps = collectCapabilities(kernel);
     expect(caps).toHaveLength(2);
+    // 恒等式
+    const byDriver = groupByDriver(kernel);
+    for (const d of caps) {
+      expect(d.contributions).toEqual(byDriver.get(d.driverId) ?? []);
+    }
     expect(caps[0].driverId).toBe("alpha.demo");
-    expect(caps[0].contributions.map((c) => `${c.type}:${c.id}`).sort()).toEqual(["panel:p1", "theme:t1"]);
+    expect(caps[0].contributions.map((c) => `${c.type}:${c.id}`).sort()).toEqual([
+      "command:cmd1",
+      "panel:p1",
+      "theme:t1",
+    ]);
     expect(caps[1].driverId).toBe("beta.demo");
-    expect(caps[1].contributions.map((c) => `${c.type}:${c.id}`).sort()).toEqual(["panel:p2", "settingsView:sv"]);
+    expect(caps[1].contributions.map((c) => `${c.type}:${c.id}`).sort()).toEqual([
+      "custom.brandNew:x",
+      "panel:p2",
+      "settingsView:sv",
+    ]);
   });
 
   it("已加载但无贡献的驱动 → 空数组", () => {
@@ -142,19 +178,13 @@ describe("collectCapabilities", () => {
       { type: "theme", id: "t-shadow", driverId: "alpha.demo", origin: "runtime" },
     ]);
     const [d] = collectCapabilities(kernel);
+    // 恒等式：输出 === queryAll() 分组（同 (type,id) 只一条、origin=runtime）
+    const byDriver = groupByDriver(kernel);
+    expect(d.contributions).toEqual(byDriver.get("alpha.demo") ?? []);
     const originOf = new Map(d.contributions.map((c) => [c.id, c.origin]));
     expect(originOf.get("t-static")).toBe("static");
     expect(originOf.get("p-runtime")).toBe("runtime");
     expect(originOf.get("t-shadow")).toBe("runtime"); // 有效值 = runtime ?? static
     expect(originOf.size).toBe(3); // 同 (type,id) 只一条（无重复）
-  });
-
-  it("自定义 type 目录：只采集传入的 type", () => {
-    const kernel = makeKernel(["alpha.demo"], [
-      { type: "theme", id: "t1", driverId: "alpha.demo" },
-      { type: "panel", id: "p1", driverId: "alpha.demo" },
-    ]);
-    const [d] = collectCapabilities(kernel, ["theme"]);
-    expect(d.contributions.map((c) => c.id)).toEqual(["t1"]);
   });
 });

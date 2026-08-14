@@ -1,8 +1,11 @@
 /**
- * 驱动能力总览数据管道（阶段 A1）：按驱动聚合 registry 贡献的纯函数。
+ * 驱动能力总览数据管道（阶段 A1 · 裁决 #1 后返工版）：按驱动聚合 registry 贡献的纯函数。
  *
+ * 注册表驱动：从 `kernel.registry.queryAll()` 一次枚举全部**有效贡献**
+ * （effective = runtime ?? static），按 driverId 分组——任何新能力 type 自动进聚合，
+ * 外壳不维护 type 目录（裁决 #1：内核只给机制、外壳不认识内容语义）。
  * 消费的是贡献元数据（type/id/origin）——这里要的就是贡献清单本身，
- * 与「取能力值才 .map(c => c.value)」的宿主视图纪律不冲突（见任务 A1 语义）。
+ * 与「取能力值才 .map(c => c.value)」的宿主视图纪律不冲突。
  * 纯函数：不触碰 DOM / React / 事件，输入 kernel 结构、输出普通数据。
  */
 
@@ -22,32 +25,15 @@ export interface DriverCapabilities {
   contributions: CapabilityContribution[];
 }
 
-/**
- * 外壳已知的贡献 type 目录（现有驱动注册的 type 全集，见各驱动 index.ts）：
- * panel / theme / settingsView / filesystem / markdown / appearance.driverSetting。
- * registry 无法枚举 type（只能按 type 查询），故目录由外壳声明；新增贡献 type 时在此追加。
- */
-export const KNOWN_CAPABILITY_TYPES = [
-  "panel",
-  "theme",
-  "settingsView",
-  "filesystem",
-  "markdown",
-  "appearance.driverSetting",
-] as const;
-
-/** kernel 最小结构（结构类型：registry 宿主视图 + 已加载驱动清单） */
+/** kernel 最小结构（结构类型：registry 宿主视图 queryAll + 已加载驱动清单） */
 export interface CapabilityKernelLike {
   registry: {
-    query<T = unknown>(
-      type: string,
-      filter?: { driver?: string },
-    ): Array<{
+    queryAll(): Array<{
       type: string;
       id: string;
       driverId: string;
       origin: CapabilityOrigin;
-      value: T;
+      value: unknown;
     }>;
   };
   drivers: {
@@ -56,21 +42,22 @@ export interface CapabilityKernelLike {
 }
 
 /**
- * 按驱动聚合 registry 贡献：对每个已加载驱动（drivers.list()），
- * 依 type 目录逐类查询 `registry.query(type, { driver })`，收集贡献元数据。
- * 无贡献的驱动 → 空数组。输出顺序 = drivers.list() 顺序；组内 = 目录序 × 查询序（priority 降序）。
+ * 按驱动聚合 registry 贡献：一次 `registry.queryAll()` 枚举全部有效贡献，
+ * 按 driverId 预分组；输出按 drivers.list() 顺序每驱动一条（无贡献 → 空数组）。
+ * 组内顺序 = queryAll 顺序（注册表遍历序，确定性）。
  */
-export function collectCapabilities(
-  kernel: CapabilityKernelLike,
-  types: readonly string[] = KNOWN_CAPABILITY_TYPES,
-): DriverCapabilities[] {
-  return kernel.drivers.list().map(({ manifest }) => {
-    const contributions: CapabilityContribution[] = [];
-    for (const type of types) {
-      for (const c of kernel.registry.query<unknown>(type, { driver: manifest.id })) {
-        contributions.push({ type: c.type, id: c.id, origin: c.origin });
-      }
+export function collectCapabilities(kernel: CapabilityKernelLike): DriverCapabilities[] {
+  const byDriver = new Map<string, CapabilityContribution[]>();
+  for (const c of kernel.registry.queryAll()) {
+    let list = byDriver.get(c.driverId);
+    if (!list) {
+      list = [];
+      byDriver.set(c.driverId, list);
     }
-    return { driverId: manifest.id, contributions };
-  });
+    list.push({ type: c.type, id: c.id, origin: c.origin });
+  }
+  return kernel.drivers.list().map(({ manifest }) => ({
+    driverId: manifest.id,
+    contributions: byDriver.get(manifest.id) ?? [],
+  }));
 }
