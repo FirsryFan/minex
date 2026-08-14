@@ -113,6 +113,35 @@ describe("runAgent loop 停止条件", () => {
   });
 });
 
+describe("runAgent onContext 加工 hook（2-4）", () => {
+  it("loop 内 buildMessages 前调用，传当前轮 history 尾部（含用户消息）", async () => {
+    const calls: Array<Array<{ ref: string; content: string }>> = [];
+    async function* stream(): AsyncIterable<LLMChunk> {
+      // 每轮都返回 tool_call（两轮），验证每轮 onContext 都被调
+      yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c", name: "echo", arguments: "{}" } };
+      yield { delta: "", done: true, usage: { promptTokens: 10, completionTokens: 0, cachedTokens: 0 } };
+    }
+    const events = runAgent(makeDeps(stream), {
+      systemPrompt: "s",
+      history: [{ role: "user", content: "你好" }],
+      maxIterations: 2,
+      onContext: (items) => calls.push(items),
+    });
+    await collect(events);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[0]).toEqual([{ ref: "h0", content: "你好" }]); // 首轮 = history 尾部（用户消息）
+  });
+
+  it("默认不调用：无 onContext 时正常执行（向后兼容）", async () => {
+    async function* stream(): AsyncIterable<LLMChunk> {
+      yield { delta: "答", done: false };
+      yield { delta: "", done: true, usage: { promptTokens: 5, completionTokens: 1, cachedTokens: 0 } };
+    }
+    const events = runAgent(makeDeps(stream), { systemPrompt: "s", history: [] });
+    expect(await collect(events)).toEqual(["text", "done"]);
+  });
+});
+
 describe("runAgent 工具并行执行", () => {
   it("多个无依赖 tool_calls 并行（并发计数）+ 结果按声明顺序回灌", async () => {
     let active = 0;

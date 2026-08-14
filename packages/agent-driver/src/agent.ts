@@ -28,7 +28,15 @@ export interface RunAgentOptions {
   maxConcurrent?: number;
   /** 再加工 hook（W 层）：工具结果回灌前加工，默认透传 */
   rework?: (result: ChatMessage) => ChatMessage[];
+  /**
+   * 上下文加工 hook（2-4 大纲记忆）：loop 内 buildMessages 之前调用，
+   * 把当前轮 history 尾部 context 传给它（供消费方提炼大纲记忆等）；默认不调用任何逻辑，向后兼容。
+   */
+  onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
 }
+
+/** onContext 传入的 history 尾部条数（与 buildContext tailCount 默认一致） */
+const CONTEXT_TAIL = 10;
 
 export interface AgentDeps {
   /** llm 能力（Provider.stream） */
@@ -100,6 +108,12 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
 
   for (let i = 0; i < maxIterations; i++) {
     const started = Date.now();
+    // 2-4 加工 hook：buildMessages 之前把当前轮 history 尾部 context 传出（默认不调用）
+    if (opts.onContext) {
+      opts.onContext(
+        history.slice(-CONTEXT_TAIL).map((m, idx) => ({ ref: `h${idx}`, content: m.content ?? "" })),
+      );
+    }
     const messages = buildMessages({ systemPrompt: opts.systemPrompt, history, workMemory: [] });
     const acc: AccumulatedResponse = { content: "", toolCallDeltas: [] };
     let ttftMs = 0;

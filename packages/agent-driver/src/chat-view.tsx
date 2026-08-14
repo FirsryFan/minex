@@ -12,13 +12,19 @@ import {
   type SessionLinkLike,
   type SessionNodeLike,
 } from "./chat-history.js";
+import { buildOutlineEntry, shouldOutline, type OutlineEntryLike } from "./outline.js";
 import { takePendingOpenSessionId } from "./session-open.js";
 
 const SYSTEM_PROMPT = "你是一个乐于助人的 AI 助手，用中文回答。";
 
 /** agent 能力子集（宿主视图取能力值要 .value） */
 interface AgentCap {
-  run(systemPrompt: string, history: unknown[], maxIterations?: number): AsyncIterable<AgentEvent>;
+  run(
+    systemPrompt: string,
+    history: unknown[],
+    maxIterations?: number,
+    opts?: { onContext?: (contextItems: Array<{ ref: string; content: string }>) => void },
+  ): AsyncIterable<AgentEvent>;
 }
 
 interface AgentEvent {
@@ -51,6 +57,7 @@ interface SessionTreeCap {
   addNode(s: SessionLike, node: SessionNodeLike): SessionLike;
   addLink(s: SessionLike, link: SessionLinkLike): SessionLike;
   createSession(input: { title?: string; activeAgents?: string[] }): SessionLike;
+  addOutlineEntry(s: SessionLike, entry: OutlineEntryLike): SessionLike;
 }
 
 /** 上下文条目（2-3：子对话初始 context / 手动追加） */
@@ -140,9 +147,11 @@ export default function ChatView({
     [kernel],
   );
 
-  // 2-3 父对话大纲 + 初始上下文（仅子对话：parentSession prop）
-  const parentOutlines = (parentSession?.meta.outlines ?? []) as OutlineLike[];
-  const parentFirstMessage = parentSession?.nodes.find((n) => n.kind === "user")?.content;
+  // 2-3 父对话（状态化：2-4 大纲生成后更新，供「添加上上下文」面板实时显示新条目）
+  const [parent, setParent] = useState<SessionLike | null>(parentSession ?? null);
+  const parentRef = useRef<SessionLike | null>(parent);
+  const parentOutlines = (parent?.meta.outlines ?? []) as OutlineLike[];
+  const parentFirstMessage = parent?.nodes.find((n) => n.kind === "user")?.content;
 
   // 卸载时中断进行中的 for await（loop 内检查 cancelledRef）
   useEffect(() => {
@@ -270,11 +279,23 @@ export default function ChatView({
     // 自动继承（2-3）：开关开 → systemPrompt 注入父大纲文本，agent 自行选择
     const systemPrompt = buildChildSystemPrompt(SYSTEM_PROMPT, autoInherit, parentOutlines);
 
+    // 2-4 大纲记忆：子对话 agent-loop 的 onContext hook → 提炼判定 + 生成条目 → 追加父会话大纲 + saveSession
+    const onContext = parentRef.current
+      ? (ctxItems: Array<{ ref: string; content: string }>): void => {
+          if (!shouldOutline(ctxItems)) return; // 空 context 不生成，不污染大纲
+          const entry = buildOutlineEntry(ctxItems);
+          const p = tree.addOutlineEntry(parentRef.current!, entry);
+          parentRef.current = p;
+          setParent(p);
+          void store.saveSession(p).catch(() => {});
+        }
+      : undefined;
+
     const deltas: string[] = [];
     const toolCalls: Array<{ name: string; args: unknown }> = [];
     let errorMsg: string | undefined;
     try {
-      for await (const ev of agent.run(systemPrompt, history)) {
+      for await (const ev of agent.run(systemPrompt, history, undefined, onContext ? { onContext } : undefined)) {
         if (cancelledRef.current) break;
         if (ev.kind === "text") {
           deltas.push(ev.delta ?? "");

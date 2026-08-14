@@ -1,6 +1,6 @@
 import type { DriverContext } from "@minex/kernel";
 import { addLink, addNode, createSession, rebuildFromMarkdown, toMarkdown, validateSession, type Session } from "./session.js";
-import { buildContext, deriveBranches } from "./session-tree.js";
+import { addOutlineEntry, buildContext, deriveBranches } from "./session-tree.js";
 import { createSessionStore, type SessionFsOps, type SessionStore } from "./store.js";
 
 /**
@@ -11,6 +11,7 @@ import { createSessionStore, type SessionFsOps, type SessionStore } from "./stor
  * 2-2：注册 `session.tree` 能力（会话树纯函数：buildContext/deriveBranches/addNode/addLink）——
  *      供 agent 聊天等驱动跨包消费（同「跨包零源码 import」约定，纯函数经能力桥接）。
  * 2-3：session.tree 增 createSession（浮窗子对话建会话用）。
+ * 2-4：session.tree 增 addOutlineEntry（大纲记忆追加，agent 加工 hook 消费）。
  * 依赖 minex.filesystem（FileSystemAbility.ensureDir 建会话文件夹）。
  */
 export default {
@@ -22,8 +23,8 @@ export default {
     const store: SessionStore = createSessionStore(fs);
     ctx.register("session", "default", store);
 
-    // 会话树纯函数（2-1/2-3）：buildContext / deriveBranches / addNode / addLink / createSession（agent 聊天消费）
-    ctx.register("session.tree", "default", { buildContext, deriveBranches, addNode, addLink, createSession });
+    // 会话树纯函数（2-1/2-3/2-4）：buildContext / deriveBranches / addNode / addLink / createSession / addOutlineEntry
+    ctx.register("session.tree", "default", { buildContext, deriveBranches, addNode, addLink, createSession, addOutlineEntry });
 
     // 面板：会话总览（右栏；搜索 / 标签筛选 / 列表 / 新建，点击打开 .ses）
     ctx.register("panel", "mist.session.overview", {

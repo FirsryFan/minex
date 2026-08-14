@@ -50,9 +50,14 @@ export default {
       },
     });
 
-    // agent 能力：从内核收集依赖 → runAgent
+    // agent 能力：从内核收集依赖 → runAgent（opts.onContext 透传，2-4 大纲记忆加工 hook）
     ctx.register("agent", "default", {
-      run(systemPrompt: string, history: ChatMessage[], maxIterations?: number) {
+      run(
+        systemPrompt: string,
+        history: ChatMessage[],
+        maxIterations?: number,
+        opts?: { onContext?: (contextItems: Array<{ ref: string; content: string }>) => void },
+      ) {
         const provider = ctx.get<LLMProvider>("llm", "deepseek");
         if (!provider) throw new Error("未找到 llm 能力（deepseek）");
         const config = ctx.get<ConfigLike>("llm.config", "default");
@@ -69,7 +74,7 @@ export default {
             recordMetrics: (entry) => metrics?.record(entry),
             prices,
           },
-          { systemPrompt, history, maxIterations },
+          { systemPrompt, history, maxIterations, ...(opts ? { onContext: opts.onContext } : {}) },
         );
       },
     });
