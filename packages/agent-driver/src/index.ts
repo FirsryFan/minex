@@ -74,6 +74,15 @@ export default {
       },
     });
 
+    // 聊天面板：顶栏选 Agent → 主区聊天界面（惰性加载，Node 宿主不触发）
+    ctx.register("panel", "minex.agent.chat", {
+      driverId: "minex.agent",
+      id: "minex.agent.chat",
+      title: "聊天",
+      defaultDock: "main",
+      load: () => import("./chat-view.js"),
+    });
+
     return () => {};
   },
 };
