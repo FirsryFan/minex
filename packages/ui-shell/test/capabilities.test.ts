@@ -152,10 +152,10 @@ describe("collectCapabilities", () => {
       "sessions",
     ]);
 
-    // 3-5：通用 Graph 驱动——graph 能力（default）+ 图谱面板（minex.graph.view）
+    // 3-5 + P2-1：通用 Graph 驱动——graph 能力（default）+ 图谱面板（minex.graph.view）+ 目标示例源（goals）
     const graph = caps.find((d) => d.driverId === "minex.graph")!;
-    expect(graph.contributions.map((c) => c.type).sort()).toEqual(["graph", "panel"]);
-    expect(graph.contributions.map((c) => c.id).sort()).toEqual(["default", "minex.graph.view"]);
+    expect(graph.contributions.map((c) => c.type).sort()).toEqual(["graph", "graphSource", "panel"]);
+    expect(graph.contributions.map((c) => c.id).sort()).toEqual(["default", "goals", "minex.graph.view"]);
     expect(graph.contributions.every((c) => c.origin === "runtime")).toBe(true);
   });
 

@@ -76,26 +76,35 @@ export default {
       });
     }
 
-    // 3-5：workflow 执行方法图数据源（Graph↔agent）——workflow 结构 → 步骤图（nodes→步骤节点、deps→边）
-    // v1：示例 workflow（无 workflow 存储库；阶段 4 接真实 workflow 数据）
+    // 3-5 + P1-7：workflow 执行方法图数据源（Graph↔agent）——真实工具调用链：
+    // 最近更新的会话 nodes 中 tool 节点按会话序 = 步骤，相邻 tool 之间连边（执行方法图，
+    // 非硬编码示例；无 workflow 存储库 → 方法图 = 会话工具调用链，Graph↔session 复用）
     ctx.register("graphSource", "workflow", {
       title: "工作流",
       getData: async () => {
-        const sample: Workflow = {
-          nodes: [
-            { id: "start", op: "echo", args: { text: "开始" } },
-            { id: "mid", op: "echo", args: { text: "处理" }, deps: ["start"] },
-            { id: "end", op: "echo", args: { text: "结束" }, deps: ["mid"] },
-          ],
-        };
+        const store = ctx.get<{
+          loadIndex(): Promise<{ sessions: Array<{ id: string; updatedAt: string }> }>;
+          loadSession(id: string): Promise<
+            | {
+                nodes?: Array<{ id: string; kind?: string; toolName?: string }>;
+              }
+            | undefined
+          >;
+        }>("session", "default");
+        if (!store) return { nodes: [], edges: [] };
+        const index = await store.loadIndex();
+        const latest = [...index.sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+        if (!latest) return { nodes: [], edges: [] };
+        const s = await store.loadSession(latest.id);
+        const toolNodes = (s?.nodes ?? []).filter((n) => n.kind === "tool");
         return {
-          nodes: sample.nodes.map((n) => ({
+          nodes: toolNodes.map((n) => ({
             id: n.id,
-            label: `${n.id}（${n.op}）`,
+            label: `工具 ${n.toolName ?? "?"}`,
             group: "步骤",
-            meta: { op: n.op },
+            meta: { op: n.toolName },
           })),
-          edges: sample.nodes.flatMap((n) => (n.deps ?? []).map((d) => ({ from: d, to: n.id }))),
+          edges: toolNodes.slice(1).map((n, i) => ({ from: toolNodes[i].id, to: n.id })),
         };
       },
     });

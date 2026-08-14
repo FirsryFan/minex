@@ -28,7 +28,7 @@ interface ToolLike {
  * 代码插槽：filePool 路径点击 → filesystem 读 → markdown 渲染代码块预览 → 「保存到插槽」写 slots.code
  * （slots.code v1 仅管理/预览，不注入 agent——执行留阶段 4+）。保存/删除联动 emit minex:dataChanged。
  */
-export default function AgentConfigView({ kernel }: { kernel: MinexKernel }) {
+export default function AgentConfigView({ kernel, instanceId }: { kernel: MinexKernel; instanceId?: number }) {
   const personas = useMemo<RoleLike[]>(
     () => kernel.registry.query<RoleLike>("role").map((c) => c.value),
     [kernel],
@@ -150,6 +150,20 @@ export default function AgentConfigView({ kernel }: { kernel: MinexKernel }) {
             <span className="agent-config-avatar">{selected.avatar ?? selected.name.slice(0, 1)}</span>
             <strong>{selected.name}</strong>
             <span className="muted">{selected.id}</span>
+            {/* P1-6：设为当前会话 persona（emit 带 targetInstanceId——只影响本实例聊天） */}
+            <button
+              className="btn-ghost"
+              title="把该档案的 persona 设为当前实例聊天的 persona"
+              disabled={!selected.personaId}
+              onClick={() =>
+                kernel.events.emit("minex:setPersona", {
+                  personaId: selected.personaId ?? "",
+                  targetInstanceId: instanceId,
+                })
+              }
+            >
+              设为当前会话 persona
+            </button>
             <button className="btn" onClick={save}>保存</button>
             {savedTick && <span className="muted">已保存</span>}
           </div>

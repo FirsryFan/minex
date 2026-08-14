@@ -157,7 +157,7 @@ describe("registerRealTools（3-1 工具插件化）", () => {
     expect(await tools.get("list_sessions")!.execute({})).toBe("（暂无会话）");
   });
 
-  it("search_file（P1-3）：文件名/内容命中 + 无命中占位", async () => {
+  it("search_file（P1-3）：文件名命中 + 内容命中", async () => {
     const fs = {
       readDir: async (p: string) => {
         if (p === "") return [{ name: "a.md", path: "a.md", isDirectory: false }, { name: "sub", path: "sub", isDirectory: true }];
@@ -169,9 +169,19 @@ describe("registerRealTools（3-1 工具插件化）", () => {
     const { ctx, registered } = makeCtx({ fs });
     registerRealTools(ctx);
     const tool = toolsOf(registered).get("search_file")!;
-    // 文件名命中（sub/b.txt 含 "b"）+ 内容命中（a.md 含关键词）
     expect(await tool.execute({ keyword: "关键词" })).toBe("a.md（内容命中）");
     expect(await tool.execute({ keyword: "b" })).toContain("sub/b.txt（文件名命中）");
+  });
+
+  it("search_file（P1-3）：无命中 → 占位文本；缺 keyword → 报错", async () => {
+    const { ctx, registered } = makeCtx({
+      fs: {
+        readDir: async () => [{ name: "a.md", path: "a.md", isDirectory: false }],
+        readFile: async () => "no match",
+      },
+    });
+    registerRealTools(ctx);
+    const tool = toolsOf(registered).get("search_file")!;
     expect(await tool.execute({ keyword: "不存在词" })).toBe("（未找到）");
     expect(await tool.execute({})).toBe("Error: 缺少 keyword 参数");
   });

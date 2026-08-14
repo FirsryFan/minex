@@ -237,15 +237,17 @@ export default function ChatView({
     return t !== undefined ? (t ?? undefined) : effectivePersona?.tools;
   }
 
-  // F-A 反馈 4：Agent 配置面板「设为当前会话 persona」→ 本聊天实例切换
+  // F-A 反馈 4 + P1-6：minex:setPersona（配置面板「设为当前会话 persona」）→ 本聊天实例切换；
+  // P1-6：事件带 targetInstanceId，只影响目标实例（不全局广播）
   useEffect(() => {
     return kernel.events.on("minex:setPersona", (payload) => {
-      const p = payload as { personaId?: string } | undefined;
+      const p = payload as { personaId?: string; targetInstanceId?: number } | undefined;
       if (!p?.personaId) return;
+      if (p.targetInstanceId !== undefined && p.targetInstanceId !== instanceId) return;
       setPersonaId(p.personaId);
       setSession((s) => (s ? { ...s, meta: { ...s.meta, personaId: p.personaId! } } : s));
     });
-  }, [kernel]);
+  }, [kernel, instanceId]);
 
   // F-A 反馈 2：双击卡片 Esc 关闭
   useEffect(() => {

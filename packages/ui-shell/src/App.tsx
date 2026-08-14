@@ -415,17 +415,25 @@ function WorkspaceInstance({
   // F-G/F-H 主区选择：打开会话（openSessionId）→ 主区 = 聊天（会话模式，驱动无关）；
   // agent 驱动 → 配置中心（默认）；其余驱动 → 该驱动主面板
   const mains = panels.filter((p) => dockOf(p) === "main" && p.driverId === instance.activeDriverId);
+  // P1-5：聊天面板 dock 态——被用户拆放到右栏/浮窗后，openSessionId 分支不再落到 main
+  const chatPanel = panels.find((p) => p.id === "minex.agent.chat");
+  const chatDock = chatPanel ? dockOf(chatPanel) : undefined;
   const mainPanel = (() => {
     if (instance.openSessionId) {
-      return panels.find((p) => p.id === "minex.agent.chat" && dockOf(p) === "main") ?? mains[0];
+      if (chatDock === "main") return chatPanel ?? mains[0];
+      return undefined; // 聊天被拆放 → 主区占位提示（P1-5，v1 提示不挪动）
     }
     if (instance.activeDriverId === "minex.agent") {
       return mains.find((p) => p.id !== "minex.agent.chat") ?? mains[0]; // 配置中心
     }
     return mains[0];
   })();
-  // F-H：会话驱动无打开会话 → 主区空态提示
+  // F-H：会话驱动无打开会话 → 主区空态提示；P1-5：聊天被拆放 → 主区提示在右栏/浮窗
   const sessionEmpty = !mainPanel && instance.activeDriverId === "mist.session";
+  const chatMovedHint =
+    Boolean(instance.openSessionId) && chatDock !== undefined && chatDock !== "main"
+      ? (chatDock === "floating" ? "聊天面板已在浮窗" : "聊天面板已在右栏")
+      : null;
   const floatingAll = panels.filter((p) => dockOf(p) === "floating");
   const leftPanel = leftPanels.find((p) => p.id === instance.activeLeftPanelId) ?? leftPanels[0];
 
@@ -560,9 +568,13 @@ function WorkspaceInstance({
         {mainPanel ? (
           renderPanel(mainPanel, "加载工作区…")
         ) : (
-          // F-H：会话驱动无打开会话 → 空态提示（在左侧会话列表或图谱选择会话打开）
+          // F-H/P1-5：空态提示——聊天被拆放（右栏/浮窗）优先，其次会话驱动未开会话
           <div className="main-empty">
-            {sessionEmpty ? <span className="muted">在左侧会话列表或图谱选择会话打开</span> : null}
+            {chatMovedHint ? (
+              <span className="muted">{chatMovedHint}，请在那里继续会话</span>
+            ) : sessionEmpty ? (
+              <span className="muted">在左侧会话列表或图谱选择会话打开</span>
+            ) : null}
           </div>
         )}
       </div>

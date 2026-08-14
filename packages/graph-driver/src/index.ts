@@ -152,6 +152,23 @@ export default {
       load: () => import("./graph-view.js"),
     });
 
+    // P2-1：阶段目标图示例源（graphSource 扩展点示范——任意驱动可注册任意图；
+    // 供 graph_query 工具读取；画布面板固定会话树不受影响）
+    ctx.register("graphSource", "goals", {
+      title: "目标",
+      getData: async () => ({
+        nodes: [
+          { id: "g3", label: "阶段 3 会干活", group: "目标" },
+          { id: "g4", label: "阶段 4 团队协作", group: "目标" },
+          { id: "g5", label: "阶段 5 锦上添花", group: "目标" },
+        ],
+        edges: [
+          { from: "g3", to: "g4" },
+          { from: "g4", to: "g5" },
+        ],
+      }),
+    });
+
     return () => {};
   },
 };
