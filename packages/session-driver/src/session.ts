@@ -14,6 +14,9 @@ export type SessionNodeKind = "user" | "assistant" | "tool" | "agent-msg" | "eve
 
 export type SessionLinkType = "responds" | "branch" | "assign" | "agent-flow";
 
+import { validateOutlineEntry } from "./session-tree.js";
+import type { OutlineEntry } from "./session-tree.js";
+
 export interface SessionNode {
   id: string;
   kind: SessionNodeKind;
@@ -40,6 +43,10 @@ export interface SessionMeta {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  /** 当前分支（HEAD，视图指针，不落盘持久语义；缺省 = 主链，旧数据兼容） */
+  currentBranchId?: string;
+  /** 大纲记忆（D4 Envelope 式条目，task 2-1；可选，旧数据兼容） */
+  outlines?: OutlineEntry[];
 }
 
 export interface Session {
@@ -256,6 +263,14 @@ export function validateSession(data: unknown): data is Session {
   if (typeof meta.id !== "string" || typeof meta.title !== "string") return false;
   if (typeof meta.type !== "string" || !validateType(meta.type)) return false;
   if (!Array.isArray(meta.tags) || (meta.tags as unknown[]).some((t) => typeof t !== "string")) return false;
+  // 2-1 扩展（可选字段，旧数据不受影响）：currentBranchId 必须 string；outlines 逐条形状校验
+  if (meta.currentBranchId !== undefined && typeof meta.currentBranchId !== "string") return false;
+  if (
+    meta.outlines !== undefined &&
+    (!Array.isArray(meta.outlines) || !(meta.outlines as unknown[]).every(validateOutlineEntry))
+  ) {
+    return false;
+  }
   if (!Array.isArray(s.activeAgents) || (s.activeAgents as unknown[]).some((a) => typeof a !== "string")) return false;
   if (!Array.isArray(s.nodes) || !Array.isArray(s.links)) return false;
   for (const n of s.nodes as unknown[]) {
