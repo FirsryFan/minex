@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import {
+  AUTO_SAVE_THRESHOLD,
   buildChildSystemPrompt,
   loadChatHistory,
   newId,
   saveAsSession,
   saveChatHistory,
   sessionToChatMessages,
+  shouldAutoSave,
   type ChatMessageView,
   type SessionLike,
   type SessionLinkLike,
@@ -96,12 +98,15 @@ export default function ChatView({
   session: sessionProp,
   contextItems,
   parentSession,
+  onStateChange,
 }: {
   kernel: MinexKernel;
   instanceId?: number;
   session?: SessionLike;
   contextItems?: ContextItemLike[];
   parentSession?: SessionLike;
+  /** P5 状态机句柄上报：dirty（未保存且消息非空）+ save（立即保存），供外壳关闭询问用 */
+  onStateChange?: (h: { dirty: boolean; save: () => Promise<void> }) => void;
 }) {
   // .value 纪律：registry.get 返回 Contribution，能力值在 .value
   const agent = kernel.registry.get<AgentCap>("agent", "default")?.value;
@@ -152,6 +157,33 @@ export default function ChatView({
   const parentRef = useRef<SessionLike | null>(parent);
   const parentOutlines = (parent?.meta.outlines ?? []) as OutlineLike[];
   const parentFirstMessage = parent?.nodes.find((n) => n.kind === "user")?.content;
+
+  // P5 保存状态机：会话模式（打开的 .ses）初始已保存；子对话（有 parentSession，草稿优先）初始未保存
+  const [saved, setSaved] = useState<boolean>(() => sessionProp !== undefined && parentSession === undefined);
+  const savedRef = useRef(saved);
+  const sessionRef = useRef<SessionLike | null>(session);
+  useEffect(() => {
+    savedRef.current = saved;
+  }, [saved]);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  // P5：立即保存当前会话（子对话 → saveSession 子会话 + 父会话带 branch 链接）+ 状态变 saved
+  const saveCurrent = useCallback(async (): Promise<void> => {
+    if (savedRef.current) return;
+    const s = sessionRef.current;
+    if (!s || !store) return;
+    await store.saveSession(s).catch(() => {});
+    if (parentRef.current) await store.saveSession(parentRef.current).catch(() => {});
+    savedRef.current = true;
+    setSaved(true);
+  }, [store]);
+
+  // P5 关闭询问：dirty = 未保存且消息非空；save 句柄供外壳「保存为会话」用
+  useEffect(() => {
+    onStateChange?.({ dirty: !saved && messages.length > 0, save: saveCurrent });
+  }, [saved, messages, saveCurrent, onStateChange]);
 
   // 卸载时中断进行中的 for await（loop 内检查 cancelledRef）
   useEffect(() => {
@@ -263,13 +295,13 @@ export default function ChatView({
     const branchId = session.meta.currentBranchId ?? "main";
     const headNodeId = tree.deriveBranches(session).find((b) => b.id === branchId)?.headNodeId;
 
-    // 1) user 节点 append（responds 到当前分支头）→ saveSession
+    // 1) user 节点 append（responds 到当前分支头）——已保存会话立即落盘；草稿（P5）先留在内存
     const userNode: SessionNodeLike = { id: newId(), kind: "user", content: text, ts: new Date().toISOString() };
     let s2 = tree.addNode(session, userNode);
     if (headNodeId) s2 = tree.addLink(s2, { from: userNode.id, to: headNodeId, type: "responds" });
     setSession(s2);
     setMessages(sessionToChatMessages(s2));
-    await store.saveSession(s2);
+    if (saved) await store.saveSession(s2);
 
     // 2) agent.run history = 子对话上下文（contextItems 注入/手动追加）+ buildContext（当前分支，tail 默认 10）
     const history = [
@@ -331,7 +363,17 @@ export default function ChatView({
     if (finalText) appendNode({ id: newId(), kind: "assistant", content: finalText, ts: now });
     setSession(s3);
     setMessages(sessionToChatMessages(s3));
-    await store.saveSession(s3);
+    // 3b) P5 自动保存状态机：已保存 → 每轮落盘；未保存（子对话草稿）→ 轮数（用户消息数）达阈值自动保存
+    if (saved) {
+      await store.saveSession(s3);
+    } else if (
+      shouldAutoSave(s3.nodes.filter((n) => n.kind === "user").length, AUTO_SAVE_THRESHOLD)
+    ) {
+      await store.saveSession(s3).catch(() => {});
+      if (parentRef.current) await store.saveSession(parentRef.current).catch(() => {});
+      savedRef.current = true;
+      setSaved(true);
+    }
   }
 
   async function send(): Promise<void> {
@@ -355,20 +397,20 @@ export default function ChatView({
     }
   }
 
-  // 2-3：框选 → 创建子会话 + 父会话挂 branch 链接 + emit minex:openChildChat（外壳浮窗承载迷你 ChatView）
+  // 2-3：框选 → 子对话草稿（P5 draft-first：不立即建 .ses，≥3 轮自动保存 / 关闭时询问）+ 父会话挂 branch 链接
   async function openChildChat(text: string, nodeId: string): Promise<void> {
     if (!session || !tree || !store) return;
     setSel(null);
     try {
       const parentBranchId = session.meta.currentBranchId ?? "main";
       const childContext = tree.buildContext(session, parentBranchId, { selectedNodeIds: [nodeId] });
-      const childSession = tree.createSession({ title: "子对话", activeAgents: session.activeAgents });
-      // 树形关系：父会话挂 branch 链接（from = 子会话 id 跨会话指针，to = 框选节点 = 分支入口）
+      const created = tree.createSession({ title: "子对话", activeAgents: session.activeAgents });
+      // 子会话记父会话 id（会话系图谱真相源，P3）；父会话挂 branch 链接（from = 子会话 id，to = 框选节点 = 分支入口）
+      const childSession = { ...created, meta: { ...created.meta, parentSessionId: session.meta.id } };
       const parent2 = tree.addLink(session, { from: childSession.meta.id, to: nodeId, type: "branch" });
       setSession(parent2);
       setMessages(sessionToChatMessages(parent2));
-      await store.saveSession(parent2).catch(() => {}); // 无 filesystem 根目录时静默（内存会话仍可用）
-      await store.saveSession(childSession).catch(() => {});
+      // 不立即 saveSession——子对话为草稿，自动保存（≥3 轮）/关闭询问时落盘
       kernel.events.emit("minex:openChildChat", { childSession, contextItems: childContext, parentSession: parent2 });
     } catch {
       /* 打开失败静默，不崩 */

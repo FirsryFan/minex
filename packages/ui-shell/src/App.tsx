@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { GripVertical } from "lucide-react";
 import { FloatingPanel } from "./components/FloatingPanel.js";
@@ -121,10 +121,14 @@ export function App({ problems }: { problems: string[] }) {
   }, [kernel, activeInstanceId]);
 
   // 2-3 浮窗子对话：聊天内框选 → 打开子对话浮窗（复用会话模式 ChatView）
+  // P5 关闭询问：childHandleRef 持有子对话的 dirty/save 句柄；dirty 时弹「保存为会话/放弃」
+  const childHandleRef = useRef<{ dirty: boolean; save: () => Promise<void> } | null>(null);
+  const [showChildSavePrompt, setShowChildSavePrompt] = useState(false);
   useEffect(() => {
     return kernel.events.on("minex:openChildChat", (payload) => {
       const p = payload as { childSession?: SessionLike; contextItems?: unknown[]; parentSession?: SessionLike } | undefined;
       if (!p?.childSession || !p.parentSession) return;
+      childHandleRef.current = null; // 新子对话重置句柄
       const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
       setChildChat({
         childSession: p.childSession,
@@ -247,7 +251,7 @@ export function App({ problems }: { problems: string[] }) {
       )}
 
       {/* 2-3 浮窗子对话（框选 → 与 AI 讨论这段）：复用会话模式 ChatView（contextItems + parentSession）。
-          热修：onMove/onResize 真实更新 state（拖拽/缩放生效），onDrop 位置已由 onMove 跟踪。 */}
+          热修：onMove/onResize 真实更新 state（拖拽/缩放生效）；P5：dirty 时关闭弹「保存为会话/放弃」。 */}
       {childChat && (
         <FloatingPanel
           title="子对话"
@@ -258,15 +262,53 @@ export function App({ problems }: { problems: string[] }) {
           onMove={(x, y, w, h) => setChildChat((c) => (c ? { ...c, x, y, w, h } : c))}
           onResize={(w, h) => setChildChat((c) => (c ? { ...c, w, h } : c))}
           onDrop={() => {}}
-          onClose={() => setChildChat(null)}
+          onClose={() => {
+            if (childHandleRef.current?.dirty) setShowChildSavePrompt(true);
+            else setChildChat(null);
+          }}
         >
           <ChatView
             kernel={kernel}
             session={childChat.childSession}
             contextItems={childChat.contextItems}
             parentSession={childChat.parentSession}
+            onStateChange={(h) => {
+              childHandleRef.current = h;
+            }}
           />
         </FloatingPanel>
+      )}
+
+      {/* P5 关闭询问：草稿未保存且消息非空 → 保存为会话/放弃 */}
+      {showChildSavePrompt && (
+        <div className="floating-mask" onClick={() => setShowChildSavePrompt(false)}>
+          <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+            <p>会话尚未保存，要保存为会话吗？</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setShowChildSavePrompt(false);
+                  setChildChat(null);
+                }}
+              >
+                放弃
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  void (async () => {
+                    await childHandleRef.current?.save();
+                    setShowChildSavePrompt(false);
+                    setChildChat(null);
+                  })();
+                }}
+              >
+                保存为会话
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

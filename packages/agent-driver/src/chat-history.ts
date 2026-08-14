@@ -95,6 +95,17 @@ export function buildChildSystemPrompt(
   return `${base}\n\n以下是父对话的大纲记忆，可从中选择与本次对话相关的信息：\n${list}`;
 }
 
+/** 自动保存阈值（P5 拍板：子对话 ≥3 轮自动保存；v1 常量，不做 UI 配置） */
+export const AUTO_SAVE_THRESHOLD = 3;
+
+/**
+ * 自动保存判定（P5 状态机）：messageCount ≥ threshold 且 threshold > 0。
+ * messageCount 语义 = 轮数（用户消息数）；threshold ≤ 0 视为关闭自动保存（防御）。
+ */
+export function shouldAutoSave(messageCount: number, threshold: number): boolean {
+  return threshold > 0 && messageCount >= threshold;
+}
+
 /** 读取聊天历史：JSON.parse，缺失/损坏返回 []（try/catch 不抛错）。 */
 export function loadChatHistory(kernel: ChatHistoryKernel, instanceId: number | undefined): ChatMessageView[] {
   try {

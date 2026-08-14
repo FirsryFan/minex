@@ -1,6 +1,7 @@
 import { createInMemoryStorage, createKernel } from "@minex/kernel";
 import { describe, expect, it } from "vitest";
 import {
+  AUTO_SAVE_THRESHOLD,
   buildChildSystemPrompt,
   chatMessagesToSession,
   loadChatHistory,
@@ -8,6 +9,7 @@ import {
   saveAsSession,
   saveChatHistory,
   sessionToChatMessages,
+  shouldAutoSave,
   type ChatMessageView,
   type SessionLike,
   type SessionNodeLike,
@@ -208,5 +210,22 @@ describe("buildChildSystemPrompt（2-3 自动继承）", () => {
     expect(out).toContain("大纲记忆");
     expect(out).toContain("- 用户希望用中文交流");
     expect(out).toContain("- 已讨论文件读取方案");
+  });
+});
+
+describe("shouldAutoSave（P5 自动保存状态机）", () => {
+  it("边界：正好达阈值 → true；差一轮 → false；AUTO_SAVE_THRESHOLD = 3", () => {
+    expect(AUTO_SAVE_THRESHOLD).toBe(3);
+    expect(shouldAutoSave(3, AUTO_SAVE_THRESHOLD)).toBe(true);
+    expect(shouldAutoSave(2, AUTO_SAVE_THRESHOLD)).toBe(false);
+  });
+
+  it("阈值 0 防御：threshold ≤ 0 → 关闭自动保存（恒 false）", () => {
+    expect(shouldAutoSave(10, 0)).toBe(false);
+    expect(shouldAutoSave(10, -1)).toBe(false);
+  });
+
+  it("负数消息数 → false", () => {
+    expect(shouldAutoSave(-1, 3)).toBe(false);
   });
 });
