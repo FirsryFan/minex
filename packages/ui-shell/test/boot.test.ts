@@ -1,9 +1,33 @@
-import { createInMemoryStorage, createKernel } from "@minex/kernel";
+import { createInMemoryStorage, createKernel, type DriverManifest, type DriverModule } from "@minex/kernel";
 import { describe, expect, it } from "vitest";
+import agentDriver from "../../agent-driver/src/index.js";
+import appearanceDriver from "../../appearance-driver/src/index.js";
+import filesystemDriver from "../../filesystem-driver/src/index.js";
+import llmDriver from "../../llm-driver/src/index.js";
+import markdownDriver from "../../markdown-driver/src/index.js";
+import sessionDriver from "../../session-driver/src/index.js";
+import agentManifest from "../../agent-driver/manifest.json";
+import appearanceManifest from "../../appearance-driver/manifest.json";
+import filesystemManifest from "../../filesystem-driver/manifest.json";
+import llmManifest from "../../llm-driver/manifest.json";
+import markdownManifest from "../../markdown-driver/manifest.json";
+import sessionManifest from "../../session-driver/manifest.json";
 import { bootDrivers } from "../src/boot.js";
 
 function testKernel() {
   return createKernel({ storage: createInMemoryStorage() });
+}
+
+/** 全量真实驱动清单（与 ui-shell drivers.ts 的 DRIVERS 同序同源：filesystem → session → markdown → appearance → llm → agent） */
+function realDrivers(): DriverModule[] {
+  return [
+    { manifest: filesystemManifest as unknown as DriverManifest, activate: filesystemDriver.activate },
+    { manifest: sessionManifest as unknown as DriverManifest, activate: sessionDriver.activate },
+    { manifest: markdownManifest as unknown as DriverManifest, activate: markdownDriver.activate },
+    { manifest: appearanceManifest as unknown as DriverManifest, activate: appearanceDriver.activate },
+    { manifest: llmManifest as unknown as DriverManifest, activate: llmDriver.activate },
+    { manifest: agentManifest as unknown as DriverManifest, activate: agentDriver.activate },
+  ];
 }
 
 describe("bootDrivers", () => {
@@ -51,5 +75,16 @@ describe("bootDrivers", () => {
     const problems = await bootDrivers(kernel, [p], () => cancelled);
     cancelled = true;
     expect(problems).toEqual([]);
+  });
+
+  it("1-1 验收：boot 6 个真实驱动 → 无 problems、list() 长度 6、llm/agent 能力可见", async () => {
+    const kernel = testKernel();
+    const problems = await bootDrivers(kernel, realDrivers());
+    expect(problems).toEqual([]); // llm/agent 激活无报错（bootstrap 不报错）
+    expect(kernel.drivers.list()).toHaveLength(6);
+    expect(kernel.drivers.getState("minex.llm")).toBe("activated");
+    expect(kernel.drivers.getState("minex.agent")).toBe("activated");
+    expect(kernel.registry.get("llm.config", "default")?.value).toBeDefined();
+    expect(kernel.registry.get("agent", "default")?.value).toBeDefined();
   });
 });

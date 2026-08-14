@@ -72,6 +72,9 @@ export default {
     };
     ctx.register("llm.metrics", "default", metrics);
 
+    // 设置界面：设置页 DriverDetail 经 settingsView 贡献惰性加载（appearance 同模式）
+    ctx.register("settingsView", "minex.llm", { load: () => import("./settings-view.js") });
+
     return () => {};
   },
 };
