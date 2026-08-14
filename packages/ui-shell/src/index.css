@@ -1858,6 +1858,44 @@ button {
   color: var(--color-text-muted);
   font-size: 11px;
 }
+/* 3-5 通用图谱画布：source 切换器（下拉全部 graphSource 贡献） */
+.graph-source-switch {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+.graph-source-switch select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 12px;
+}
+/* 3-5 §一：选中节点 = accent ring（主题无 --color-accent，用 primary） */
+.graph-node.selected {
+  box-shadow: 0 0 0 3px var(--color-primary);
+}
+/* 3-5 会话设置弹窗只读大纲列表 */
+.session-outlines {
+  margin: 0;
+  padding-left: 16px;
+  max-height: 140px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.session-outlines li {
+  margin: 2px 0;
+}
+.session-outline-kind {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 10px;
+}
 .graph-outline {
   flex: 1;
   overflow-y: auto;

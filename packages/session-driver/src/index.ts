@@ -1,6 +1,6 @@
 import type { DriverContext } from "@minex/kernel";
 import { addLink, addNode, createSession, rebuildFromMarkdown, toMarkdown, validateSession, type Session } from "./session.js";
-import { addOutlineEntry, buildContext, deriveBranches, redoToolResult, revertAt } from "./session-tree.js";
+import { addOutlineEntry, buildContext, buildSessionGraph, deriveBranches, redoToolResult, revertAt } from "./session-tree.js";
 import { createSessionStore, type SessionFsOps, type SessionStore } from "./store.js";
 
 /**
@@ -58,13 +58,26 @@ export default {
       load: () => import("./overview-view.js"),
     });
 
-    // 面板：会话系（左栏；图谱树形画布 + 大纲 tab，P2/P3）——icon 映射 Network 由外壳 panel-icons 维护
-    ctx.register("panel", "mist.session.graph", {
-      driverId: "mist.session",
-      id: "mist.session.graph",
-      title: "会话系",
-      defaultDock: "left",
-      load: () => import("./graph-view.js"),
+    // 3-5：会话树图谱数据源（通用 Graph 画布消费；P3 推导不落盘，每次 getData 现取——
+    // 新建/删除会话后画布 minex:dataChanged 刷新即最新）；节点点击 → 打开会话对话模式
+    ctx.register("graphSource", "sessions", {
+      title: "会话树",
+      getData: async () => {
+        const index = await store.loadIndex();
+        const loaded = await Promise.all(index.sessions.map((e) => store.loadSession(e.id)));
+        const ok = loaded.filter((s): s is Session => Boolean(s));
+        const graph = buildSessionGraph(index.sessions, (id) => ok.find((s) => s.meta.id === id)?.meta);
+        return {
+          nodes: graph.nodes.map((n) => ({
+            id: n.id,
+            label: n.title,
+            group: n.parentId ? "子会话" : "根会话",
+            meta: { nodeCount: n.nodeCount, title: n.title },
+          })),
+          edges: graph.nodes.filter((n) => n.parentId).map((n) => ({ from: n.parentId!, to: n.id })),
+        };
+      },
+      onNodeClick: (node: { id: string }) => ctx.emit("minex:openSession", { id: node.id }),
     });
 
     // 会话 markdown 视图（.ses 主链渲染 + 保存；保存走 store 保证索引一致）

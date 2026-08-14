@@ -10,10 +10,12 @@ import appearanceDriver from "../../appearance-driver/src/index.js";
 import filesystemDriver from "../../filesystem-driver/src/index.js";
 import markdownDriver from "../../markdown-driver/src/index.js";
 import sessionDriver from "../../session-driver/src/index.js";
+import graphDriver from "../../graph-driver/src/index.js";
 import appearanceManifest from "../../appearance-driver/manifest.json";
 import filesystemManifest from "../../filesystem-driver/manifest.json";
 import markdownManifest from "../../markdown-driver/manifest.json";
 import sessionManifest from "../../session-driver/manifest.json";
+import graphManifest from "../../graph-driver/manifest.json";
 import { bootDrivers } from "../src/boot.js";
 import { collectCapabilities, type CapabilityContribution, type CapabilityOrigin } from "../src/capabilities.js";
 
@@ -27,6 +29,7 @@ function realDrivers(): DriverModule[] {
     { manifest: sessionManifest as unknown as DriverManifest, activate: sessionDriver.activate },
     { manifest: markdownManifest as unknown as DriverManifest, activate: markdownDriver.activate },
     { manifest: appearanceManifest as unknown as DriverManifest, activate: appearanceDriver.activate },
+    { manifest: graphManifest as unknown as DriverManifest, activate: graphDriver.activate },
   ];
 }
 
@@ -73,6 +76,7 @@ describe("collectCapabilities", () => {
       "mist.session",
       "minex.markdown",
       "minex.appearance",
+      "minex.graph",
     ]);
 
     // 恒等式主断言（裁决 #1）：输出 === queryAll() 按 driver 分组——任何新 type 自动进聚合
@@ -132,9 +136,10 @@ describe("collectCapabilities", () => {
     expect(session.contributions.map((c) => c.type)).toContain("session.md");
     expect(session.contributions.map((c) => c.type)).toContain("panel");
     expect(session.contributions.map((c) => c.type)).toContain("session.tree"); // 2-2 会话树能力
+    // 3-5：会话系面板（mist.session.graph）已迁移到通用 Graph 画布 → 删除；改为 graphSource「会话树」
     expect(session.contributions.map((c) => c.type).sort()).toEqual([
+      "graphSource",
       "panel",
-      "panel", // 2-R2 会话系面板（mist.session.graph）+ 会话总览面板
       "session",
       "session.md",
       "session.tree",
@@ -143,9 +148,15 @@ describe("collectCapabilities", () => {
       "default",
       "default",
       "default",
-      "mist.session.graph",
       "mist.session.overview",
+      "sessions",
     ]);
+
+    // 3-5：通用 Graph 驱动——graph 能力（default）+ 图谱面板（minex.graph.view）
+    const graph = caps.find((d) => d.driverId === "minex.graph")!;
+    expect(graph.contributions.map((c) => c.type).sort()).toEqual(["graph", "panel"]);
+    expect(graph.contributions.map((c) => c.id).sort()).toEqual(["default", "minex.graph.view"]);
+    expect(graph.contributions.every((c) => c.origin === "runtime")).toBe(true);
   });
 
   it("多驱动多 type 正常聚合（含目录外新 type：注册表驱动，无需目录）", () => {

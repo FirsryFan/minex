@@ -33,6 +33,8 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [settingsForm, setSettingsForm] = useState<SettingsForm | null>(null);
+  // 3-5：大纲查看（原会话系面板大纲 tab 并入）——设置弹窗内只读大纲列表
+  const [settingsOutlines, setSettingsOutlines] = useState<Array<{ id: string; kind: string; summary: string }>>([]);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!store) return;
@@ -96,6 +98,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     const s = await store.loadSession(id);
     if (!s) return;
     setSettingsId(id);
+    setSettingsOutlines((s.meta.outlines ?? []) as Array<{ id: string; kind: string; summary: string }>);
     setSettingsForm({
       tags: [...s.meta.tags],
       agent: s.activeAgents[0] ?? "minex.agent",
@@ -306,6 +309,23 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
                   placeholder="留空 = 不覆盖"
                   onChange={(e) => setSettingsForm((f) => (f ? { ...f, temperature: e.target.value } : f))}
                 />
+              </div>
+            </div>
+            <div className="field">
+              <label>大纲（3-5 只读）</label>
+              <div className="field-control">
+                {settingsOutlines.length === 0 ? (
+                  <span className="muted">（暂无大纲）</span>
+                ) : (
+                  <ul className="session-outlines">
+                    {settingsOutlines.map((o) => (
+                      <li key={o.id}>
+                        <span className="session-outline-kind">{o.kind}</span>
+                        <span>{o.summary}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>

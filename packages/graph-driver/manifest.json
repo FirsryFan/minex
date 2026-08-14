@@ -1,0 +1,14 @@
+{
+  "id": "minex.graph",
+  "name": "图谱",
+  "version": "0.1.0",
+  "minKernelVersion": "0.2.3",
+  "entry": "./dist/index.js",
+  "reloadable": true,
+  "hasWorkspace": false,
+  "source": "本地",
+  "description": "通用 Graph 驱动：内容无关可交互图（graphSource 提供数据）+ 图→agent 转译",
+  "tags": ["Graph"],
+  "kind": "driver",
+  "dependencies": []
+}

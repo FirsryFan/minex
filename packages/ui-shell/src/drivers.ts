@@ -15,6 +15,8 @@ import llmManifestRaw from "../../llm-driver/manifest.json";
 import llmModuleRaw from "../../llm-driver/src/index.js";
 import agentManifestRaw from "../../agent-driver/manifest.json";
 import agentModuleRaw from "../../agent-driver/src/index.js";
+import graphManifestRaw from "../../graph-driver/manifest.json";
+import graphModuleRaw from "../../graph-driver/src/index.js";
 
 const appearanceModule = appearanceModuleRaw as unknown as { activate: DriverModule["activate"] };
 const appearanceManifest = appearanceManifestRaw as unknown as DriverManifest;
@@ -28,6 +30,8 @@ const llmModule = llmModuleRaw as unknown as { activate: DriverModule["activate"
 const llmManifest = llmManifestRaw as unknown as DriverManifest;
 const agentModule = agentModuleRaw as unknown as { activate: DriverModule["activate"] };
 const agentManifest = agentManifestRaw as unknown as DriverManifest;
+const graphModule = graphModuleRaw as unknown as { activate: DriverModule["activate"] };
+const graphManifest = graphManifestRaw as unknown as DriverManifest;
 
 /**
  * v1：显式驱动清单（浏览器无法读文件系统，驱动经 Vite 打包加载）。
@@ -42,4 +46,6 @@ export const DRIVERS: DriverModule[] = [
   { manifest: { ...appearanceManifest, icon: appearanceIconUrl }, activate: appearanceModule.activate },
   { manifest: { ...llmManifest }, activate: llmModule.activate },
   { manifest: { ...agentManifest }, activate: agentModule.activate },
+  // 3-5：通用 Graph 驱动（graphSource 数据源在会话/agent 激活后注册，放最后）
+  { manifest: { ...graphManifest }, activate: graphModule.activate },
 ];

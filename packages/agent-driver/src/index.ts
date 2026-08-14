@@ -49,6 +49,56 @@ export default {
     // 3-1 工具插件化：注册 7 个真实工具（read_file/list_dir/write_file/render_markdown/list_sessions/load_session/save_session）
     registerRealTools(ctx);
 
+    // 3-5：graph_query 工具（Graph↔agent）——取 graphSource 数据 → translateGraph 转译文本（agent 读图）
+    const graphCap = ctx.get<{ translateGraph(data: { nodes: unknown[]; edges: unknown[] }): string }>("graph", "default");
+    if (graphCap) {
+      ctx.register("tool", "graph_query", {
+        name: "graph_query",
+        description:
+          "查询图谱数据（会话树 / 工作流等 graphSource 数据源），返回可读文本。source 参数 = 数据源标题（缺省第一个）。",
+        parameters: {
+          type: "object",
+          properties: { source: { type: "string", description: "数据源标题，如 会话树 / 工作流（缺省第一个）" } },
+        },
+        risk: "read",
+        async execute(args: Record<string, unknown>) {
+          const sources = ctx.query<{
+            title: string;
+            getData(): Promise<{ nodes: unknown[]; edges: unknown[] }>;
+          }>("graphSource");
+          const wanted = typeof args.source === "string" ? args.source : "";
+          const src = sources.find((s) => s.title === wanted) ?? sources[0];
+          if (!src) return "Error: 无可用图谱数据源";
+          const data = await src.getData();
+          return graphCap.translateGraph(data as never);
+        },
+      });
+    }
+
+    // 3-5：workflow 执行方法图数据源（Graph↔agent）——workflow 结构 → 步骤图（nodes→步骤节点、deps→边）
+    // v1：示例 workflow（无 workflow 存储库；阶段 4 接真实 workflow 数据）
+    ctx.register("graphSource", "workflow", {
+      title: "工作流",
+      getData: async () => {
+        const sample: Workflow = {
+          nodes: [
+            { id: "start", op: "echo", args: { text: "开始" } },
+            { id: "mid", op: "echo", args: { text: "处理" }, deps: ["start"] },
+            { id: "end", op: "echo", args: { text: "结束" }, deps: ["mid"] },
+          ],
+        };
+        return {
+          nodes: sample.nodes.map((n) => ({
+            id: n.id,
+            label: `${n.id}（${n.op}）`,
+            group: "步骤",
+            meta: { op: n.op },
+          })),
+          edges: sample.nodes.flatMap((n) => (n.deps ?? []).map((d) => ({ from: d, to: n.id }))),
+        };
+      },
+    });
+
     // 协议信封能力（parse/serialize/send/on，纯数据层）
     ctx.register("envelope", "default", {
       parse: parseEnvelope,

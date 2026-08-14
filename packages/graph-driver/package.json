@@ -1,0 +1,21 @@
+{
+  "name": "minex-graph-driver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minex 通用 Graph 驱动：内容无关可交互图（graphSource 数据源）+ 图→agent 转译",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@minex/kernel": "^0.2.3"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.1"
+  }
+}
