@@ -38,7 +38,7 @@ export interface RunAgentOptions {
    * 权限裁决 hook（3-2）：每个工具调用执行前调用；false → 结果文本「用户拒绝执行 <name>」（不抛错）。
    * 缺省不调用（全部放行，向后兼容）。
    */
-  canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
+  canRun?: (call: { name: string; risk: string; args?: Record<string, unknown> }) => Promise<boolean>;
   /** 3-3 模型参数（temperature 等）透传给 stream req；缺省不传（用 llm 驱动默认参数） */
   params?: Record<string, unknown>;
   /** 3-4 真停止：AbortController 全链——abort → stream 抛 AbortError → 产 done（不产 error 不记 metrics） */
@@ -245,9 +245,9 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
       }
       const tool = byName.get(call.name);
       if (!tool) return `Error: 未找到工具 ${call.name}`;
-      // 3-2 权限裁决：false → 拒绝文本（不抛错，结果照常回灌）
+      // 3-2 权限裁决：false → 拒绝文本（不抛错，结果照常回灌）。P1-2：带 args（ask 弹窗显示目标路径）
       if (opts.canRun) {
-        const ok = await opts.canRun({ name: call.name, risk: riskOf.get(call.name) ?? "read" });
+        const ok = await opts.canRun({ name: call.name, risk: riskOf.get(call.name) ?? "read", args });
         if (!ok) return `用户拒绝执行 ${call.name}`;
       }
       try {

@@ -38,6 +38,67 @@ function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
+/** 可执行工具形状（P1-4 resolveToolResult 用） */
+export interface ToolExecLike {
+  name: string;
+  risk?: "read" | "write" | "run";
+  execute(args: Record<string, unknown>): Promise<string>;
+}
+
+/**
+ * 工具结果解析（P1-4，checker minor 自动化）：read 类命中缓存直接复用（不重执行）；
+ * 未命中执行并写缓存；write/run 不缓存必执行。缓存 key = `${name}:${JSON.stringify(args)}`。
+ * 纯函数可测（除 execute 副作用外）。
+ */
+export async function resolveToolResult(
+  tool: ToolExecLike,
+  args: Record<string, unknown>,
+  cache: Map<string, string>,
+): Promise<string> {
+  const key = `${tool.name}:${JSON.stringify(args)}`;
+  if (tool.risk === "read" && cache.has(key)) return cache.get(key)!;
+  let output: string;
+  try {
+    output = await tool.execute(args);
+  } catch (err) {
+    output = `Error: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  if (tool.risk === "read") cache.set(key, output);
+  return output;
+}
+
+/** 递归搜索（P1-3 search_file）：文件名/内容包含关键词；深度上限 maxDepth 层；容错（readDir/readFile 失败跳过）。 */
+async function searchFiles(
+  fs: FsLike,
+  path: string,
+  keyword: string,
+  maxDepth: number,
+  out: string[],
+): Promise<void> {
+  if (maxDepth < 0) return;
+  let entries: Array<{ name: string; path: string; isDirectory: boolean }>;
+  try {
+    entries = await fs.readDir(path);
+  } catch {
+    return; // 容错：目录不可读跳过
+  }
+  const kw = keyword.toLowerCase();
+  for (const e of entries) {
+    if (e.isDirectory) {
+      await searchFiles(fs, e.path, keyword, maxDepth - 1, out);
+    } else if (e.name.toLowerCase().includes(kw)) {
+      out.push(`${e.path}（文件名命中）`);
+    } else {
+      try {
+        const content = await fs.readFile(e.path);
+        if (content.toLowerCase().includes(kw)) out.push(`${e.path}（内容命中）`);
+      } catch {
+        /* 容错：文件不可读跳过 */
+      }
+    }
+  }
+}
+
 /** 注册 7 个真实工具（中文描述 + JSON schema + risk）。依赖缺失时不注册对应工具（能力桥接防御）。 */
 export function registerRealTools(ctx: DriverContext): void {
   const fs = ctx.get<FsLike>("filesystem", "default");
@@ -91,7 +152,29 @@ export function registerRealTools(ctx: DriverContext): void {
           const path = str(args.path);
           if (!path) return "Error: 缺少 path 参数";
           await fs.writeFile(path, str(args.content));
+          // P1-2：写后统一 emit dataChanged——文件树/会话总览/图谱联动刷新
+          ctx.emit("minex:dataChanged", { driverId: "minex.filesystem" });
           return `已写入 ${path}`;
+        },
+      },
+      {
+        name: "search_file",
+        description: "递归搜索文件（按文件名或内容包含关键词；深度上限 3 层，容错）。",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "起始目录（缺省根目录）" },
+            keyword: { type: "string", description: "搜索关键词" },
+          },
+          required: ["keyword"],
+        },
+        risk: "read",
+        async execute(args) {
+          const keyword = str(args.keyword);
+          if (!keyword) return "Error: 缺少 keyword 参数";
+          const out: string[] = [];
+          await searchFiles(fs, str(args.path), keyword, 3, out); // P1-3：深度上限 3
+          return out.length > 0 ? out.join("\n") : "（未找到）";
         },
       },
     );

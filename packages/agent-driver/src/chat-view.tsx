@@ -23,6 +23,7 @@ import { buildOutlineEntry, shouldOutline, type OutlineEntryLike } from "./outli
 import { takePendingOpenSessionId } from "./session-open.js";
 import { QUICK_PHRASES, fillTemplate, type QuickPhrase } from "./quick-phrase.js";
 import { checkPermission, type PermissionMode, type ToolRisk } from "./permission.js";
+import { resolveToolResult, type ToolExecLike } from "./real-tools.js";
 import { BUILTIN_SKILLS, loadAgentProfiles, type AgentProfile } from "./agent-profile.js";
 
 const SYSTEM_PROMPT = "你是一个乐于助人的 AI 助手，用中文回答。";
@@ -37,8 +38,8 @@ interface AgentCap {
       onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
       /** 3-1：工具白名单（persona.tools 消费；缺省 = 全部） */
       toolWhitelist?: string[];
-      /** 3-2：权限裁决 hook（false → 拒绝文本回灌） */
-      canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
+      /** 3-2：权限裁决 hook（false → 拒绝文本回灌）；P1-2：call 带 args（ask 弹窗显示目标路径） */
+      canRun?: (call: { name: string; risk: string; args?: Record<string, unknown> }) => Promise<boolean>;
       /** 3-3：模型名 / 模型参数覆盖（会话级 settings 消费） */
       model?: string;
       params?: Record<string, unknown>;
@@ -179,10 +180,11 @@ export default function ChatView({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // 3-2 权限确认弹窗：canRun 裁决为 ask 时挂起，等待用户 允许/拒绝/记住此工具
+  // 3-2 权限确认弹窗：canRun 裁决为 ask 时挂起，等待用户 允许/拒绝/记住此工具。P1-2：带 args 显示目标路径
   const [permissionPrompt, setPermissionPrompt] = useState<{
     name: string;
     risk: string;
+    args?: Record<string, unknown>;
     resolve: (ok: boolean) => void;
   } | null>(null);
   // 3-3 计量：本轮回复用量（回复尾小字）+ 全局累计（metrics 读取节流用 tick）
@@ -403,9 +405,9 @@ export default function ChatView({
   }
 
   // —— 3-2 权限确认（Promise 桥接：canRun 为 ask 时挂起，等用户选择） ——
-  function askPermission(call: { name: string; risk: string }): Promise<boolean> {
+  function askPermission(call: { name: string; risk: string; args?: Record<string, unknown> }): Promise<boolean> {
     return new Promise((resolve) => {
-      setPermissionPrompt({ name: call.name, risk: call.risk, resolve });
+      setPermissionPrompt({ name: call.name, risk: call.risk, ...(call.args ? { args: call.args } : {}), resolve });
     });
   }
 
@@ -427,7 +429,7 @@ export default function ChatView({
   }
 
   /** 3-2 + F-A/F-C：canRun 裁决模式 = settings ?? profile.permissionMode ?? 全局默认 ?? auto */
-  function buildCanRun(): ((call: { name: string; risk: string }) => Promise<boolean>) | undefined {
+  function buildCanRun(): ((call: { name: string; risk: string; args?: Record<string, unknown> }) => Promise<boolean>) | undefined {
     const settings = session?.meta.settings;
     const mode: PermissionMode =
       settings?.permissionMode ?? profile?.permissionMode ?? loadAgentConfig(kernel)?.defaultPermissionMode ?? "auto";
@@ -776,18 +778,8 @@ export default function ChatView({
     const canRun = buildCanRun();
     if (canRun && !(await canRun({ name: toolName, risk: tool.risk ?? "read" }))) return; // 拒绝 → 不重做
     const args = (redoState.toolNode.input ?? {}) as Record<string, unknown>;
-    const cacheKey = `${toolName}:${JSON.stringify(args)}`;
-    let output: string;
-    if (tool.risk === "read" && toolCacheRef.current.has(cacheKey)) {
-      output = toolCacheRef.current.get(cacheKey)!; // F-B：缓存命中，不重执行
-    } else {
-      try {
-        output = await tool.execute(args);
-      } catch (err) {
-        output = `Error: ${err instanceof Error ? err.message : String(err)}`;
-      }
-      if (tool.risk === "read") toolCacheRef.current.set(cacheKey, output); // read 类写缓存（write/run 不缓存）
-    }
+    // P1-4：resolveToolResult——read 类命中缓存直接复用（不重执行）；write/run 必重跑
+    const output = await resolveToolResult(tool as ToolExecLike, args, toolCacheRef.current);
     const updated: SessionNodeLike = { ...redoState.toolNode, output, error: undefined };
     const s2 = tree.redoToolResult(session, updated, redoState.afterNodeId);
     // F-B：重做完成 → 显示「恢复旧分析」条（0 token 复用旧 thinking）
@@ -948,28 +940,47 @@ export default function ChatView({
 
       <div className="chat-messages">
         {messages.map((m, i) => {
-          // F-A 反馈 2：每条消息 = 一行 icon + 摘要（不展示整段 JSON/代码/正文）；双击弹卡片看全文
-          const cls = classifyMessage(m);
-          const isToolError = m.role === "tool" && (m.content ?? "").startsWith("Error");
+          // P0-1：user/assistant 全文渲染（给人读）；仅 tool 类折叠成一行 icon+摘要 + 双击卡片看全量
+          if (m.role === "tool") {
+            const cls = classifyMessage(m);
+            const isToolError = (m.content ?? "").startsWith("Error");
+            return (
+              <div
+                key={i}
+                className={`chat-msg chat-msg-line tool${m.error ? " error" : ""}`}
+                data-node-id={nodeIdByIndex[i]}
+                title="双击查看全文"
+                onDoubleClick={() => setDetailMsg(m)}
+              >
+                <span className="chat-msg-icon">🔧</span>
+                <span className={`chat-msg-summary${isToolError ? " error" : ""}`}>{cls.summary}</span>
+                {/* 3-4：tool_call 级撤回（删除该工具及其后节点，不整轮重跑）——保留在 tool 行内 */}
+                {isSessionMode && (
+                  <button
+                    className="chat-tool-revert"
+                    title="撤回到此（删除该工具及其后节点）"
+                    onClick={() => void revertTo(nodeIdByIndex[i])}
+                  >
+                    ↩
+                  </button>
+                )}
+              </div>
+            );
+          }
+          // P0-1：user/assistant 全文渲染（user pre-wrap / assistant markdown）
+          const html = m.role === "assistant" && md && m.content ? md.render(m.content) : null;
           return (
             <div
               key={i}
-              className={`chat-msg chat-msg-line ${m.role}${m.error ? " error" : ""}`}
+              className={`chat-msg ${m.role}${m.error ? " error" : ""}`}
               data-node-id={nodeIdByIndex[i]}
               title="双击查看全文"
               onDoubleClick={() => setDetailMsg(m)}
             >
-              <span className="chat-msg-icon">{msgIcon(cls)}</span>
-              <span className={`chat-msg-summary${isToolError ? " error" : ""}`}>{cls.summary}</span>
-              {/* 3-4：tool_call 级撤回（删除该工具及其后节点，不整轮重跑）——保留在 tool 行内 */}
-              {m.role === "tool" && isSessionMode && (
-                <button
-                  className="chat-tool-revert"
-                  title="撤回到此（删除该工具及其后节点）"
-                  onClick={() => void revertTo(nodeIdByIndex[i])}
-                >
-                  ↩
-                </button>
+              {html ? (
+                <div className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />
+              ) : (
+                <div className="chat-msg-text">{m.content}</div>
               )}
             </div>
           );
@@ -1144,7 +1155,11 @@ export default function ChatView({
         >
           <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
             <p>
-              工具 <strong>{permissionPrompt.name}</strong>（{permissionPrompt.risk}）需要你的许可才能执行。
+              执行 <strong>{permissionPrompt.name}</strong>
+              {typeof permissionPrompt.args?.path === "string" && permissionPrompt.args.path
+                ? ` → ${permissionPrompt.args.path}`
+                : ""}
+              （{permissionPrompt.risk}）需要你的许可。
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
               <button

@@ -278,14 +278,15 @@ describe("runAgent 权限裁决（3-2 canRun）", () => {
       risk: "write" as const,
       execute: async () => "wrote",
     };
-    const seen: Array<{ name: string; risk: string }> = [];
-    const canRun = async (call: { name: string; risk: string }): Promise<boolean> => {
+    const seen: Array<{ name: string; risk: string; args?: Record<string, unknown> }> = [];
+    const canRun = async (call: { name: string; risk: string; args?: Record<string, unknown> }): Promise<boolean> => {
       seen.push(call);
       return false;
     };
     const events = runAgent(makeDeps(stream, [writeTool]), { systemPrompt: "s", history: [], canRun });
     await collect(events);
-    expect(seen).toEqual([{ name: "write_file", risk: "write" }]); // risk 表正确传递
+    // P1-2：canRun 带 args（权限弹窗显示目标路径用）
+    expect(seen).toEqual([{ name: "write_file", risk: "write", args: {} }]);
     const toolMsg = secondRoundMessages.find((m) => m.role === "tool");
     expect(toolMsg?.content).toBe("用户拒绝执行 write_file");
   });
@@ -303,7 +304,7 @@ describe("runAgent 权限裁决（3-2 canRun）", () => {
       }
       yield { delta: "", done: true, usage: { promptTokens: 10, completionTokens: 1, cachedTokens: 0 } };
     }
-    const seen: Array<{ name: string; risk: string }> = [];
+    const seen: Array<{ name: string; risk: string; args?: Record<string, unknown> }> = [];
     const events = runAgent(makeDeps(stream), {
       systemPrompt: "s",
       history: [],
@@ -313,7 +314,7 @@ describe("runAgent 权限裁决（3-2 canRun）", () => {
       },
     });
     await collect(events);
-    expect(seen).toEqual([{ name: "echo", risk: "read" }]); // 缺省 risk = read
+    expect(seen).toEqual([{ name: "echo", risk: "read", args: {} }]); // 缺省 risk = read
     expect(secondRoundMessages.find((m) => m.role === "tool")?.content).toBe("ok");
   });
 });

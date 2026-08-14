@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DriverContext } from "@minex/kernel";
-import { registerRealTools } from "../src/real-tools.js";
+import { registerRealTools, resolveToolResult } from "../src/real-tools.js";
 import type { AgentTool } from "../src/tool.js";
 
 /** 能力桩（filesystem / session / markdown），按注册的 get 分发 */
@@ -68,7 +68,7 @@ function toolsOf(registered: Map<string, unknown>): Map<string, AgentTool> {
 }
 
 describe("registerRealTools（3-1 工具插件化）", () => {
-  it("注册 7 个真实工具（无 echo），risk 标注正确", () => {
+  it("注册 8 个真实工具（无 echo），risk 标注正确", () => {
     const { ctx, registered } = makeCtx({});
     registerRealTools(ctx);
     const tools = toolsOf(registered);
@@ -79,12 +79,14 @@ describe("registerRealTools（3-1 工具插件化）", () => {
       "read_file",
       "render_markdown",
       "save_session",
+      "search_file", // P1-3
       "write_file",
     ]);
     expect(tools.has("echo")).toBe(false);
     expect(tools.get("read_file")?.risk).toBe("read");
     expect(tools.get("write_file")?.risk).toBe("write");
     expect(tools.get("save_session")?.risk).toBe("write");
+    expect(tools.get("search_file")?.risk).toBe("read");
     expect(tools.get("list_dir")?.risk).toBe("read");
   });
 
@@ -153,5 +155,85 @@ describe("registerRealTools（3-1 工具插件化）", () => {
     const tools = toolsOf(registered);
     expect(await tools.get("list_dir")!.execute({})).toBe("（空目录）");
     expect(await tools.get("list_sessions")!.execute({})).toBe("（暂无会话）");
+  });
+
+  it("search_file（P1-3）：文件名/内容命中 + 无命中占位", async () => {
+    const fs = {
+      readDir: async (p: string) => {
+        if (p === "") return [{ name: "a.md", path: "a.md", isDirectory: false }, { name: "sub", path: "sub", isDirectory: true }];
+        if (p === "sub") return [{ name: "b.txt", path: "sub/b.txt", isDirectory: false }];
+        return [];
+      },
+      readFile: async (p: string) => (p === "a.md" ? "hello 关键词 world" : "no match"),
+    };
+    const { ctx, registered } = makeCtx({ fs });
+    registerRealTools(ctx);
+    const tool = toolsOf(registered).get("search_file")!;
+    // 文件名命中（sub/b.txt 含 "b"）+ 内容命中（a.md 含关键词）
+    expect(await tool.execute({ keyword: "关键词" })).toBe("a.md（内容命中）");
+    expect(await tool.execute({ keyword: "b" })).toContain("sub/b.txt（文件名命中）");
+    expect(await tool.execute({ keyword: "不存在词" })).toBe("（未找到）");
+    expect(await tool.execute({})).toBe("Error: 缺少 keyword 参数");
+  });
+
+  it("search_file（P1-3）：深度上限 3 层截断——第 4 层目录不扫描", async () => {
+    const seen: string[] = [];
+    const fs = {
+      readDir: async (p: string) => {
+        seen.push(p);
+        if (p === "" || p === "d1" || p === "d1/d2" || p === "d1/d2/d3") {
+          const next = p === "" ? "d1" : `${p}/d${p.split("/").length + 1}`;
+          return [{ name: next.split("/").pop()!, path: next, isDirectory: true }];
+        }
+        return [{ name: "hit.txt", path: `${p}/hit.txt`, isDirectory: false }];
+      },
+      readFile: async () => "",
+    };
+    const { ctx, registered } = makeCtx({ fs });
+    registerRealTools(ctx);
+    const tool = toolsOf(registered).get("search_file")!;
+    await tool.execute({ keyword: "hit" });
+    // 深度上限 3：d1(1)/d2(2)/d3(3) 目录会进入，d1/d2/d3/d4(4) 不进入（readDir 不被调用）
+    expect(seen.includes("d1/d2/d3/d4")).toBe(false);
+    expect(seen.includes("d1/d2/d3")).toBe(true);
+  });
+});
+
+describe("resolveToolResult（P1-4 read 缓存自动化）", () => {
+  it("read 类命中缓存：复用不重执行（execute 只调一次）", async () => {
+    let calls = 0;
+    const tool = { name: "read_file", risk: "read" as const, execute: async () => `内容${++calls}` };
+    const cache = new Map<string, string>();
+    const out1 = await resolveToolResult(tool, { path: "a.md" }, cache);
+    const out2 = await resolveToolResult(tool, { path: "a.md" }, cache);
+    expect(out1).toBe("内容1");
+    expect(out2).toBe("内容1"); // 命中缓存，execute 未再调用
+    expect(calls).toBe(1);
+    expect(cache.has("read_file:{\"path\":\"a.md\"}")).toBe(true);
+  });
+
+  it("read 类未命中：执行并写缓存；不同 args 各自缓存", async () => {
+    const tool = { name: "read_file", risk: "read" as const, execute: async (a: Record<string, unknown>) => `r:${String(a.path)}` };
+    const cache = new Map<string, string>();
+    expect(await resolveToolResult(tool, { path: "a" }, cache)).toBe("r:a");
+    expect(await resolveToolResult(tool, { path: "b" }, cache)).toBe("r:b");
+    expect(cache.size).toBe(2);
+  });
+
+  it("write 类不缓存：同 args 二次调用 execute 两次、缓存不写", async () => {
+    let calls = 0;
+    const tool = { name: "write_file", risk: "write" as const, execute: async () => `w${++calls}` };
+    const cache = new Map<string, string>();
+    expect(await resolveToolResult(tool, { path: "a" }, cache)).toBe("w1");
+    expect(await resolveToolResult(tool, { path: "a" }, cache)).toBe("w2");
+    expect(calls).toBe(2);
+    expect(cache.size).toBe(0);
+  });
+
+  it("execute 抛错 → Error 文本（不崩）；risk 缺省（undefined）不缓存", async () => {
+    const tool = { name: "x", execute: async () => Promise.reject(new Error("boom")) };
+    const cache = new Map<string, string>();
+    expect(await resolveToolResult(tool, {}, cache)).toBe("Error: boom");
+    expect(cache.size).toBe(0); // risk 缺省 ≠ "read" → 不写缓存（read 判定在 riskOf 层）
   });
 });
