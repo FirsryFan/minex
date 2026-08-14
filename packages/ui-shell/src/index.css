@@ -1399,6 +1399,132 @@ button {
   word-break: break-all;
   color: var(--color-text-muted);
 }
+/* —— F-A 反馈 2：消息一行 icon+摘要（双击弹卡片全文） —— */
+.chat-msg-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+}
+.chat-msg-line:hover {
+  background: var(--color-hover);
+}
+.chat-msg-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+.chat-msg-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-msg-summary.error {
+  color: var(--color-danger);
+}
+.chat-msg-card {
+  max-width: 560px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.chat-msg-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+}
+.chat-msg-card-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-msg-card-body {
+  padding: 12px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+/* F-A 反馈 4：会话总览 agent/persona 过滤下拉 */
+.session-filter {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 12px;
+  max-width: 120px;
+}
+/* F-A 反馈 4：Agent 配置面板（persona 画廊 + 工具白名单 + 默认配置） */
+.agent-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--spacing-sm);
+  overflow-y: auto;
+}
+.agent-config-persona {
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+}
+.agent-config-persona-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-config-persona-head .btn-ghost {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+.agent-config-desc {
+  font-size: 12px;
+}
+.agent-config-prompt summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.agent-config-prompt pre {
+  margin: 4px 0 0;
+  padding: 6px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--color-hover);
+  border-radius: var(--radius-sm);
+}
+.agent-config-tools {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.agent-config-tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  margin-top: 4px;
+}
+.agent-config-tool {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
 .chat-input-row {
   display: flex;
   gap: 8px;

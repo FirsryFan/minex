@@ -3,6 +3,8 @@ import type { MinexKernel } from "@minex/kernel";
 import {
   AUTO_SAVE_THRESHOLD,
   buildChildSystemPrompt,
+  classifyMessage,
+  loadAgentConfig,
   loadChatHistory,
   mapContextToMessages,
   newId,
@@ -10,7 +12,9 @@ import {
   saveChatHistory,
   sessionToChatMessages,
   shouldAutoSave,
+  type AgentConfig,
   type ChatMessageView,
+  type MessageClass,
   type SessionLike,
   type SessionLinkLike,
   type SessionNodeLike,
@@ -195,6 +199,41 @@ export default function ChatView({
     toolNode: SessionNodeLike;
     afterNodeId: string;
   } | null>(null);
+  // F-A 反馈 2：双击消息行 → 卡片显示全文
+  const [detailMsg, setDetailMsg] = useState<ChatMessageView | null>(null);
+  // F-A 反馈 4：agent 配置（内核 storage minex.agent/agentConfig，缺省回退现状）
+  const agentConfig = loadAgentConfig(kernel);
+
+  /** F-A：消息行 icon（tool 🔧 / code </> / think 💭 / user 💬） */
+  function msgIcon(cls: MessageClass): string {
+    return cls.kind === "tool" ? "🔧" : cls.kind === "code" ? "</>" : cls.kind === "think" ? "💭" : "💬";
+  }
+
+  /** F-A：persona 工具白名单 = agentConfig.personaTools[personaId]（null=全部）?? persona 自带 tools */
+  function personaToolsOf(): string[] | undefined {
+    const cfg = loadAgentConfig(kernel)?.personaTools?.[personaId];
+    return cfg !== undefined ? (cfg ?? undefined) : currentPersona?.tools;
+  }
+
+  // F-A 反馈 4：Agent 配置面板「设为当前会话 persona」→ 本聊天实例切换
+  useEffect(() => {
+    return kernel.events.on("minex:setPersona", (payload) => {
+      const p = payload as { personaId?: string } | undefined;
+      if (!p?.personaId) return;
+      setPersonaId(p.personaId);
+      setSession((s) => (s ? { ...s, meta: { ...s.meta, personaId: p.personaId! } } : s));
+    });
+  }, [kernel]);
+
+  // F-A 反馈 2：双击卡片 Esc 关闭
+  useEffect(() => {
+    if (!detailMsg) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setDetailMsg(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detailMsg]);
   // 2-3：框选状态 / 子对话上下文 / 上下文面板 / 自动继承 / 已勾选
   const chatViewRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<SelectionState | null>(null);
@@ -367,10 +406,11 @@ export default function ChatView({
     await store.saveSession(next).catch(() => {});
   }
 
-  /** 3-2：按会话设置构建 canRun 裁决（auto 全放行；ask 弹确认；记住 = 写 toolPermissions） */
+  /** 3-2 + F-A 反馈 4：按会话设置/agent 默认配置构建 canRun 裁决（缺省 auto 全放行；ask 弹确认） */
   function buildCanRun(): ((call: { name: string; risk: string }) => Promise<boolean>) | undefined {
     const settings = session?.meta.settings;
-    const mode: PermissionMode = settings?.permissionMode ?? "auto";
+    const mode: PermissionMode =
+      settings?.permissionMode ?? loadAgentConfig(kernel)?.defaultPermissionMode ?? "auto";
     const overrides = settings?.toolPermissions;
     return async (call) => {
       if (checkPermission({ name: call.name, risk: call.risk as ToolRisk }, mode, overrides) === "allow") return true;
@@ -387,8 +427,9 @@ export default function ChatView({
     const history = [...messages, userMsg]
       .filter((m) => (m.role === "user" || m.role === "assistant") && !m.error)
       .map((m) => ({ role: m.role, content: m.content }));
-    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun；3-4：signal + 插入指令
-    const personaTools = currentPersona?.tools;
+    // 3-1 + F-A：persona 工具白名单（agentConfig.personaTools ?? persona.tools；缺省 = 全部工具）；
+    // 3-2：权限裁决 canRun；3-4：signal + 插入指令
+    const personaTools = personaToolsOf();
     const canRun = buildCanRun();
     const runOpts = {
       ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
@@ -445,8 +486,13 @@ export default function ChatView({
       ...extraContext.map((c) => ({ role: "user" as const, content: c.content })),
       ...mapContextToMessages(tree.buildContext(s2, branchId), s2),
     ];
-    // 2-R1 + R-A 反馈 8：基础 prompt 优先级 = 会话级 settings.systemPrompt ?? persona.systemPrompt ?? 默认常量
-    const basePrompt = session.meta.settings?.systemPrompt ?? currentPersona?.systemPrompt ?? SYSTEM_PROMPT;
+    // 2-R1 + R-A 反馈 8 + F-A 反馈 4：基础 prompt 优先级 =
+    // 会话级 settings.systemPrompt ?? persona.systemPrompt ?? agent 默认 systemPrompt ?? 常量
+    const basePrompt =
+      session.meta.settings?.systemPrompt ??
+      currentPersona?.systemPrompt ??
+      loadAgentConfig(kernel)?.defaultSystemPrompt ??
+      SYSTEM_PROMPT;
     // G-B 反馈 7：自动继承候选 = 当前来源会话大纲（迁移面板可换来源）
     const systemPrompt = buildChildSystemPrompt(basePrompt, autoInherit, sourceOutlines);
 
@@ -466,8 +512,9 @@ export default function ChatView({
     const toolCalls: Array<{ name: string; args: unknown }> = [];
     let errorMsg: string | undefined;
     setReplyUsage(null);
-    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun；3-3：会话级 model/temperature
-    const personaTools = currentPersona?.tools;
+    // 3-1 + F-A：persona 工具白名单（agentConfig.personaTools ?? persona.tools）；3-2：canRun；
+    // 3-3：会话级 model/temperature；3-4：signal + 插入指令
+    const personaTools = personaToolsOf();
     const canRun = buildCanRun();
     const settings = session.meta.settings;
     const runOpts = {
@@ -826,38 +873,28 @@ export default function ChatView({
 
       <div className="chat-messages">
         {messages.map((m, i) => {
-          if (m.role === "tool") {
-            return (
-              <div key={i} className="chat-msg tool" data-node-id={nodeIdByIndex[i]}>
-                <div className="chat-tool-name">
-                  <span>调用工具 {m.toolName ?? "?"}</span>
-                  {/* 3-4：tool_call 级撤回（删除该工具及其后节点，不整轮重跑） */}
-                  {isSessionMode && (
-                    <button
-                      className="chat-tool-revert"
-                      title="撤回到此（删除该工具及其后节点）"
-                      onClick={() => void revertTo(nodeIdByIndex[i])}
-                    >
-                      ↩
-                    </button>
-                  )}
-                </div>
-                {m.args !== undefined && <pre className="chat-tool-args">{JSON.stringify(m.args, null, 2)}</pre>}
-              </div>
-            );
-          }
-          // assistant 内容用 markdown 渲染（dangerouslySetInnerHTML，参考 markdown workspace preview）
-          const html = m.role === "assistant" && md && m.content ? md.render(m.content) : null;
+          // F-A 反馈 2：每条消息 = 一行 icon + 摘要（不展示整段 JSON/代码/正文）；双击弹卡片看全文
+          const cls = classifyMessage(m);
+          const isToolError = m.role === "tool" && (m.content ?? "").startsWith("Error");
           return (
             <div
               key={i}
-              className={`chat-msg ${m.role}${m.error ? " error" : ""}`}
+              className={`chat-msg chat-msg-line ${m.role}${m.error ? " error" : ""}`}
               data-node-id={nodeIdByIndex[i]}
+              title="双击查看全文"
+              onDoubleClick={() => setDetailMsg(m)}
             >
-              {html ? (
-                <div className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />
-              ) : (
-                <div>{m.content}</div>
+              <span className="chat-msg-icon">{msgIcon(cls)}</span>
+              <span className={`chat-msg-summary${isToolError ? " error" : ""}`}>{cls.summary}</span>
+              {/* 3-4：tool_call 级撤回（删除该工具及其后节点，不整轮重跑）——保留在 tool 行内 */}
+              {m.role === "tool" && isSessionMode && (
+                <button
+                  className="chat-tool-revert"
+                  title="撤回到此（删除该工具及其后节点）"
+                  onClick={() => void revertTo(nodeIdByIndex[i])}
+                >
+                  ↩
+                </button>
               )}
             </div>
           );
@@ -869,6 +906,35 @@ export default function ChatView({
           </div>
         )}
       </div>
+
+      {/* F-A 反馈 2：双击消息 → 卡片显示全文（tool = 完整 args JSON + 输出；assistant = markdown 渲染） */}
+      {detailMsg && (
+        <div className="floating-mask" onClick={() => setDetailMsg(null)}>
+          <div className="chat-msg-card" onClick={(e) => e.stopPropagation()}>
+            <div className="chat-msg-card-head">
+              <span className="chat-msg-icon">{msgIcon(classifyMessage(detailMsg))}</span>
+              <span className="chat-msg-card-summary">{classifyMessage(detailMsg).summary}</span>
+              <button className="icon-btn" title="关闭" onClick={() => setDetailMsg(null)}>
+                ×
+              </button>
+            </div>
+            <div className="chat-msg-card-body">
+              {detailMsg.role === "tool" ? (
+                <>
+                  {detailMsg.args !== undefined && (
+                    <pre className="chat-tool-args">{JSON.stringify(detailMsg.args, null, 2)}</pre>
+                  )}
+                  {detailMsg.content !== "" && <div className="muted">输出：{detailMsg.content}</div>}
+                </>
+              ) : detailMsg.role === "assistant" && md && detailMsg.content ? (
+                <div className="markdown-body" dangerouslySetInnerHTML={{ __html: md.render(detailMsg.content) }} />
+              ) : (
+                <div style={{ whiteSpace: "pre-wrap" }}>{detailMsg.content}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3-4：被撤区重做条（v1 redo 栈内存态，刷新即失）——仅重跑该工具，不重新生成后续 thinking */}
       {redoState && (

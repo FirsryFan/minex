@@ -4,6 +4,7 @@ import {
   AUTO_SAVE_THRESHOLD,
   buildChildSystemPrompt,
   chatMessagesToSession,
+  classifyMessage,
   loadChatHistory,
   mapContextToMessages,
   newId,
@@ -275,5 +276,46 @@ describe("mapContextToMessages（3-6 history 角色增强）", () => {
 
   it("空 contextItems → 空数组", () => {
     expect(mapContextToMessages([], session)).toEqual([]);
+  });
+});
+
+describe("classifyMessage（F-A 反馈 2 消息图标化）", () => {
+  it("tool 带参 → 扳手 + 工具名 + 首参键=值（截断 40 字）", () => {
+    const c = classifyMessage({
+      role: "tool",
+      content: "ok",
+      toolName: "read_file",
+      args: { path: "笔记.md", offset: 3 },
+    });
+    expect(c).toEqual({ kind: "tool", summary: "调用工具 read_file（path=笔记.md）" });
+  });
+
+  it("tool 无参 → 只工具名；超长参截断", () => {
+    expect(classifyMessage({ role: "tool", content: "", toolName: "list_dir" })).toEqual({
+      kind: "tool",
+      summary: "调用工具 list_dir",
+    });
+    const long = "x".repeat(80);
+    const c = classifyMessage({ role: "tool", content: "", toolName: "write_file", args: { content: long } });
+    expect(c.summary).toBe(`调用工具 write_file（content=${"x".repeat(32)}）`); // 首参 "content=8字+32x" 截断 40 字
+  });
+
+  it("assistant 含代码块 → code + 首行截断 60 字", () => {
+    const c = classifyMessage({ role: "assistant", content: "给你一段代码：\n```ts\nconst a = 1;\n```\n完毕" });
+    expect(c.kind).toBe("code");
+    expect(c.summary).toBe("给你一段代码：");
+  });
+
+  it("assistant 普通回复 → think + 首行截断 60 字；user → 首行截断 60 字", () => {
+    expect(classifyMessage({ role: "assistant", content: "这是回答\n第二行" })).toEqual({
+      kind: "think",
+      summary: "这是回答",
+    });
+    expect(classifyMessage({ role: "user", content: "你好\n世界" })).toEqual({ kind: "user", summary: "你好" });
+  });
+
+  it("空内容 → 空摘要（防御）", () => {
+    expect(classifyMessage({ role: "assistant", content: "" })).toEqual({ kind: "think", summary: "" });
+    expect(classifyMessage({ role: "user", content: "" })).toEqual({ kind: "user", summary: "" });
   });
 });

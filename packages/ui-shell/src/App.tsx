@@ -61,6 +61,13 @@ function makeInstance(
   };
 }
 
+/** 左栏面板可见性（F-A 反馈 5）：会话域面板（mist.session）仅在 agent 驱动下显示——「会话只在 agent 驱动下存在」；
+ *  其余面板仅其所属驱动激活时显示；右栏/浮窗已拆放面板不受影响（P2 不回归）。 */
+function leftPanelVisible(p: PanelContribution, activeDriverId: string | null): boolean {
+  if (p.driverId === "mist.session") return activeDriverId === "minex.agent"; // 会话总览/图谱同域
+  return p.driverId === activeDriverId;
+}
+
 /**
  * 外壳（S3 面板化 + S4 多开）：驱动贡献「面板」，外壳按运行时 dockState 渲染停靠面板（左/右/主区）+ 浮窗层。
  * - 工作视图多开：每实例独立布局状态，view-strip 切换/新建/关闭
@@ -392,7 +399,8 @@ function WorkspaceInstance({
 
   // 面板运行时停靠状态（defaultDock 回退；"hidden" 不渲染）
   const dockOf = (p: PanelContribution): DockState => instance.dockState[p.id] ?? p.defaultDock;
-  const leftPanels = panels.filter((p) => dockOf(p) === "left");
+  // F-A 反馈 5：左栏按 activeDriverId 过滤（会话域面板仅 agent 驱动显示；右栏/浮窗已拆放面板不受影响）
+  const leftPanels = panels.filter((p) => dockOf(p) === "left" && leftPanelVisible(p, instance.activeDriverId));
   const rightPanels = panels.filter((p) => dockOf(p) === "right");
   const mainPanel = panels.find((p) => dockOf(p) === "main" && p.driverId === instance.activeDriverId);
   const floatingAll = panels.filter((p) => dockOf(p) === "floating");

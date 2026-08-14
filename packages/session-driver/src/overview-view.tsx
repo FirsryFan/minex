@@ -35,6 +35,10 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
   const [settingsForm, setSettingsForm] = useState<SettingsForm | null>(null);
   // 3-5：大纲查看（原会话系面板大纲 tab 并入）——设置弹窗内只读大纲列表
   const [settingsOutlines, setSettingsOutlines] = useState<Array<{ id: string; kind: string; summary: string }>>([]);
+  // F-A 反馈 4：按 agent/persona 过滤（逐个 loadSession 查 activeAgents/personaId，v1 零模型改动）
+  const [agentFilter, setAgentFilter] = useState("");
+  const [personaFilter, setPersonaFilter] = useState("");
+  const [filteredExtra, setFilteredExtra] = useState<SessionIndexEntry[] | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!store) return;
@@ -65,6 +69,31 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
       return e.title.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q));
     })
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  // F-A 反馈 4：agent/persona 过滤为异步阶段（逐个 loadSession 查字段；量大后 index 扩展注释）
+  useEffect(() => {
+    let alive = true;
+    if (!agentFilter && !personaFilter) {
+      setFilteredExtra(filtered);
+      return;
+    }
+    void (async () => {
+      const out: SessionIndexEntry[] = [];
+      for (const e of filtered) {
+        const s = await store?.loadSession(e.id);
+        if (!s) continue;
+        if (agentFilter && s.activeAgents[0] !== agentFilter) continue;
+        if (personaFilter && s.meta.personaId !== personaFilter) continue;
+        out.push(e);
+      }
+      if (alive) setFilteredExtra(out);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [filtered, agentFilter, personaFilter, store]);
+
+  const shown = filteredExtra ?? filtered;
 
   const agentOptions = kernel.drivers
     .list()
@@ -156,6 +185,29 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {/* F-A 反馈 4：按 agent / persona 过滤（与搜索/标签叠加 AND） */}
+        <select
+          className="session-filter"
+          title="按 agent 过滤"
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+        >
+          <option value="">全部 agent</option>
+          {agentOptions.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+        <select
+          className="session-filter"
+          title="按 persona 过滤"
+          value={personaFilter}
+          onChange={(e) => setPersonaFilter(e.target.value)}
+        >
+          <option value="">全部 persona</option>
+          {personaOptions.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
         <button className="btn session-new" title="新建会话" onClick={() => void createNew()}>＋</button>
       </div>
       {tags.length > 0 && (
@@ -169,8 +221,8 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
         </div>
       )}
       <div className="session-list">
-        {filtered.length === 0 && <div className="muted session-empty">（无会话）</div>}
-        {filtered.map((e) => (
+        {shown.length === 0 && <div className="muted session-empty">（无会话）</div>}
+        {shown.map((e) => (
           <div key={e.id} className="session-item" onClick={() => openChat(e.id)} title={`对话：${e.type} · ${e.nodeCount} 节点 · ${e.updatedAt}`}>
             <div className="session-item-title">{e.title}</div>
             <div className="session-item-meta muted">{e.tags.length ? e.tags.join(" · ") : e.type} · {e.nodeCount} 节点</div>

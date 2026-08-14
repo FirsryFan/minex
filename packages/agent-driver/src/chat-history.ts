@@ -82,6 +82,24 @@ export interface SessionStoreLike {
   saveSession(s: SessionLike): Promise<void>;
 }
 
+/** agent 配置（F-A 反馈 4，内核 storage `minex.agent/agentConfig`）：persona 工具白名单 + 默认权限/默认 prompt */
+export interface AgentConfig {
+  /** personaId → 工具白名单；null = 全部工具；缺省（无条目）= 用 persona 自带 tools */
+  personaTools?: Record<string, string[] | null>;
+  /** 默认权限模式（会话 settings.permissionMode 缺省时回退；再回退 "auto"） */
+  defaultPermissionMode?: "auto" | "edit" | "manual";
+  /** 默认 systemPrompt（会话 settings.systemPrompt / persona.systemPrompt 均无时回退） */
+  defaultSystemPrompt?: string;
+}
+
+export function loadAgentConfig(kernel: ChatHistoryKernel): AgentConfig | undefined {
+  return kernel.storage.namespace("minex.agent").get<AgentConfig>("agentConfig");
+}
+
+export function saveAgentConfig(kernel: ChatHistoryKernel, config: AgentConfig): void {
+  kernel.storage.namespace("minex.agent").set("agentConfig", config);
+}
+
 function chatKey(instanceId: number | undefined): string {
   return `chatHistory@${instanceId ?? 0}`;
 }
@@ -107,6 +125,37 @@ export function buildChildSystemPrompt(
 
 /** 自动保存阈值（P5 拍板：子对话 ≥3 轮自动保存；v1 常量，不做 UI 配置） */
 export const AUTO_SAVE_THRESHOLD = 3;
+
+/** 消息分类结果（F-A 反馈 2：一行 icon + 摘要，不展示整段 JSON/代码） */
+export interface MessageClass {
+  kind: "tool" | "code" | "think" | "user";
+  summary: string;
+}
+
+/**
+ * 消息分类（F-A 反馈 2，纯函数）：tool→扳手（工具名 + 首参键=值截断 40 字）；
+ * assistant 含 ``` → code（编写代码，首行截断 60 字）；assistant 其他 → think（首行截断 60 字）；
+ * user → 首行截断 60 字。空内容 → 空摘要。
+ */
+export function classifyMessage(m: ChatMessageView): MessageClass {
+  if (m.role === "tool") {
+    const args = m.args as Record<string, unknown> | undefined;
+    const first =
+      args && typeof args === "object" && !Array.isArray(args)
+        ? Object.entries(args)
+            .slice(0, 1)
+            .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)[0]
+        : "";
+    return { kind: "tool", summary: `调用工具 ${m.toolName ?? "?"}${first ? `（${first.slice(0, 40)}）` : ""}` };
+  }
+  const content = m.content ?? "";
+  if (m.role === "user") {
+    return { kind: "user", summary: (content.split("\n")[0] || "").slice(0, 60) };
+  }
+  const firstLine = (content.split("\n")[0] || "").slice(0, 60);
+  if (content.includes("```")) return { kind: "code", summary: firstLine };
+  return { kind: "think", summary: firstLine };
+}
 
 /**
  * 3-6：buildContext 产物 → LLM history 消息（按 ref 查节点 kind 映射 role，不动 buildContext）。

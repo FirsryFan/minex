@@ -178,6 +178,15 @@ export default {
       load: () => import("./chat-view.js"),
     });
 
+    // F-A 反馈 4：Agent 配置面板（persona 画廊 + 工具白名单 + 默认权限模式 + 默认 systemPrompt）
+    ctx.register("panel", "minex.agent.config", {
+      driverId: "minex.agent",
+      id: "minex.agent.config",
+      title: "Agent",
+      defaultDock: "left",
+      load: () => import("./config-view.js"),
+    });
+
     // 内置 persona（P1）：注册为 role 贡献，浮窗选择器 / agent 自主候选池（autoAdopt 阶段 3）消费
     for (const p of BUILTIN_PERSONAS) {
       ctx.register("role", p.id, p);
