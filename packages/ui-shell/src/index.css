@@ -543,12 +543,16 @@ button {
 .confirm-box {
   margin: auto;
   width: fit-content;
-  min-width: 320px;
+  min-width: 360px;
   max-width: var(--floating-max-width);
   background: var(--color-card);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-floating);
   padding: var(--spacing-lg);
+}
+/* P0-2：会话设置弹窗加宽（字段多） */
+.session-settings {
+  min-width: 480px;
 }
 
 /* 驱动详情头部：固定大图居左 + 介绍居右 */
@@ -1488,7 +1492,39 @@ button {
   background: var(--color-card);
   box-shadow: var(--shadow-card);
 }
-/* F-D 反馈 3：Agent 配置中心（两栏：左 profile 列表 + 右全字段表单） */
+/* P0-3：Agent 列表面板（左栏） */
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+.agent-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.agent-list-del {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.agent-list-del:hover {
+  color: var(--color-danger);
+}
+.agent-config-form-solo {
+  padding: 12px;
+  overflow-y: auto;
+}
+.agent-config-form-solo .agent-config-form-head {
+  margin-bottom: 10px;
+}
 .agent-config-center {
   display: flex;
   flex: 1;

@@ -188,6 +188,15 @@ export default {
       load: () => import("./config-view.js"),
     });
 
+    // P0-3 反馈 3：Agent 列表面板（左栏，agent 驱动显示）——列表选中 emit minex:selectAgentProfile 联动主区表单
+    ctx.register("panel", "minex.agent.list", {
+      driverId: "minex.agent",
+      id: "minex.agent.list",
+      title: "Agents",
+      defaultDock: "left",
+      load: () => import("./agent-list-view.js"),
+    });
+
     // 内置 persona（P1）：注册为 role 贡献，浮窗选择器 / agent 自主候选池（autoAdopt 阶段 3）消费
     for (const p of BUILTIN_PERSONAS) {
       ctx.register("role", p.id, p);

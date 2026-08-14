@@ -393,7 +393,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
                 <textarea
                   rows={4}
                   value={settingsForm.systemPrompt}
-                  placeholder="留空 = 使用 agent 档案 / persona 的默认提示词"
+                  placeholder="留空使用默认"
                   onChange={(e) => setSettingsForm((f) => (f ? { ...f, systemPrompt: e.target.value } : f))}
                 />
               </div>
@@ -420,7 +420,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
               <div className="field-control">
                 <input
                   value={settingsForm.model}
-                  placeholder="留空 = 使用全局配置的模型"
+                  placeholder="留空使用全局模型"
                   onChange={(e) => setSettingsForm((f) => (f ? { ...f, model: e.target.value } : f))}
                 />
               </div>
@@ -434,7 +434,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
                   max={2}
                   step={0.1}
                   value={settingsForm.temperature}
-                  placeholder="留空 = 不覆盖"
+                  placeholder="留空不覆盖"
                   onChange={(e) => setSettingsForm((f) => (f ? { ...f, temperature: e.target.value } : f))}
                 />
               </div>

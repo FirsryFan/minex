@@ -167,10 +167,10 @@ export function App({ problems }: { problems: string[] }) {
         contextItems: (p.contextItems ?? []) as Array<{ ref: string; content: string }>,
         parentSession: p.parentSession,
         selectionText: p.selectionText ?? "",
-        x: Math.max(0, vw - 520),
+        x: Math.max(0, vw - 600),
         y: 80,
-        w: 420,
-        h: 520,
+        w: 480,
+        h: 600,
       });
     });
   }, [kernel]);
@@ -446,7 +446,7 @@ function WorkspaceInstance({
       dockState: { ...instance.dockState, [id]: "floating" },
       floatingPos: {
         ...instance.floatingPos,
-        [id]: { id, x: 140, y: 90, w: 360, h: 480 },
+        [id]: { id, x: 140, y: 90, w: 480, h: 600 },
       },
     });
   }
@@ -458,7 +458,7 @@ function WorkspaceInstance({
   }
   /** 浮窗位置更新（拖拽/缩放） */
   function patchFloating(id: string, patch: Partial<FloatingState>): void {
-    const cur = instance.floatingPos[id] ?? { id, x: 140, y: 90, w: 360, h: 480 };
+    const cur = instance.floatingPos[id] ?? { id, x: 140, y: 90, w: 480, h: 600 };
     onUpdate({ floatingPos: { ...instance.floatingPos, [id]: { ...cur, ...patch } } });
   }
 
@@ -513,7 +513,7 @@ function WorkspaceInstance({
                     e.preventDefault();
                     setPanelMenu({ panelId: p.id, x: e.clientX, y: e.clientY });
                   }}
-                  title={`${p.title}（点击切换 · 双击浮起 · 右键拆放）`}
+                  title="切换面板"
                 >
                   <Icon size={18} />
                 </button>
@@ -599,8 +599,8 @@ function WorkspaceInstance({
             title={p.title}
             x={fs?.x ?? 140}
             y={fs?.y ?? 90}
-            w={fs?.w ?? 360}
-            h={fs?.h ?? 480}
+            w={fs?.w ?? 480}
+            h={fs?.h ?? 600}
             onMove={(x, y, w, h) => handleFloatMove(p.id, x, y, w, h)}
             onResize={(w, h) => patchFloating(p.id, { w, h })}
             onDrop={() => handleFloatDrop(p.id)}

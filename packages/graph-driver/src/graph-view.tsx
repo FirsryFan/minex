@@ -199,7 +199,7 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
               </span>
             </>
           ) : (
-            <span className="muted">（悬停节点查看信息）</span>
+            <span className="muted">悬停查看</span>
           )}
         </div>
         {worldSize.w > 0 && (
@@ -244,8 +244,8 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
             })}
           </div>
         )}
-        {graph && graph.nodes.length === 0 && <div className="muted graph-empty">（暂无会话）</div>}
-        {!source && <div className="muted graph-empty">（暂无会话树数据源）</div>}
+        {graph && graph.nodes.length === 0 && <div className="muted graph-empty">暂无会话</div>}
+        {!source && <div className="muted graph-empty">暂无会话树数据源</div>}
         <div className="graph-legend">○ 大小 = 消息数</div>
         <button className="graph-reset" title="重置视角（100% + 选中节点居中）" onClick={resetView}>
           ⟳
