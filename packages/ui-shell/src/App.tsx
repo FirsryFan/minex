@@ -37,9 +37,15 @@ interface InstanceState {
   dockState: Record<string, DockState>;
   /** 浮窗位置（仅 floating 面板记录） */
   floatingPos: Record<string, FloatingState>;
+  /** 2-R1 浮窗展开：新实例以该会话为上下文打开（会话加载经 session-open 桥接，本字段为可查元数据） */
+  pendingSession?: { sessionId: string; branchId?: string };
 }
 
-function makeInstance(id: number, name: string): InstanceState {
+function makeInstance(
+  id: number,
+  name: string,
+  pendingSession?: { sessionId: string; branchId?: string },
+): InstanceState {
   return {
     id,
     name,
@@ -49,6 +55,7 @@ function makeInstance(id: number, name: string): InstanceState {
     activeLeftPanelId: null,
     dockState: {},
     floatingPos: {},
+    ...(pendingSession ? { pendingSession } : {}),
   };
 }
 
@@ -70,10 +77,13 @@ export function App({ problems }: { problems: string[] }) {
   const [taskViewOpen, setTaskViewOpen] = useState(false);
   // 2-3 浮窗子对话：聊天内框选 → minex:openChildChat → 外壳浮窗承载迷你 ChatView。
   // 热修：x/y/w/h 入 state，onMove/onResize 真实更新——修复拖拽 no-op 导致拖不动。
+  // 2-R1：pendingPhrase/selectionText —— quick phrase 模板槽位表单初值。
   const [childChat, setChildChat] = useState<{
     childSession: SessionLike;
     contextItems: Array<{ ref: string; content: string }>;
     parentSession: SessionLike;
+    pendingPhrase?: { id: string; title: string; slots: Array<{ key: string; label: string; placeholder?: string }>; text: string };
+    selectionText?: string;
     x: number;
     y: number;
     w: number;
@@ -126,7 +136,13 @@ export function App({ problems }: { problems: string[] }) {
   const [showChildSavePrompt, setShowChildSavePrompt] = useState(false);
   useEffect(() => {
     return kernel.events.on("minex:openChildChat", (payload) => {
-      const p = payload as { childSession?: SessionLike; contextItems?: unknown[]; parentSession?: SessionLike } | undefined;
+      const p = payload as {
+        childSession?: SessionLike;
+        contextItems?: unknown[];
+        parentSession?: SessionLike;
+        pendingPhrase?: { id: string; title: string; slots: Array<{ key: string; label: string; placeholder?: string }>; text: string };
+        selectionText?: string;
+      } | undefined;
       if (!p?.childSession || !p.parentSession) return;
       childHandleRef.current = null; // 新子对话重置句柄
       const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
@@ -134,6 +150,7 @@ export function App({ problems }: { problems: string[] }) {
         childSession: p.childSession,
         contextItems: (p.contextItems ?? []) as Array<{ ref: string; content: string }>,
         parentSession: p.parentSession,
+        ...(p.pendingPhrase ? { pendingPhrase: p.pendingPhrase, selectionText: p.selectionText ?? "" } : {}),
         x: Math.max(0, vw - 520),
         y: 80,
         w: 420,
@@ -141,6 +158,28 @@ export function App({ problems }: { problems: string[] }) {
       });
     });
   }, [kernel]);
+
+  // 2-R1 浮窗展开为新工作区（P6）：新实例 + Agent 驱动 + 会话模式打开（session-open 桥接挂载竞态）
+  useEffect(() => {
+    return kernel.events.on("minex:expandToWorkspace", (payload) => {
+      const p = payload as { sessionId?: string; branchId?: string } | undefined;
+      if (!p?.sessionId) return;
+      setPendingOpenSessionId(p.sessionId); // 先桥接：新实例 ChatView 挂载时 take（子组件 effect 先于父组件）
+      const nextId = Math.max(0, ...instances.map((i) => i.id)) + 1;
+      setInstances((prev) => [
+        ...prev,
+        makeInstance(nextId, `工作区 ${prev.length + 1}`, { sessionId: p.sessionId!, branchId: p.branchId }),
+      ]);
+      updateInstance(nextId, { activeDriverId: "minex.agent" });
+      setActiveInstanceId(nextId);
+      setChildChat(null); // 原浮窗关闭（内容已在新工作区）
+      try {
+        localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.agent");
+      } catch {
+        /* localStorage 不可用 */
+      }
+    });
+  }, [kernel, instances]);
 
   // 任务视图弹窗：Esc 关闭
   useEffect(() => {
@@ -272,6 +311,8 @@ export function App({ problems }: { problems: string[] }) {
             session={childChat.childSession}
             contextItems={childChat.contextItems}
             parentSession={childChat.parentSession}
+            pendingPhrase={childChat.pendingPhrase}
+            selectionText={childChat.selectionText}
             onStateChange={(h) => {
               childHandleRef.current = h;
             }}

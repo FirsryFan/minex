@@ -98,6 +98,8 @@ export function createSession(input: {
   tags?: string[];
   activeAgents?: string[];
   now?: string;
+  /** 会话采用的 persona（2-R1 子会话继承父 persona；可选） */
+  personaId?: string;
 }): Session {
   const now = input.now ?? new Date().toISOString();
   return {
@@ -106,6 +108,7 @@ export function createSession(input: {
       type: input.type ?? "chat",
       title: input.title ?? "未命名会话",
       tags: [...(input.tags ?? [])],
+      ...(input.personaId ? { personaId: input.personaId } : {}),
       createdAt: now,
       updatedAt: now,
     },

@@ -40,3 +40,25 @@ export function validatePersona(data: unknown): data is Persona {
   if (p.autoAdopt !== undefined && typeof p.autoAdopt !== "boolean") return false;
   return true; // slots 自由（payload 类字段，任意形状可存）
 }
+
+/** 内置 persona（P1：通用助手默认 / 研究者 / 写作助手），activate 时注册为 role 贡献 */
+export const BUILTIN_PERSONAS: Persona[] = [
+  {
+    id: "minex.persona.assistant",
+    name: "通用助手",
+    description: "乐于助人的 AI 助手，用中文回答（默认）",
+    systemPrompt: "你是一个乐于助人的 AI 助手，用中文回答。",
+  },
+  {
+    id: "minex.persona.researcher",
+    name: "研究者",
+    description: "严谨的研究助手，回答分点、注明不确定处",
+    systemPrompt: "你是一个严谨的研究助手，回答要分点、注明不确定处。",
+  },
+  {
+    id: "minex.persona.writer",
+    name: "写作助手",
+    description: "写作助手，输出结构清晰、语言流畅",
+    systemPrompt: "你是一个写作助手，输出结构清晰、语言流畅。",
+  },
+];

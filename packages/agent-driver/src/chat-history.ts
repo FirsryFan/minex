@@ -18,6 +18,8 @@ export interface SessionLike {
     currentBranchId?: string;
     outlines?: unknown[];
     settings?: unknown;
+    parentSessionId?: string;
+    personaId?: string;
   };
   activeAgents: string[];
   nodes: SessionNodeLike[];

@@ -16,6 +16,7 @@ import {
 } from "./chat-history.js";
 import { buildOutlineEntry, shouldOutline, type OutlineEntryLike } from "./outline.js";
 import { takePendingOpenSessionId } from "./session-open.js";
+import { QUICK_PHRASES, fillTemplate, type QuickPhrase } from "./quick-phrase.js";
 
 const SYSTEM_PROMPT = "你是一个乐于助人的 AI 助手，用中文回答。";
 
@@ -58,8 +59,16 @@ interface SessionTreeCap {
   deriveBranches(session: SessionLike): Array<{ id: string; entryNodeId: string; nodeIds: string[]; headNodeId: string }>;
   addNode(s: SessionLike, node: SessionNodeLike): SessionLike;
   addLink(s: SessionLike, link: SessionLinkLike): SessionLike;
-  createSession(input: { title?: string; activeAgents?: string[] }): SessionLike;
+  createSession(input: { title?: string; activeAgents?: string[]; personaId?: string }): SessionLike;
   addOutlineEntry(s: SessionLike, entry: OutlineEntryLike): SessionLike;
+}
+
+/** persona 形状（role 贡献值，跨包零源码 import，结构类型） */
+interface PersonaLike {
+  id: string;
+  name: string;
+  description?: string;
+  systemPrompt: string;
 }
 
 /** 上下文条目（2-3：子对话初始 context / 手动追加） */
@@ -99,6 +108,8 @@ export default function ChatView({
   contextItems,
   parentSession,
   onStateChange,
+  pendingPhrase,
+  selectionText,
 }: {
   kernel: MinexKernel;
   instanceId?: number;
@@ -107,12 +118,41 @@ export default function ChatView({
   parentSession?: SessionLike;
   /** P5 状态机句柄上报：dirty（未保存且消息非空）+ save（立即保存），供外壳关闭询问用 */
   onStateChange?: (h: { dirty: boolean; save: () => Promise<void> }) => void;
+  /** 2-R1 quick phrase：浮窗打开时待填模板（选中模板 → 槽位表单） */
+  pendingPhrase?: QuickPhrase;
+  /** 2-R1 框选文本（自动填入 {selection} 槽） */
+  selectionText?: string;
 }) {
   // .value 纪律：registry.get 返回 Contribution，能力值在 .value
   const agent = kernel.registry.get<AgentCap>("agent", "default")?.value;
   const md = kernel.registry.get<MarkdownCap>("markdown", "render")?.value;
   const store = kernel.registry.get<SessionStoreCap>("session", "default")?.value;
   const tree = kernel.registry.get<SessionTreeCap>("session.tree", "default")?.value;
+
+  // 2-R1 persona：role 贡献（宿主 .value 纪律）；默认继承父会话 personaId，无则通用助手
+  const personas = useMemo<PersonaLike[]>(
+    () => kernel.registry.query<PersonaLike>("role").map((c) => c.value),
+    [kernel],
+  );
+  const [personaId, setPersonaId] = useState<string>(
+    () => parentSession?.meta.personaId ?? "minex.persona.assistant",
+  );
+  const currentPersona = personas.find((p) => p.id === personaId);
+
+  // 2-R1 quick phrase 槽位表单（compose 非空时输入行替换为槽位表单）
+  const [compose, setCompose] = useState<{ phrase: QuickPhrase; values: Record<string, string> } | null>(() =>
+    pendingPhrase
+      ? {
+          phrase: pendingPhrase,
+          values: {
+            selection: selectionText ?? "",
+            ...Object.fromEntries(
+              pendingPhrase.slots.filter((s) => s.key !== "selection").map((s) => [s.key, ""]),
+            ),
+          },
+        }
+      : null,
+  );
 
   const [session, setSession] = useState<SessionLike | null>(sessionProp ?? null);
   // 会话模式：历史来自 session；草稿模式：历史来自 localStorage（刷新不丢）
@@ -142,15 +182,8 @@ export default function ChatView({
     return ids;
   }, [session]);
 
-  // 2-3 agent 下拉选项：已激活且有 hasWorkspace 的驱动（v1 实际只有 minex.agent）
-  const agentOptions = useMemo(
-    () =>
-      kernel.drivers
-        .list()
-        .filter((m) => m.manifest.hasWorkspace && kernel.drivers.getState(m.manifest.id) === "activated")
-        .map((m) => ({ id: m.manifest.id, name: m.manifest.name })),
-    [kernel],
-  );
+  // 2-R1 persona 选择器选项 = registry 全部 role 贡献（P1：浮窗左上角 agent 选择）
+  //（原 2-3 的驱动下拉已由 persona 选择取代——用户反馈 1：应为 agent 选择而非驱动选择）
 
   // 2-3 父对话（状态化：2-4 大纲生成后更新，供「添加上上下文」面板实时显示新条目）
   const [parent, setParent] = useState<SessionLike | null>(parentSession ?? null);
@@ -308,8 +341,9 @@ export default function ChatView({
       ...extraContext.map((c) => ({ role: "user" as const, content: c.content })),
       ...tree.buildContext(s2, branchId).map((c) => ({ role: "user" as const, content: c.content })),
     ];
-    // 自动继承（2-3）：开关开 → systemPrompt 注入父大纲文本，agent 自行选择
-    const systemPrompt = buildChildSystemPrompt(SYSTEM_PROMPT, autoInherit, parentOutlines);
+    // 2-R1：基础 prompt = 当前 persona 的 systemPrompt（替代默认常量）；自动继承（2-3）再注入父大纲
+    const basePrompt = currentPersona?.systemPrompt ?? SYSTEM_PROMPT;
+    const systemPrompt = buildChildSystemPrompt(basePrompt, autoInherit, parentOutlines);
 
     // 2-4 大纲记忆：子对话 agent-loop 的 onContext hook → 提炼判定 + 生成条目 → 追加父会话大纲 + saveSession
     const onContext = parentRef.current
@@ -376,10 +410,10 @@ export default function ChatView({
     }
   }
 
-  async function send(): Promise<void> {
-    const text = input.trim();
+  async function send(textOverride?: string): Promise<void> {
+    const text = (textOverride ?? input).trim();
     if (!text || streaming || !agent) return;
-    setInput("");
+    if (textOverride === undefined) setInput("");
     setStreaming(true);
     cancelledRef.current = false;
     if (isSessionMode) await sendSessionMode(text);
@@ -397,24 +431,59 @@ export default function ChatView({
     }
   }
 
-  // 2-3：框选 → 子对话草稿（P5 draft-first：不立即建 .ses，≥3 轮自动保存 / 关闭时询问）+ 父会话挂 branch 链接
-  async function openChildChat(text: string, nodeId: string): Promise<void> {
+  // 2-3/2-R1：框选 → 子对话草稿（P5 draft-first：不立即建 .ses，≥3 轮自动保存 / 关闭时询问）+ 父会话挂 branch 链接
+  // phrase 传入 → 浮窗以 quick phrase 槽位表单打开（{selection} 自动填框选内容）
+  async function openChildChat(text: string, nodeId: string, phrase?: QuickPhrase): Promise<void> {
     if (!session || !tree || !store) return;
     setSel(null);
     try {
       const parentBranchId = session.meta.currentBranchId ?? "main";
       const childContext = tree.buildContext(session, parentBranchId, { selectedNodeIds: [nodeId] });
-      const created = tree.createSession({ title: "子对话", activeAgents: session.activeAgents });
-      // 子会话记父会话 id（会话系图谱真相源，P3）；父会话挂 branch 链接（from = 子会话 id，to = 框选节点 = 分支入口）
+      // 2-R1：子会话继承父 persona（P1）；子会话记父会话 id（P3）；父会话挂 branch 链接（from = 子会话 id，to = 框选节点）
+      const created = tree.createSession({
+        title: "子对话",
+        activeAgents: session.activeAgents,
+        ...(session.meta.personaId ? { personaId: session.meta.personaId } : {}),
+      });
       const childSession = { ...created, meta: { ...created.meta, parentSessionId: session.meta.id } };
       const parent2 = tree.addLink(session, { from: childSession.meta.id, to: nodeId, type: "branch" });
       setSession(parent2);
       setMessages(sessionToChatMessages(parent2));
       // 不立即 saveSession——子对话为草稿，自动保存（≥3 轮）/关闭询问时落盘
-      kernel.events.emit("minex:openChildChat", { childSession, contextItems: childContext, parentSession: parent2 });
+      kernel.events.emit("minex:openChildChat", {
+        childSession,
+        contextItems: childContext,
+        parentSession: parent2,
+        ...(phrase ? { pendingPhrase: phrase, selectionText: text } : {}),
+      });
     } catch {
       /* 打开失败静默，不崩 */
     }
+  }
+
+  // 2-R1：persona 选择 → 子会话 meta.personaId 更新（内存态，自动保存/关闭保存时落盘）
+  function selectPersona(id: string): void {
+    setPersonaId(id);
+    setSession((s) => (s ? { ...s, meta: { ...s.meta, personaId: id } } : s));
+  }
+
+  // 2-R1：quick phrase 槽位表单提交 → fillTemplate 产物为首条 user 消息
+  function submitCompose(): void {
+    if (!compose) return;
+    const text = fillTemplate(compose.phrase, compose.values).trim();
+    if (!text) return;
+    setCompose(null);
+    void send(text);
+  }
+
+  // 2-R1：浮窗展开为新工作区（P6）——emit 后外壳 addInstance + 新实例会话模式打开
+  function expandToWorkspace(): void {
+    if (!session) return;
+    kernel.events.emit("minex:expandToWorkspace", {
+      sessionId: session.meta.id,
+      branchId: session.meta.currentBranchId ?? "main",
+      personaId,
+    });
   }
 
   // 2-3：agent 下拉 → 改子会话 activeAgents + saveSession
@@ -459,13 +528,13 @@ export default function ChatView({
             {parentSession && (
               <select
                 className="chat-agent-select"
-                title="子对话使用的 agent"
-                value={session.activeAgents[0] ?? "minex.agent"}
-                onChange={(e) => void selectAgent(e.target.value)}
+                title="选择 agent（persona）"
+                value={personaId}
+                onChange={(e) => selectPersona(e.target.value)}
               >
-                {agentOptions.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
+                {personas.map((p) => (
+                  <option key={p.id} value={p.id} title={p.description}>
+                    {p.name}
                   </option>
                 ))}
               </select>
@@ -475,9 +544,14 @@ export default function ChatView({
               {session.meta.title}
             </span>
             {parentSession && (
-              <button className="btn-ghost" onClick={() => setContextOpen((o) => !o)}>
-                添加上下文
-              </button>
+              <>
+                <button className="btn-ghost" onClick={() => setContextOpen((o) => !o)}>
+                  添加上下文
+                </button>
+                <button className="chat-expand-btn" title="展开为新工作区" onClick={expandToWorkspace}>
+                  ↗
+                </button>
+              </>
             )}
           </>
         ) : (
@@ -556,33 +630,79 @@ export default function ChatView({
         })}
       </div>
 
-      {/* 2-3 框选浮钮：会话模式 + 选中节点（user/assistant 卡）才出现 */}
+      {/* 2-3/2-R1 框选浮钮菜单：会话模式 + 选中节点（user/assistant 卡）才出现——
+          「与 AI 讨论这段」+ 3 个 quick phrase 模板 */}
       {sel && sel.nodeId && isSessionMode && (
-        <button
-          className="chat-discuss-btn"
-          style={{ left: sel.x, top: sel.y }}
-          onClick={() => {
-            if (sel.nodeId) void openChildChat(sel.text, sel.nodeId);
-          }}
-        >
-          与 AI 讨论这段
-        </button>
+        <div className="chat-discuss-menu" style={{ left: sel.x, top: sel.y }}>
+          <button
+            className="chat-discuss-btn"
+            onClick={() => {
+              if (sel.nodeId) void openChildChat(sel.text, sel.nodeId);
+            }}
+          >
+            与 AI 讨论这段
+          </button>
+          {QUICK_PHRASES.map((q) => (
+            <button
+              key={q.id}
+              className="chat-discuss-btn"
+              onClick={() => {
+                if (sel.nodeId) void openChildChat(sel.text, sel.nodeId, q);
+              }}
+            >
+              {q.title}
+            </button>
+          ))}
+        </div>
       )}
 
-      <div className="chat-input-row">
-        <input
-          value={input}
-          placeholder="输入消息…"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void send();
-          }}
-          disabled={streaming}
-        />
-        <button className="btn" onClick={() => void send()} disabled={streaming || input.trim() === ""}>
-          发送
-        </button>
-      </div>
+      {compose ? (
+        /* 2-R1 quick phrase 槽位表单：{selection} 自动填框选内容，其余槽位输入 */
+        <div className="chat-compose">
+          <div className="chat-compose-title muted">模板：{compose.phrase.title}</div>
+          {compose.phrase.slots.map((slot) => (
+            <label key={slot.key} className="chat-compose-field">
+              <span>{slot.label}</span>
+              {slot.key === "selection" ? (
+                <div className="chat-compose-selection" title="框选内容自动填入">
+                  {compose.values.selection}
+                </div>
+              ) : (
+                <input
+                  value={compose.values[slot.key] ?? ""}
+                  placeholder={slot.placeholder}
+                  onChange={(e) =>
+                    setCompose((c) => (c ? { ...c, values: { ...c.values, [slot.key]: e.target.value } } : c))
+                  }
+                />
+              )}
+            </label>
+          ))}
+          <div className="chat-compose-actions">
+            <button className="btn-ghost" onClick={() => setCompose(null)}>
+              取消
+            </button>
+            <button className="btn" onClick={submitCompose}>
+              发送
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="chat-input-row">
+          <input
+            value={input}
+            placeholder="输入消息…"
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void send();
+            }}
+            disabled={streaming}
+          />
+          <button className="btn" onClick={() => void send()} disabled={streaming || input.trim() === ""}>
+            发送
+          </button>
+        </div>
+      )}
     </div>
   );
 }

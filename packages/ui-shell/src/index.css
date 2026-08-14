@@ -1499,3 +1499,82 @@ button {
   font-size: 12px;
   cursor: pointer;
 }
+
+/* 2-R1：框选浮钮菜单 + quick phrase 槽位表单 + 展开按钮 */
+.chat-discuss-menu {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.chat-discuss-menu .chat-discuss-btn {
+  position: static;
+  box-shadow: none;
+  text-align: left;
+  white-space: nowrap;
+}
+.chat-expand-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+.chat-expand-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.chat-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-card);
+}
+.chat-compose-title {
+  font-size: 12px;
+}
+.chat-compose-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.chat-compose-field input {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 12px;
+}
+.chat-compose-field input:focus {
+  outline: 2px solid var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+.chat-compose-selection {
+  padding: 6px 8px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  max-height: 72px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.chat-compose-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

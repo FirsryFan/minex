@@ -7,6 +7,7 @@ import { createBuiltinRegistry } from "./operations.js";
 import { createPool } from "./pool.js";
 import { echoTool, type AgentTool } from "./tool.js";
 import { validateWorkflow, type Workflow } from "./workflow.js";
+import { BUILTIN_PERSONAS } from "./persona.js";
 
 /** llm.config 结构类型子集（agent 用到的部分） */
 interface ConfigLike {
@@ -87,6 +88,11 @@ export default {
       defaultDock: "main",
       load: () => import("./chat-view.js"),
     });
+
+    // 内置 persona（P1）：注册为 role 贡献，浮窗选择器 / agent 自主候选池（autoAdopt 阶段 3）消费
+    for (const p of BUILTIN_PERSONAS) {
+      ctx.register("role", p.id, p);
+    }
 
     return () => {};
   },
