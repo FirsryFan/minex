@@ -19,7 +19,8 @@
   /* 文本 / 边框 */
   --color-text: #1e293b;
   --color-text-muted: #64748b;
-  --color-border: #e2e8f0;
+  /* R-A 反馈 5：浅色边框加深一档（#d0d7e2），与 --color-bg #f3f6fb / --color-panel #e9eef6 对比清晰 */
+  --color-border: #d0d7e2;
   --color-hover: #f8fafc;
 
   /* 圆角（内部所有区块都是圆角卡片） */

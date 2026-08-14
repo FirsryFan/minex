@@ -24,6 +24,7 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [outlineSel, setOutlineSel] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null); // R-A 反馈 3：节点删除确认
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -47,6 +48,15 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // R-A 反馈 2：订阅刷新（保存/新建/删除会话后图谱立即更新，无需重开面板；订阅卸载清理）
+  useEffect(() => {
+    const offs: Array<() => void> = [];
+    offs.push(kernel.registry.onChange("*", () => void refresh()));
+    offs.push(kernel.events.on("minex:dataChanged", () => void refresh()));
+    offs.push(kernel.events.on("minex:openSession", () => void refresh()));
+    return () => offs.forEach((off) => off());
+  }, [kernel, refresh]);
 
   const currentSession = sessions.find((s) => s.meta.id === currentSessionId) ?? null;
   const outlines = currentSession?.meta.outlines ?? [];
@@ -142,6 +152,14 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
     kernel.events.emit("minex:openSession", { id, targetInstanceId: instanceId });
   }
 
+  /** R-A 反馈 3：节点删除（确认后 deleteSession + 刷新；删父会话后子会话变根——buildSessionGraph 对 parent 不存在按根排） */
+  async function confirmDelete(): Promise<void> {
+    if (!store || !deleteId) return;
+    await store.deleteSession(deleteId);
+    setDeleteId(null);
+    await refresh();
+  }
+
   return (
     <div className="graph-view">
       <div className="graph-tabs">
@@ -174,16 +192,26 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
                 const p = layout[n.id];
                 if (!p) return null;
                 return (
-                  <button
+                  <div
                     key={n.id}
                     className={`graph-node${n.id === currentSessionId ? " current" : ""}`}
                     style={{ left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
                     onClick={() => openSession(n.id)}
                     title={`打开「${n.title}」`}
                   >
+                    <button
+                      className="graph-node-del"
+                      title="删除会话"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteId(n.id);
+                      }}
+                    >
+                      ✕
+                    </button>
                     <span className="graph-node-title">{n.title}</span>
                     <span className="graph-node-meta muted">{n.nodeCount} 消息</span>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -207,6 +235,19 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
               <span>{o.summary}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* R-A 反馈 3：删除确认（ConfirmModal 模式） */}
+      {deleteId && (
+        <div className="floating-mask" onClick={() => setDeleteId(null)}>
+          <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+            <p>确定删除该会话？此操作不可撤销。</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setDeleteId(null)}>取消</button>
+              <button className="btn" onClick={() => void confirmDelete()}>删除</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

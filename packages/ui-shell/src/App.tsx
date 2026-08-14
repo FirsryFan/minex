@@ -78,12 +78,11 @@ export function App({ problems }: { problems: string[] }) {
   const [taskViewOpen, setTaskViewOpen] = useState(false);
   // 2-3 浮窗子对话：聊天内框选 → minex:openChildChat → 外壳浮窗承载迷你 ChatView。
   // 热修：x/y/w/h 入 state，onMove/onResize 真实更新——修复拖拽 no-op 导致拖不动。
-  // 2-R1：pendingPhrase/selectionText —— quick phrase 模板槽位表单初值。
+  // 2-R1/R-A：selectionText —— quick phrase 模板 {selection} 槽预填（模板下拉在浮窗输入区）。
   const [childChat, setChildChat] = useState<{
     childSession: SessionLike;
     contextItems: Array<{ ref: string; content: string }>;
     parentSession: SessionLike;
-    pendingPhrase?: { id: string; title: string; slots: Array<{ key: string; label: string; placeholder?: string }>; text: string };
     selectionText?: string;
     x: number;
     y: number;
@@ -141,7 +140,6 @@ export function App({ problems }: { problems: string[] }) {
         childSession?: SessionLike;
         contextItems?: unknown[];
         parentSession?: SessionLike;
-        pendingPhrase?: { id: string; title: string; slots: Array<{ key: string; label: string; placeholder?: string }>; text: string };
         selectionText?: string;
       } | undefined;
       if (!p?.childSession || !p.parentSession) return;
@@ -151,7 +149,7 @@ export function App({ problems }: { problems: string[] }) {
         childSession: p.childSession,
         contextItems: (p.contextItems ?? []) as Array<{ ref: string; content: string }>,
         parentSession: p.parentSession,
-        ...(p.pendingPhrase ? { pendingPhrase: p.pendingPhrase, selectionText: p.selectionText ?? "" } : {}),
+        selectionText: p.selectionText ?? "",
         x: Math.max(0, vw - 520),
         y: 80,
         w: 420,
@@ -312,7 +310,6 @@ export function App({ problems }: { problems: string[] }) {
             session={childChat.childSession}
             contextItems={childChat.contextItems}
             parentSession={childChat.parentSession}
-            pendingPhrase={childChat.pendingPhrase}
             selectionText={childChat.selectionText}
             onStateChange={(h) => {
               childHandleRef.current = h;

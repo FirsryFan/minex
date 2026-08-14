@@ -1366,6 +1366,7 @@ button {
 }
 .chat-msg.assistant {
   align-self: flex-start;
+  border: 1px solid var(--color-border); /* R-A 反馈 5：浅色模式气泡框线清晰 */
 }
 .chat-msg.tool {
   align-self: flex-start;
@@ -1424,22 +1425,68 @@ button {
 .session-item {
   position: relative;
 }
-.session-item-md {
+/* R-A 反馈 8：会话列表行内操作（设置 / 删除），替代原 MD 按钮 */
+.session-item-actions {
   position: absolute;
-  right: 8px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 10px;
+  display: flex;
+  gap: 2px;
+}
+.session-item-btn {
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  font-size: 12px;
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: var(--color-card);
   color: var(--color-text-muted);
   cursor: pointer;
+  line-height: 1;
 }
-.session-item-md:hover {
+.session-item-btn:hover {
   color: var(--color-primary);
   border-color: var(--color-primary);
+}
+.session-item-btn.danger:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+/* 会话设置弹窗：标签 chips */
+.session-settings-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.session-settings-tags input {
+  flex: 1;
+  min-width: 90px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 12px;
+}
+.session-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.session-tag-chip button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
 }
 
 /* 2-3 框选子对话 + 添加上下文 */
@@ -1578,22 +1625,53 @@ button {
   gap: 8px;
   justify-content: flex-end;
 }
+/* R-A 反馈 4：quick phrase 模板下拉（浮窗输入区旁） */
+.chat-phrase-select {
+  flex: 0 0 auto;
+  padding: 8px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+/* R-A 反馈 3：图谱节点删除按钮 */
+.graph-node-del {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.4;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.graph-node:hover .graph-node-del,
+.graph-node.current .graph-node-del {
+  opacity: 1;
+}
+.graph-node-del:hover {
+  color: var(--color-danger);
+}
 
-/* 2-R2 左栏 icon 栏 + 面板拆放右键菜单 */
+/* 2-R2 左栏 icon 栏 + 面板拆放右键菜单（R-A：icon 横排——一行水平，内容区在行下方） */
 .panel-iconbar {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 2px;
-  padding: 6px 0;
+  padding: 6px;
   border-bottom: 1px solid var(--color-border);
 }
 .panel-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  margin: 0 auto;
+  width: 30px;
+  height: 30px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;

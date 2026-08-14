@@ -36,11 +36,13 @@ export interface SessionLink {
   type: SessionLinkType;
 }
 
-/** 会话级设置（2-2：v1 只存不用——阶段 3 模型参数接线时消费；缺省默认） */
+/** 会话级设置（2-2 / R-A 反馈 8：v1 只存不用——阶段 3 模型参数接线时消费；缺省默认） */
 export interface SessionSettings {
   model?: string;
   temperature?: number;
   contextStrategy?: "branch" | "full";
+  /** 会话级自定义 systemPrompt（R-A 反馈 8：优先于 persona 默认，可空） */
+  systemPrompt?: string;
 }
 
 export interface SessionMeta {
@@ -294,6 +296,7 @@ export function validateSession(data: unknown): data is Session {
     if (st.model !== undefined && typeof st.model !== "string") return false;
     if (st.temperature !== undefined && typeof st.temperature !== "number") return false;
     if (st.contextStrategy !== undefined && st.contextStrategy !== "branch" && st.contextStrategy !== "full") return false;
+    if (st.systemPrompt !== undefined && typeof st.systemPrompt !== "string") return false; // R-A 反馈 8
   }
   // 2-1 修订扩展：parentSessionId / personaId 可选（出现则必须 string，旧数据不出现即兼容）
   if (meta.parentSessionId !== undefined && typeof meta.parentSessionId !== "string") return false;
