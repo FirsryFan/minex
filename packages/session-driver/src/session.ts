@@ -66,6 +66,8 @@ export interface SessionMeta {
   parentSessionId?: string;
   /** 会话采用的 persona id（P1：浮窗选择器选定写入；可选，旧数据兼容） */
   personaId?: string;
+  /** 会话关联的 agent 档案 id（F-C：AgentProfile 引用；可选，旧数据兼容） */
+  agentProfileId?: string;
 }
 
 export interface Session {
@@ -320,6 +322,8 @@ export function validateSession(data: unknown): data is Session {
   // 2-1 修订扩展：parentSessionId / personaId 可选（出现则必须 string，旧数据不出现即兼容）
   if (meta.parentSessionId !== undefined && typeof meta.parentSessionId !== "string") return false;
   if (meta.personaId !== undefined && typeof meta.personaId !== "string") return false;
+  // F-C 扩展：agentProfileId 可选（出现则必须 string，旧数据兼容）
+  if (meta.agentProfileId !== undefined && typeof meta.agentProfileId !== "string") return false;
   if (!Array.isArray(s.activeAgents) || (s.activeAgents as unknown[]).some((a) => typeof a !== "string")) return false;
   if (!Array.isArray(s.nodes) || !Array.isArray(s.links)) return false;
   for (const n of s.nodes as unknown[]) {

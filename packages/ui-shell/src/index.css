@@ -1458,15 +1458,35 @@ button {
   overflow-y: auto;
   font-size: 13px;
 }
-/* F-A 反馈 4：会话总览 agent/persona 过滤下拉 */
-.session-filter {
-  padding: 6px 8px;
+/* F-C：会话总览过滤栏——漏斗按钮 + 过滤卡片（标签/时间/大小/agent 四维） */
+.session-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-card);
-  color: var(--color-text);
-  font-size: 12px;
-  max-width: 120px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.session-filter-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.session-filter-btn.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.filter-card {
+  width: 260px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
 }
 /* F-A 反馈 4：Agent 配置面板（persona 画廊 + 工具白名单 + 默认配置） */
 .agent-config {

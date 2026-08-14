@@ -23,6 +23,7 @@ import { buildOutlineEntry, shouldOutline, type OutlineEntryLike } from "./outli
 import { takePendingOpenSessionId } from "./session-open.js";
 import { QUICK_PHRASES, fillTemplate, type QuickPhrase } from "./quick-phrase.js";
 import { checkPermission, type PermissionMode, type ToolRisk } from "./permission.js";
+import { loadAgentProfiles, type AgentProfile } from "./agent-profile.js";
 
 const SYSTEM_PROMPT = "你是一个乐于助人的 AI 助手，用中文回答。";
 
@@ -211,18 +212,23 @@ export default function ChatView({
   } | null>(null);
   // F-A 反馈 2：双击消息行 → 卡片显示全文
   const [detailMsg, setDetailMsg] = useState<ChatMessageView | null>(null);
-  // F-A 反馈 4：agent 配置（内核 storage minex.agent/agentConfig，缺省回退现状）
+  // F-A 反馈 4：agent 全局默认配置（内核 storage minex.agent/agentConfig，profile 可覆盖，无则回退现状）
   const agentConfig = loadAgentConfig(kernel);
+  // F-C：会话关联的 agent 档案（settings > profile > persona > 全局默认 优先级链的 profile 层）
+  const profile: AgentProfile | undefined = (() => {
+    const pid = session?.meta.agentProfileId;
+    return pid ? loadAgentProfiles(kernel)[pid] : undefined;
+  })();
 
   /** F-A：消息行 icon（tool 🔧 / code </> / think 💭 / user 💬） */
   function msgIcon(cls: MessageClass): string {
     return cls.kind === "tool" ? "🔧" : cls.kind === "code" ? "</>" : cls.kind === "think" ? "💭" : "💬";
   }
 
-  /** F-A：persona 工具白名单 = agentConfig.personaTools[personaId]（null=全部）?? persona 自带 tools */
+  /** F-C：工具白名单 = profile.tools（null=全部）?? persona 自带 tools（缺省 = 全部） */
   function personaToolsOf(): string[] | undefined {
-    const cfg = loadAgentConfig(kernel)?.personaTools?.[personaId];
-    return cfg !== undefined ? (cfg ?? undefined) : currentPersona?.tools;
+    const t = profile?.tools;
+    return t !== undefined ? (t ?? undefined) : currentPersona?.tools;
   }
 
   // F-A 反馈 4：Agent 配置面板「设为当前会话 persona」→ 本聊天实例切换
@@ -416,11 +422,11 @@ export default function ChatView({
     await store.saveSession(next).catch(() => {});
   }
 
-  /** 3-2 + F-A 反馈 4：按会话设置/agent 默认配置构建 canRun 裁决（缺省 auto 全放行；ask 弹确认） */
+  /** 3-2 + F-A/F-C：canRun 裁决模式 = settings ?? profile.permissionMode ?? 全局默认 ?? auto */
   function buildCanRun(): ((call: { name: string; risk: string }) => Promise<boolean>) | undefined {
     const settings = session?.meta.settings;
     const mode: PermissionMode =
-      settings?.permissionMode ?? loadAgentConfig(kernel)?.defaultPermissionMode ?? "auto";
+      settings?.permissionMode ?? profile?.permissionMode ?? loadAgentConfig(kernel)?.defaultPermissionMode ?? "auto";
     const overrides = settings?.toolPermissions;
     return async (call) => {
       if (checkPermission({ name: call.name, risk: call.risk as ToolRisk }, mode, overrides) === "allow") return true;
@@ -496,10 +502,11 @@ export default function ChatView({
       ...extraContext.map((c) => ({ role: "user" as const, content: c.content })),
       ...mapContextToMessages(tree.buildContext(s2, branchId), s2),
     ];
-    // 2-R1 + R-A 反馈 8 + F-A 反馈 4：基础 prompt 优先级 =
-    // 会话级 settings.systemPrompt ?? persona.systemPrompt ?? agent 默认 systemPrompt ?? 常量
+    // 2-R1 + R-A 反馈 8 + F-A/F-C：基础 prompt 优先级 =
+    // settings.systemPrompt ?? profile.systemPrompt ?? persona.systemPrompt ?? agent 全局默认 ?? 常量
     const basePrompt =
       session.meta.settings?.systemPrompt ??
+      profile?.systemPrompt ??
       currentPersona?.systemPrompt ??
       loadAgentConfig(kernel)?.defaultSystemPrompt ??
       SYSTEM_PROMPT;
@@ -522,8 +529,8 @@ export default function ChatView({
     const toolCalls: Array<{ name: string; args: unknown }> = [];
     let errorMsg: string | undefined;
     setReplyUsage(null);
-    // 3-1 + F-A：persona 工具白名单（agentConfig.personaTools ?? persona.tools）；3-2：canRun；
-    // 3-3：会话级 model/temperature；3-4：signal + 插入指令
+    // 3-1 + F-A/F-C：persona 工具白名单（profile.tools ?? persona.tools）；3-2：canRun；
+    // 3-3 + F-C：模型/参数 = settings ?? profile（缺省 = 全局）
     const personaTools = personaToolsOf();
     const canRun = buildCanRun();
     const settings = session.meta.settings;
@@ -531,8 +538,15 @@ export default function ChatView({
       ...(onContext ? { onContext } : {}),
       ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
       ...(canRun ? { canRun } : {}),
-      ...(settings?.model ? { model: settings.model } : {}),
-      ...(settings?.temperature !== undefined ? { params: { temperature: settings.temperature } } : {}),
+      ...(settings?.model ?? profile?.model ? { model: settings?.model ?? profile?.model } : {}),
+      ...(settings?.temperature !== undefined || profile?.params?.temperature !== undefined
+        ? {
+            params: {
+              temperature:
+                settings?.temperature ?? (profile?.params?.temperature as number | undefined),
+            },
+          }
+        : {}),
       ...(abortRef.current ? { signal: abortRef.current.signal } : {}),
       pendingMessages: (): Array<{ role: string; content: string }> => {
         const p = pendingRef.current;
@@ -645,7 +659,15 @@ export default function ChatView({
         activeAgents: session.activeAgents,
         ...(session.meta.personaId ? { personaId: session.meta.personaId } : {}),
       });
-      const childSession = { ...created, meta: { ...created.meta, parentSessionId: session.meta.id } };
+      const childSession = {
+        ...created,
+        meta: {
+          ...created.meta,
+          parentSessionId: session.meta.id,
+          // F-C：子会话继承父会话的 agent 档案
+          ...(session.meta.agentProfileId ? { agentProfileId: session.meta.agentProfileId } : {}),
+        },
+      };
       const parent2 = tree.addLink(session, { from: childSession.meta.id, to: nodeId, type: "branch" });
       setSession(parent2);
       setMessages(sessionToChatMessages(parent2));

@@ -9,6 +9,7 @@ import type { AgentTool } from "./tool.js";
 import { validateWorkflow, type Workflow } from "./workflow.js";
 import { BUILTIN_PERSONAS } from "./persona.js";
 import { registerRealTools } from "./real-tools.js";
+import { BUILTIN_SKILLS, deleteAgentProfile, loadAgentProfiles, saveAgentProfile } from "./agent-profile.js";
 
 /** llm.config 结构类型子集（agent 用到的部分） */
 interface ConfigLike {
@@ -191,6 +192,14 @@ export default {
     for (const p of BUILTIN_PERSONAS) {
       ctx.register("role", p.id, p);
     }
+
+    // F-C：agent 档案能力（跨包消费桥接——overview 过滤/设置下拉经此读 profile，零源码 import）
+    ctx.register("agent.profile", "default", {
+      loadAgentProfiles,
+      saveAgentProfile,
+      deleteAgentProfile,
+      BUILTIN_SKILLS,
+    });
 
     return () => {};
   },

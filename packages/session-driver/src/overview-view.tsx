@@ -8,10 +8,10 @@ interface PersonaLike {
   name: string;
 }
 
-/** 会话设置表单（R-A 反馈 8：标签 / 默认 agent / persona / systemPrompt；3-2：权限模式；3-3：模型/温度） */
+/** 会话设置表单（R-A 反馈 8：标签 / 默认 agent / persona / systemPrompt；3-2：权限模式；3-3：模型/温度；F-C：agentProfileId） */
 interface SettingsForm {
   tags: string[];
-  agent: string;
+  agentProfileId: string;
   personaId: string;
   systemPrompt: string;
   permissionMode: "auto" | "edit" | "manual";
@@ -35,9 +35,12 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
   const [settingsForm, setSettingsForm] = useState<SettingsForm | null>(null);
   // 3-5：大纲查看（原会话系面板大纲 tab 并入）——设置弹窗内只读大纲列表
   const [settingsOutlines, setSettingsOutlines] = useState<Array<{ id: string; kind: string; summary: string }>>([]);
-  // F-A 反馈 4：按 agent/persona 过滤（逐个 loadSession 查 activeAgents/personaId，v1 零模型改动）
-  const [agentFilter, setAgentFilter] = useState("");
-  const [personaFilter, setPersonaFilter] = useState("");
+  // F-C：过滤栏重设计——标题搜索 + 漏斗 → 过滤卡片（标签多选/时间/大小/agent 四维 AND）
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [tagSel, setTagSel] = useState<Set<string>>(new Set());
+  const [timeSel, setTimeSel] = useState("");
+  const [sizeSel, setSizeSel] = useState("");
+  const [agentSel, setAgentSel] = useState("");
   const [filteredExtra, setFilteredExtra] = useState<SessionIndexEntry[] | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -61,19 +64,32 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     return () => offs.forEach((off) => off());
   }, [kernel, refresh]);
 
+  // F-C：同步过滤（标签多选 OR / 时间 / 大小 / 标题搜索——只匹配会话名）——纯 index 数据，快路径
+  const q = query.trim().toLowerCase();
   const filtered = entries
-    .filter((e) => (tag ? e.tags.includes(tag) : true))
+    .filter((e) => (tagSel.size === 0 || e.tags.some((t) => tagSel.has(t))))
     .filter((e) => {
-      const q = query.trim().toLowerCase();
-      if (!q) return true;
-      return e.title.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q));
+      if (!timeSel) return true;
+      const age = Date.now() - Date.parse(e.updatedAt);
+      if (timeSel === "today") return age < 86_400_000;
+      if (timeSel === "7d") return age < 7 * 86_400_000;
+      if (timeSel === "30d") return age < 30 * 86_400_000;
+      return true;
     })
+    .filter((e) => {
+      if (!sizeSel) return true;
+      if (sizeSel === "small") return e.nodeCount < 10;
+      if (sizeSel === "medium") return e.nodeCount >= 10 && e.nodeCount <= 50;
+      if (sizeSel === "large") return e.nodeCount > 50;
+      return true;
+    })
+    .filter((e) => (q ? e.title.toLowerCase().includes(q) : true)) // F-C：只匹配会话名（去掉标签匹配）
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
-  // F-A 反馈 4：agent/persona 过滤为异步阶段（逐个 loadSession 查字段；量大后 index 扩展注释）
+  // F-C：agent 维为异步阶段（逐个 loadSession 查 meta.agentProfileId；v1 零模型改动，量大后 index 扩展）
   useEffect(() => {
     let alive = true;
-    if (!agentFilter && !personaFilter) {
+    if (!agentSel) {
       setFilteredExtra(filtered);
       return;
     }
@@ -82,8 +98,8 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
       for (const e of filtered) {
         const s = await store?.loadSession(e.id);
         if (!s) continue;
-        if (agentFilter && s.activeAgents[0] !== agentFilter) continue;
-        if (personaFilter && s.meta.personaId !== personaFilter) continue;
+        const pid = s.meta.agentProfileId ?? "";
+        if (agentSel === "__none__" ? pid !== "" : pid !== agentSel) continue;
         out.push(e);
       }
       if (alive) setFilteredExtra(out);
@@ -91,14 +107,28 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     return () => {
       alive = false;
     };
-  }, [filtered, agentFilter, personaFilter, store]);
+  }, [filtered, agentSel, store]);
 
   const shown = filteredExtra ?? filtered;
 
-  const agentOptions = kernel.drivers
-    .list()
-    .filter((m) => m.manifest.hasWorkspace && kernel.drivers.getState(m.manifest.id) === "activated")
-    .map((m) => ({ id: m.manifest.id, name: m.manifest.name }));
+  // F-C：过滤卡片 Esc 关闭
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setFilterOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filterOpen]);
+
+  const hasFilter = tagSel.size > 0 || timeSel !== "" || sizeSel !== "" || agentSel !== "";
+
+  // F-C：agent 下拉选项 = AgentProfile 列表（经 agent.profile 能力桥接，跨包零源码 import）
+  const profileCap = kernel.registry
+    .get<{
+      loadAgentProfiles(k: unknown): Record<string, { id: string; name: string; personaId?: string }>;
+    }>("agent.profile", "default")?.value;
+  const profiles = profileCap ? Object.values(profileCap.loadAgentProfiles(kernel)) : [];
   const personaOptions = kernel.registry.query<PersonaLike>("role").map((c) => c.value);
 
   async function createNew(): Promise<void> {
@@ -130,7 +160,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     setSettingsOutlines((s.meta.outlines ?? []) as Array<{ id: string; kind: string; summary: string }>);
     setSettingsForm({
       tags: [...s.meta.tags],
-      agent: s.activeAgents[0] ?? "minex.agent",
+      agentProfileId: s.meta.agentProfileId ?? "",
       personaId: s.meta.personaId ?? "",
       systemPrompt: s.meta.settings?.systemPrompt ?? "",
       permissionMode: s.meta.settings?.permissionMode ?? "auto",
@@ -139,17 +169,18 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
     });
   }
 
-  /** 保存会话设置：不可变合并（tags / activeAgents / personaId / settings.systemPrompt）→ saveSession */
+  /** 保存会话设置：不可变合并（tags / agentProfileId / personaId / settings）→ saveSession */
   async function saveSettings(): Promise<void> {
     if (!store || !settingsId || !settingsForm) return;
     const s = await store.loadSession(settingsId);
     if (!s) return;
     const next: Session = {
       ...s,
-      activeAgents: [settingsForm.agent],
+      activeAgents: ["minex.agent"], // F-C：档案关联保持 agent 驱动关联
       meta: {
         ...s.meta,
         tags: settingsForm.tags,
+        ...(settingsForm.agentProfileId ? { agentProfileId: settingsForm.agentProfileId } : {}), // F-C
         ...(settingsForm.personaId ? { personaId: settingsForm.personaId } : {}),
         settings: {
           ...(s.meta.settings ?? {}),
@@ -181,45 +212,106 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
       <div className="session-overview-head">
         <input
           className="session-search"
-          placeholder="搜索会话…"
+          placeholder="搜索会话名…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {/* F-A 反馈 4：按 agent / persona 过滤（与搜索/标签叠加 AND） */}
-        <select
-          className="session-filter"
-          title="按 agent 过滤"
-          value={agentFilter}
-          onChange={(e) => setAgentFilter(e.target.value)}
+        {/* F-C：漏斗过滤器（有任一过滤时高亮）——点击开/关过滤卡片 */}
+        <button
+          className={`session-filter-btn${hasFilter ? " active" : ""}`}
+          title="过滤（标签/时间/大小/agent）"
+          onClick={() => setFilterOpen((o) => !o)}
         >
-          <option value="">全部 agent</option>
-          {agentOptions.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
-        <select
-          className="session-filter"
-          title="按 persona 过滤"
-          value={personaFilter}
-          onChange={(e) => setPersonaFilter(e.target.value)}
-        >
-          <option value="">全部 persona</option>
-          {personaOptions.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M3 5h18l-7 8v6l-4 2v-8L3 5z" />
+          </svg>
+        </button>
         <button className="btn session-new" title="新建会话" onClick={() => void createNew()}>＋</button>
       </div>
-      {tags.length > 0 && (
-        <div className="session-tags">
-          <button className={`session-tag${!tag ? " active" : ""}`} onClick={() => setTag(null)}>全部</button>
-          {tags.map((t) => (
-            <button key={t} className={`session-tag${tag === t ? " active" : ""}`} onClick={() => setTag(t === tag ? null : t)}>
-              {t}
-            </button>
-          ))}
+
+      {/* F-C：过滤卡片（四维 AND；标签多选 OR 语义） */}
+      {filterOpen && (
+        <div className="floating-mask" onClick={() => setFilterOpen(false)}>
+          <div className="filter-card" onClick={(e) => e.stopPropagation()}>
+            <div className="section-title">过滤会话</div>
+            <div className="field">
+              <label>标签（多选）</label>
+              <div className="field-control">
+                {tags.length === 0 ? (
+                  <span className="muted">（无标签）</span>
+                ) : (
+                  <div className="session-tags">
+                    {tags.map((t) => (
+                      <button
+                        key={t}
+                        className={`session-tag${tagSel.has(t) ? " active" : ""}`}
+                        onClick={() =>
+                          setTagSel((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(t)) next.delete(t);
+                            else next.add(t);
+                            return next;
+                          })
+                        }
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="field">
+              <label>时间（按更新）</label>
+              <div className="field-control">
+                <select value={timeSel} onChange={(e) => setTimeSel(e.target.value)}>
+                  <option value="">全部</option>
+                  <option value="today">今天</option>
+                  <option value="7d">最近 7 天</option>
+                  <option value="30d">最近 30 天</option>
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>大小（消息数）</label>
+              <div className="field-control">
+                <select value={sizeSel} onChange={(e) => setSizeSel(e.target.value)}>
+                  <option value="">全部</option>
+                  <option value="small">小（&lt;10 节点）</option>
+                  <option value="medium">中（10-50 节点）</option>
+                  <option value="large">大（&gt;50 节点）</option>
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>agent（档案）</label>
+              <div className="field-control">
+                <select value={agentSel} onChange={(e) => setAgentSel(e.target.value)}>
+                  <option value="">全部</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                  <option value="__none__">未指定</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setTagSel(new Set());
+                  setTimeSel("");
+                  setSizeSel("");
+                  setAgentSel("");
+                }}
+              >
+                清除过滤
+              </button>
+            </div>
+          </div>
         </div>
       )}
+
       <div className="session-list">
         {shown.length === 0 && <div className="muted session-empty">（无会话）</div>}
         {shown.map((e) => (
@@ -291,11 +383,15 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
               </div>
             </div>
             <div className="field">
-              <label>默认 agent</label>
+              <label>agent（档案，F-C）</label>
               <div className="field-control">
-                <select value={settingsForm.agent} onChange={(e) => setSettingsForm((f) => (f ? { ...f, agent: e.target.value } : f))}>
-                  {agentOptions.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
+                <select
+                  value={settingsForm.agentProfileId}
+                  onChange={(e) => setSettingsForm((f) => (f ? { ...f, agentProfileId: e.target.value } : f))}
+                >
+                  <option value="">（未指定）</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </div>
@@ -303,7 +399,13 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
             <div className="field">
               <label>persona</label>
               <div className="field-control">
-                <select value={settingsForm.personaId} onChange={(e) => setSettingsForm((f) => (f ? { ...f, personaId: e.target.value } : f))}>
+                <select
+                  value={
+                    settingsForm.personaId ||
+                    (profiles.find((p) => p.id === settingsForm.agentProfileId)?.personaId ?? "")
+                  }
+                  onChange={(e) => setSettingsForm((f) => (f ? { ...f, personaId: e.target.value } : f))}
+                >
                   <option value="">（不指定）</option>
                   {personaOptions.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>

@@ -28,6 +28,8 @@ export interface SessionLike {
     };
     parentSessionId?: string;
     personaId?: string;
+    /** F-C：会话关联的 agent 档案 id（AgentProfile） */
+    agentProfileId?: string;
   };
   activeAgents: string[];
   nodes: SessionNodeLike[];
