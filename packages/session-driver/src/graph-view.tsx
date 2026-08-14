@@ -1,0 +1,214 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MinexKernel } from "@minex/kernel";
+import { buildSessionGraph, layoutSessionGraph, type SessionGraph } from "./session-tree.js";
+import type { Session } from "./session.js";
+import type { SessionStore } from "./store.js";
+
+const NODE_W = 160;
+const NODE_H = 56;
+
+type Tab = "graph" | "outline";
+
+/**
+ * 会话系面板（task 2-R2，P2/P3）：左栏，两个 icon tab（图谱 / 大纲，不用文字——驱动不引 lucide，用字形图标）。
+ * - 图谱 tab：buildSessionGraph（推导不存文件）+ layoutSessionGraph → 会话卡片树形布局；当前会话默认居中；
+ *   wheel 缩放（鼠标锚点）+ pointer 拖拽平移 + reset（100% + 当前会话居中）；节点点击 → minex:openSession。
+ * - 大纲 tab：当前会话 meta.outlines（summary + kind 徽标），点击条目「加入上下文」选中高亮。
+ */
+export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel; instanceId?: number }) {
+  // .value 纪律：registry.get 返回 Contribution，能力值在 .value
+  const store = kernel.registry.get<SessionStore>("session", "default")?.value;
+
+  const [tab, setTab] = useState<Tab>("graph");
+  const [graph, setGraph] = useState<SessionGraph | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [outlineSel, setOutlineSel] = useState<string | null>(null);
+  const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const transformRef = useRef(transform);
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
+
+  // 数据：索引 + 各会话 meta（parentSessionId）→ 图谱推导；当前会话默认 = 索引第一个（loadIndex 按 updatedAt 降序）
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!store) return;
+    const index = await store.loadIndex();
+    const loaded = await Promise.all(index.sessions.map((e) => store.loadSession(e.id)));
+    const ok = loaded.filter((s): s is Session => Boolean(s));
+    setSessions(ok);
+    setGraph(buildSessionGraph(index.sessions, (id) => ok.find((s) => s.meta.id === id)?.meta));
+    setCurrentSessionId(index.sessions[0]?.id ?? null);
+  }, [store]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const currentSession = sessions.find((s) => s.meta.id === currentSessionId) ?? null;
+  const outlines = currentSession?.meta.outlines ?? [];
+
+  // 图谱布局（纯函数）与画布世界尺寸 / 父子连线
+  const layout = useMemo(() => (graph ? layoutSessionGraph(graph) : {}), [graph]);
+  const worldSize = useMemo(() => {
+    if (!graph || graph.nodes.length === 0) return { w: 0, h: 0 };
+    const maxX = Math.max(...graph.nodes.map((n) => (layout[n.id]?.x ?? 0) + NODE_W));
+    const maxY = Math.max(...graph.nodes.map((n) => (layout[n.id]?.y ?? 0) + NODE_H));
+    return { w: maxX + 40, h: maxY + 40 };
+  }, [graph, layout]);
+  const lines = useMemo(() => {
+    if (!graph) return [];
+    const out: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+    for (const n of graph.nodes) {
+      if (!n.parentId) continue;
+      const p = layout[n.parentId];
+      const c = layout[n.id];
+      if (!p || !c) continue;
+      out.push({ x1: p.x + NODE_W / 2, y1: p.y + NODE_H / 2, x2: c.x + NODE_W / 2, y2: c.y + NODE_H / 2 });
+    }
+    return out;
+  }, [graph, layout]);
+
+  /** 把节点置于画布中心（scale 指定）：屏幕 = 世界 × scale + translate */
+  function centerOn(id: string | null, scale: number): void {
+    const box = containerRef.current;
+    const vw = box?.clientWidth ?? 400;
+    const vh = box?.clientHeight ?? 300;
+    const p = id ? layout[id] : undefined;
+    setTransform({
+      scale,
+      x: vw / 2 - ((p?.x ?? 0) + NODE_W / 2) * scale,
+      y: vh / 2 - ((p?.y ?? 0) + NODE_H / 2) * scale,
+    });
+  }
+
+  // 打开时当前会话默认居中 + 缩放适应（单节点 1.2 / 多节点 0.9）
+  useEffect(() => {
+    if (graph && graph.nodes.length > 0) {
+      centerOn(currentSessionId, graph.nodes.length <= 1 ? 1.2 : 0.9);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph]);
+
+  // 拖拽平移：window pointer 监听（canvas 背景按下开始；节点按下不拖，走点击）
+  useEffect(() => {
+    const onMove = (e: PointerEvent): void => {
+      if (!dragRef.current) return;
+      const d = dragRef.current;
+      setTransform((t) => ({ ...t, x: d.ox + (e.clientX - d.sx), y: d.oy + (e.clientY - d.sy) }));
+    };
+    const onUp = (): void => {
+      dragRef.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+
+  function onPointerDown(e: React.PointerEvent): void {
+    if ((e.target as Element).closest(".graph-node")) return; // 节点点击不拖
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: transformRef.current.x, oy: transformRef.current.y };
+  }
+
+  /** wheel 缩放：以鼠标为锚点（保持鼠标下的内容点不动） */
+  function onWheel(e: React.WheelEvent): void {
+    const box = containerRef.current;
+    if (!box) return;
+    const rect = box.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    setTransform((t) => {
+      const scale = Math.min(3, Math.max(0.3, t.scale * factor));
+      const k = scale / t.scale;
+      return { scale, x: mx - (mx - t.x) * k, y: my - (my - t.y) * k };
+    });
+  }
+
+  /** reset：100% + 当前会话居中（RotateCcw 语义，字形 ⟳） */
+  function resetView(): void {
+    centerOn(currentSessionId, 1);
+  }
+
+  /** 节点点击 → 打开会话对话模式（复用 2-2 入口） */
+  function openSession(id: string): void {
+    setCurrentSessionId(id);
+    kernel.events.emit("minex:openSession", { id, targetInstanceId: instanceId });
+  }
+
+  return (
+    <div className="graph-view">
+      <div className="graph-tabs">
+        <button className={`graph-tab${tab === "graph" ? " active" : ""}`} title="图谱" onClick={() => setTab("graph")}>
+          🕸
+        </button>
+        <button className={`graph-tab${tab === "outline" ? " active" : ""}`} title="大纲" onClick={() => setTab("outline")}>
+          ☰
+        </button>
+      </div>
+
+      {tab === "graph" ? (
+        <div className="graph-canvas" ref={containerRef} onWheel={onWheel} onPointerDown={onPointerDown}>
+          {worldSize.w > 0 && (
+            <div
+              className="graph-world"
+              style={{
+                width: worldSize.w,
+                height: worldSize.h,
+                transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+                transformOrigin: "0 0",
+              }}
+            >
+              <svg className="graph-lines" width={worldSize.w} height={worldSize.h}>
+                {lines.map((l, i) => (
+                  <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
+                ))}
+              </svg>
+              {graph?.nodes.map((n) => {
+                const p = layout[n.id];
+                if (!p) return null;
+                return (
+                  <button
+                    key={n.id}
+                    className={`graph-node${n.id === currentSessionId ? " current" : ""}`}
+                    style={{ left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
+                    onClick={() => openSession(n.id)}
+                    title={`打开「${n.title}」`}
+                  >
+                    <span className="graph-node-title">{n.title}</span>
+                    <span className="graph-node-meta muted">{n.nodeCount} 消息</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {graph && graph.nodes.length === 0 && <div className="muted graph-empty">（暂无会话）</div>}
+          <button className="graph-reset" title="重置视角（100% + 当前会话居中）" onClick={resetView}>
+            ⟳
+          </button>
+        </div>
+      ) : (
+        <div className="graph-outline">
+          {outlines.length === 0 && <div className="muted graph-empty">（当前会话暂无大纲）</div>}
+          {outlines.map((o) => (
+            <button
+              key={o.id}
+              className={`graph-outline-item${outlineSel === o.id ? " selected" : ""}`}
+              onClick={() => setOutlineSel((s) => (s === o.id ? null : o.id))}
+              title="加入上下文（选中高亮，供子对话继承）"
+            >
+              <span className="graph-outline-kind">{o.kind}</span>
+              <span>{o.summary}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

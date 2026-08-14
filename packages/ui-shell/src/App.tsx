@@ -1,12 +1,13 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
-import { GripVertical } from "lucide-react";
+import { ExternalLink, GripVertical, PanelRight } from "lucide-react";
 import { FloatingPanel } from "./components/FloatingPanel.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { ThemeManager } from "./components/ThemeManager.js";
 import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
 import { queryPanels, type PanelContribution, type PanelDock } from "./panels.js";
+import { panelIcon } from "./panel-icons.js";
 import { setPendingOpenSessionId } from "../../agent-driver/src/session-open.js";
 import ChatView from "../../agent-driver/src/chat-view.js";
 import type { SessionLike } from "../../agent-driver/src/chat-history.js";
@@ -367,6 +368,8 @@ function WorkspaceInstance({
 }) {
   const [tick, setTick] = useState(0);
   const [snapTarget, setSnapTarget] = useState<PanelDock | null>(null);
+  // 2-R2 面板拆放：左栏 icon 右键菜单（移至右栏 / 浮起）
+  const [panelMenu, setPanelMenu] = useState<{ panelId: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     const offs: Array<() => void> = [];
@@ -374,6 +377,16 @@ function WorkspaceInstance({
     offs.push(kernel.events.on("minex:dataChanged", () => setTick((t) => t + 1)));
     return () => offs.forEach((off) => off());
   }, [kernel]);
+
+  // 2-R2 右键菜单：Esc 关闭
+  useEffect(() => {
+    if (!panelMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPanelMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panelMenu]);
 
   const panels = useMemo<PanelContribution[]>(() => queryPanels(kernel), [kernel, tick]);
 
@@ -450,28 +463,63 @@ function WorkspaceInstance({
 
   return (
     <div className="workspace">
-      {/* 左侧栏 */}
+      {/* 左侧栏：2-R2 icon 栏（总池）——垂直 icon 按钮，点击切换 / 双击浮起 / 右键拆放 */}
       <div
         className={`sidebar${instance.collapsed.left ? " collapsed" : ""}`}
         style={{ width: instance.collapsed.left ? undefined : instance.widths.left }}
       >
         {leftPanels.length > 0 && (
-          <div className="panel-tabs">
-            {leftPanels.map((p) => (
-              <button
-                key={p.id}
-                className={`panel-tab${leftPanel?.id === p.id ? " active" : ""}`}
-                onClick={() => onUpdate({ activeLeftPanelId: p.id })}
-                onDoubleClick={() => floatPanel(p.id)}
-                title={`浮起「${p.title}」（双击）`}
-              >
-                {p.title}
-              </button>
-            ))}
+          <div className="panel-iconbar">
+            {leftPanels.map((p) => {
+              const Icon = panelIcon(p.id);
+              return (
+                <button
+                  key={p.id}
+                  className={`panel-icon${leftPanel?.id === p.id ? " active" : ""}`}
+                  onClick={() => onUpdate({ activeLeftPanelId: p.id })}
+                  onDoubleClick={() => floatPanel(p.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setPanelMenu({ panelId: p.id, x: e.clientX, y: e.clientY });
+                  }}
+                  title={`${p.title}（点击切换 · 双击浮起 · 右键拆放）`}
+                >
+                  <Icon size={18} />
+                </button>
+              );
+            })}
           </div>
         )}
         {leftPanel && <div className="dock-panel">{renderPanel(leftPanel)}</div>}
       </div>
+
+      {/* 2-R2 面板拆放右键菜单（移至右栏 / 浮起） */}
+      {panelMenu && (
+        <div className="floating-mask" onClick={() => setPanelMenu(null)}>
+          <div
+            className="panel-menu"
+            style={{ left: panelMenu.x, top: panelMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                onUpdate({ dockState: { ...instance.dockState, [panelMenu.panelId]: "right" } });
+                setPanelMenu(null);
+              }}
+            >
+              <PanelRight size={14} /> 移至右栏
+            </button>
+            <button
+              onClick={() => {
+                floatPanel(panelMenu.panelId);
+                setPanelMenu(null);
+              }}
+            >
+              <ExternalLink size={14} /> 浮起
+            </button>
+          </div>
+        </div>
+      )}
       {!instance.collapsed.left && (
         <Resizer side="left" initialWidth={instance.widths.left} onResize={(t) => onUpdate({ widths: { ...instance.widths, left: clamp(t, 160, 480) } })} />
       )}

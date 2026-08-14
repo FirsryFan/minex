@@ -26,13 +26,22 @@ export default {
     // 会话树纯函数（2-1/2-3/2-4）：buildContext / deriveBranches / addNode / addLink / createSession / addOutlineEntry
     ctx.register("session.tree", "default", { buildContext, deriveBranches, addNode, addLink, createSession, addOutlineEntry });
 
-    // 面板：会话总览（右栏；搜索 / 标签筛选 / 列表 / 新建，点击打开 .ses）
+    // 面板：会话总览（左栏；搜索 / 标签筛选 / 列表 / 新建，点击打开 .ses 对话模式）——P2：总览归左栏
     ctx.register("panel", "mist.session.overview", {
       driverId: "mist.session",
       id: "mist.session.overview",
       title: "会话",
-      defaultDock: "right",
+      defaultDock: "left",
       load: () => import("./overview-view.js"),
+    });
+
+    // 面板：会话系（左栏；图谱树形画布 + 大纲 tab，P2/P3）——icon 映射 Network 由外壳 panel-icons 维护
+    ctx.register("panel", "mist.session.graph", {
+      driverId: "mist.session",
+      id: "mist.session.graph",
+      title: "会话系",
+      defaultDock: "left",
+      load: () => import("./graph-view.js"),
     });
 
     // 会话 markdown 视图（.ses 主链渲染 + 保存；保存走 store 保证索引一致）
