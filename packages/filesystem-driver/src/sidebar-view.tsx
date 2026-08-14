@@ -61,10 +61,13 @@ export default function SidebarView({ kernel, instanceId }: { kernel: MinexKerne
     kernel.events.emit("filesystem:openFile", { path: node.path, targetInstanceId: instanceId });
   }
 
-  /** markdown 保存后刷新根列表（保留展开状态；已展开子目录的新增文件需重新折叠/展开才可见——v1 简化）。 */
+  /** 保存/删除文件后刷新根列表（保留展开状态；已展开子目录的新增文件需重新折叠/展开才可见——v1 简化）。
+   *  G-A 反馈 5：订阅 minex:dataChanged——删除会话（.ses 真删）后文件树同步刷新。 */
   useEffect(() => {
-    const off = kernel.events.on("filesystem:fileSaved", () => void refreshTree());
-    return off;
+    const offs: Array<() => void> = [];
+    offs.push(kernel.events.on("filesystem:fileSaved", () => void refreshTree()));
+    offs.push(kernel.events.on("minex:dataChanged", () => void refreshTree()));
+    return () => offs.forEach((off) => off());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kernel, fs]);
 

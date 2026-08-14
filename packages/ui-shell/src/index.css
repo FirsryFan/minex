@@ -1774,38 +1774,62 @@ button {
   position: absolute;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 8px 10px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 50%; /* G-A 反馈 4：圆形节点 */
+  box-shadow: var(--shadow-card); /* G-A 反馈 6 */
   color: var(--color-text);
-  font-size: 12px;
-  text-align: left;
   cursor: pointer;
   overflow: hidden;
+  transition: box-shadow 0.15s, transform 0.15s;
 }
 .graph-node:hover {
   border-color: var(--color-primary);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
 }
 .graph-node.current {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
 }
-.graph-node-title {
+.graph-node-char {
+  font-size: 18px;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 1;
+  max-width: 40px;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
-.graph-node-meta {
-  font-size: 11px;
+.graph-info {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.graph-info-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .graph-reset {
   position: absolute;
   right: 8px;
-  top: 8px;
+  top: 40px; /* 信息栏下方 */
   z-index: 5;
   padding: 4px 8px;
   border: 1px solid var(--color-border);
@@ -1858,4 +1882,23 @@ button {
 }
 .graph-empty {
   padding: var(--spacing-md);
+}
+
+/* G-A 反馈 6：卡片阴影 / 悬浮感（浅/深色通用，变量随主题） */
+.session-item {
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.session-item:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+}
+.chat-msg {
+  box-shadow: var(--shadow-card);
+}
+.chat-context-panel {
+  box-shadow: var(--shadow-card);
+}
+.chat-compose {
+  box-shadow: var(--shadow-card);
 }

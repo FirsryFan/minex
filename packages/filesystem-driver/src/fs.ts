@@ -16,6 +16,8 @@ export interface FileSystemAbility {
   writeFile(path: string, content: string): Promise<void>;
   /** 确保目录存在（递归创建；供写入深层文件前调用） */
   ensureDir(path: string): Promise<void>;
+  /** 删除文件（G-A 反馈 5：删会话真删 .ses；路径安全经 resolveSafePath） */
+  removeFile(path: string): Promise<void>;
 }
 
 /**
@@ -72,6 +74,11 @@ export function createBrowserFileSystem(): FileSystemAbility {
     },
     async ensureDir(path) {
       await resolveDir(path, true);
+    },
+    async removeFile(path) {
+      const safe = resolveSafePath(path);
+      const dir = await resolveDir(parentOf(safe));
+      await dir.removeEntry(nameOf(safe)); // 路径安全：safe 已校验，nameOf 不含 "/"
     },
   };
 }

@@ -20,7 +20,21 @@ export default {
     if (!fs) {
       throw new Error("mist.session 依赖 minex.filesystem 能力，但未找到");
     }
-    const store: SessionStore = createSessionStore(fs);
+    const rawStore = createSessionStore(fs);
+    // G-A 反馈 2：会话数据变更（保存/删除）统一 emit minex:dataChanged——图谱/总览/文件树订阅即刷新；
+    // 包装 store 供 session 能力与 session.md 保存共用（所有会话变更路径都 emit）
+    const emitChanged = (): void => ctx.emit("minex:dataChanged", { driverId: "mist.session" });
+    const store: SessionStore = {
+      ...rawStore,
+      async saveSession(s: Session): Promise<void> {
+        await rawStore.saveSession(s);
+        emitChanged();
+      },
+      async deleteSession(id: string): Promise<void> {
+        await rawStore.deleteSession(id);
+        emitChanged();
+      },
+    };
     ctx.register("session", "default", store);
 
     // 会话树纯函数（2-1/2-3/2-4）：buildContext / deriveBranches / addNode / addLink / createSession / addOutlineEntry

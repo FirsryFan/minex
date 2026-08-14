@@ -16,6 +16,8 @@ export interface SessionFsOps {
   writeFile(path: string, content: string): Promise<void>;
   /** 建目录（会话按 type 分文件夹存储） */
   ensureDir(path: string): Promise<void>;
+  /** 删除文件（G-A 反馈 5：删会话真删 .ses） */
+  removeFile(path: string): Promise<void>;
 }
 
 export interface SessionStore {
@@ -78,9 +80,17 @@ export function createSessionStore(fs: SessionFsOps): SessionStore {
     }
   }
 
-  /** 删除会话：v1 仅从索引移除（正文文件删除待 filesystem 提供 removeFile 后补充）。 */
+  /** G-A 反馈 5：删除会话 = 真删 .ses 文件（容错：文件不存在不抛）+ 索引移除 */
   async function deleteSession(id: string): Promise<void> {
     const index = await loadIndex();
+    const entry = index.sessions.find((e) => e.id === id);
+    if (entry) {
+      try {
+        await fs.removeFile(sessionPath(entry.type, entry.id));
+      } catch {
+        /* 正文文件不存在/删除失败不阻断索引移除（容错） */
+      }
+    }
     const sessions = index.sessions.filter((e) => e.id !== id);
     await fs.writeFile(indexPath, JSON.stringify({ version: SESSION_VERSION, sessions }, null, 2));
   }

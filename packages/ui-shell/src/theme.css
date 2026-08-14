@@ -37,6 +37,7 @@
 
   /* 阴影 */
   --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.14); /* G-A 反馈 6：hover 提升 */
   --shadow-floating: 0 12px 32px rgba(15, 23, 42, 0.18);
 
   /* 布局尺寸 */
@@ -77,5 +78,6 @@
   --color-hover: #2d3a4f;
 
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.55);
   --shadow-floating: 0 12px 32px rgba(0, 0, 0, 0.5);
 }

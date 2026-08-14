@@ -4,7 +4,7 @@ import { buildSessionGraph, layoutSessionGraph, type SessionGraph } from "./sess
 import type { Session } from "./session.js";
 import type { SessionStore } from "./store.js";
 
-const NODE_W = 160;
+const NODE_W = 56; // G-A 反馈 4：圆形节点（直径 56，中心 = +28）
 const NODE_H = 56;
 
 type Tab = "graph" | "outline";
@@ -25,6 +25,7 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [outlineSel, setOutlineSel] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null); // R-A 反馈 3：节点删除确认
+  const [hoverId, setHoverId] = useState<string | null>(null); // G-A 反馈 4：hover 信息栏
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,6 +61,8 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
 
   const currentSession = sessions.find((s) => s.meta.id === currentSessionId) ?? null;
   const outlines = currentSession?.meta.outlines ?? [];
+  // G-A 反馈 4：hover 信息栏（悬停优先，否则当前会话）
+  const hovered = sessions.find((s) => s.meta.id === (hoverId ?? currentSessionId)) ?? null;
 
   // 图谱布局（纯函数）与画布世界尺寸 / 父子连线
   const layout = useMemo(() => (graph ? layoutSessionGraph(graph) : {}), [graph]);
@@ -146,9 +149,10 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
     centerOn(currentSessionId, 1);
   }
 
-  /** 节点点击 → 打开会话对话模式（复用 2-2 入口） */
+  /** 节点点击 → 打开会话对话模式（复用 2-2 入口）+ G-A 反馈 3：视角跟随（该会话置于视图中心 1 倍） */
   function openSession(id: string): void {
     setCurrentSessionId(id);
+    centerOn(id, 1);
     kernel.events.emit("minex:openSession", { id, targetInstanceId: instanceId });
   }
 
@@ -173,6 +177,21 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
 
       {tab === "graph" ? (
         <div className="graph-canvas" ref={containerRef} onWheel={onWheel} onPointerDown={onPointerDown}>
+          {/* G-A 反馈 4：顶部 hover 信息栏（悬停某圆显示其信息，无悬停显示当前会话） */}
+          <div className="graph-info">
+            {hovered ? (
+              <>
+                <span className="graph-info-title">{hovered.meta.title}</span>
+                <span className="muted">
+                  {hovered.nodes.length} 消息
+                  {hovered.meta.tags.length > 0 ? ` · ${hovered.meta.tags.join(" ")}` : ""}
+                  {` · ${hovered.meta.updatedAt.slice(0, 10)}`}
+                </span>
+              </>
+            ) : (
+              <span className="muted">（悬停节点查看信息）</span>
+            )}
+          </div>
           {worldSize.w > 0 && (
             <div
               className="graph-world"
@@ -194,9 +213,11 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
                 return (
                   <div
                     key={n.id}
-                    className={`graph-node${n.id === currentSessionId ? " current" : ""}`}
+                    className={`graph-node${n.id === currentSessionId ? " current" : ""}${hoverId === n.id ? " hover" : ""}`}
                     style={{ left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
                     onClick={() => openSession(n.id)}
+                    onMouseEnter={() => setHoverId(n.id)}
+                    onMouseLeave={() => setHoverId(null)}
                     title={`打开「${n.title}」`}
                   >
                     <button
@@ -209,8 +230,7 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
                     >
                       ✕
                     </button>
-                    <span className="graph-node-title">{n.title}</span>
-                    <span className="graph-node-meta muted">{n.nodeCount} 消息</span>
+                    <span className="graph-node-char">{n.title.slice(0, 1)}</span>
                   </div>
                 );
               })}
