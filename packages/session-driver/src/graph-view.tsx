@@ -230,16 +230,16 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
                   updatedAt: meta?.updatedAt ?? "",
                   childCount,
                 });
-                // 节点中心对齐布局锚点（p.x + MAX_RADIUS）：半径 < 30 时向左上偏移 (MAX_RADIUS - r)，
-                // 使 lines/centerOn 的 MAX_RADIUS 几何锚点 = 每个圆的真实视觉中心
+                // 节点中心对齐布局锚点（p.x + MAX_RADIUS）：left = p.x + (MAX_RADIUS - r)，
+                // 中心 = left + r = p.x + MAX_RADIUS → lines/centerOn 的几何锚点 = 每个圆的真实视觉中心
                 const off = MAX_RADIUS - v.radius;
                 return (
                   <div
                     key={n.id}
                     className={`graph-node${n.id === currentSessionId ? " current" : ""}${hoverId === n.id ? " hover" : ""}`}
                     style={{
-                      left: p.x - off,
-                      top: p.y - off,
+                      left: p.x + off,
+                      top: p.y + off,
                       width: v.radius * 2,
                       height: v.radius * 2,
                       background: v.fill,
@@ -253,6 +253,7 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
                     <button
                       className="graph-node-del"
                       title="删除会话"
+                      aria-label="删除会话"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteId(n.id);

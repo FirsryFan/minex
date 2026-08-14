@@ -1645,11 +1645,16 @@ button {
   color: var(--color-text-muted);
   font-size: 12px;
 }
-/* R-A 反馈 3：图谱节点删除按钮（F4 反馈 4：仅 hover 显示，常态纯净） */
+/* R-A 反馈 3：图谱节点删除按钮（F4 反馈 4：仅 hover 显示，常态纯净；checker minor：min 18px 触区） */
 .graph-node-del {
   position: absolute;
   right: 4px;
   top: 4px;
+  min-width: 18px;
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 0 4px;
   font-size: 10px;
   line-height: 1.4;
