@@ -2,7 +2,7 @@
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
-/** 工具调用（role="assistant" 消息的 tool_calls） */
+/** 工具调用（role="assistant" 消息的 tool_calls，内部扁平结构：解析/执行用） */
 export interface ToolCall {
   id: string;
   name: string;
@@ -10,13 +10,24 @@ export interface ToolCall {
   arguments: string;
 }
 
+/**
+ * 序列化后的 assistant tool_calls（OpenAI/DeepSeek 线格式，紧急修复）：
+ * 扁平 ToolCall 发给 DeepSeek 前必须加 `type:"function"` + `function` 包裹，否则 API 400 missing field type。
+ * 流式解析侧（deepseek.ts）读回的 delta.tool_calls 也是同形状（{ index, id?, type?, function: { name?, arguments? } }）。
+ */
+export interface SerializedToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
   /** role="tool" 消息关联的工具调用 id */
   tool_call_id?: string;
-  /** role="assistant" 消息发起的工具调用 */
-  tool_calls?: ToolCall[];
+  /** role="assistant" 消息发起的工具调用（线格式，发送前必须序列化） */
+  tool_calls?: SerializedToolCall[];
 }
 
 /** 工具定义（函数 schema） */

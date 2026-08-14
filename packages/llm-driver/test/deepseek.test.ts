@@ -19,6 +19,20 @@ describe("parseSseLine", () => {
     const r = parseSseLine('data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"prompt_cache_hit_tokens":30}}');
     expect(r).toEqual({ usage: { promptTokens: 100, completionTokens: 50, cachedTokens: 30 } });
   });
+  it("工具调用分片：从嵌套 function 包裹取 name/arguments（与序列化侧对称，DeepSeek 400 修复核对）", () => {
+    const r = parseSseLine(
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":"read_file","arguments":"{\\"path\\":\\"a.md\\"}"}}]}}]}',
+    );
+    expect(r).toEqual({
+      toolCall: { index: 0, id: "c1", name: "read_file", arguments: '{"path":"a.md"}' },
+    });
+  });
+  it("工具调用分片缺 name/arguments 分片：只带已有字段（流式分片续传）", () => {
+    const r = parseSseLine(
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}}}"}}]}}]}',
+    );
+    expect(r).toEqual({ toolCall: { index: 0, arguments: "}}}" } });
+  });
 });
 
 describe("extractUsage", () => {

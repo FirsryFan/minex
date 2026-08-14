@@ -4,6 +4,7 @@ import {
   defaultRework,
   parseAssistantResponse,
   runAgent,
+  serializeToolCalls,
   type AgentDeps,
   type AgentEvent,
 } from "../src/agent.js";
@@ -68,6 +69,52 @@ describe("defaultRework", () => {
   it("透传", () => {
     const m: ChatMessage = { role: "tool", content: "x", tool_call_id: "id" };
     expect(defaultRework(m)).toEqual([m]);
+  });
+});
+
+describe("serializeToolCalls（assistant tool_calls 线格式，DeepSeek 400 修复）", () => {
+  it("正常转换：type=function + function 包裹 + name/arguments 正确", () => {
+    const out = serializeToolCalls([{ id: "c1", name: "read_file", arguments: '{"path":"a.md"}' }]);
+    expect(out).toEqual([
+      { id: "c1", type: "function", function: { name: "read_file", arguments: '{"path":"a.md"}' } },
+    ]);
+    expect(out[0].type).toBe("function");
+    expect(out[0].function.name).toBe("read_file");
+  });
+
+  it("空数组 → []", () => {
+    expect(serializeToolCalls([])).toEqual([]);
+  });
+
+  it("arguments JSON 字符串原样透传（不解析不重写）；多调用保序保字段", () => {
+    const out = serializeToolCalls([
+      { id: "c1", name: "a", arguments: '{"x":1}' },
+      { id: "c2", name: "b", arguments: "" },
+    ]);
+    expect(out).toEqual([
+      { id: "c1", type: "function", function: { name: "a", arguments: '{"x":1}' } },
+      { id: "c2", type: "function", function: { name: "b", arguments: "" } },
+    ]);
+  });
+
+  it("链路：runAgent 回灌的 assistant 消息 tool_calls 为线格式（非扁平，不再 400）", async () => {
+    let secondRoundMessages: ChatMessage[] = [];
+    let calls = 0;
+    async function* stream(req: { messages: ChatMessage[] }): AsyncIterable<LLMChunk> {
+      calls++;
+      if (calls === 1) {
+        yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c1", name: "echo", arguments: '{"text":"hi"}' } };
+      } else {
+        secondRoundMessages = req.messages;
+        yield { delta: "答", done: false };
+      }
+      yield { delta: "", done: true, usage: { promptTokens: 1, completionTokens: 0, cachedTokens: 0 } };
+    }
+    await collect(runAgent(makeDeps(stream), { systemPrompt: "s", history: [] }));
+    const asst = secondRoundMessages.find((m) => m.role === "assistant");
+    expect(asst?.tool_calls).toEqual([
+      { id: "c1", type: "function", function: { name: "echo", arguments: '{"text":"hi"}' } },
+    ]);
   });
 });
 

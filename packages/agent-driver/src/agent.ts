@@ -5,6 +5,7 @@ import type {
   LLMPrices,
   LLMRequest,
   LLMUsage,
+  SerializedToolCall,
   ToolCall,
   ToolCallDelta,
   ToolDef,
@@ -93,6 +94,20 @@ export function parseAssistantResponse(payload: AccumulatedResponse): { text: st
 /** 构造工具结果消息（role="tool" + tool_call_id + content）。纯函数可测。 */
 export function buildToolResultMessage(toolCallId: string, result: string): ChatMessage {
   return { role: "tool", content: result, tool_call_id: toolCallId };
+}
+
+/**
+ * 序列化 assistant tool_calls（紧急修复：DeepSeek 400 missing field type）。
+ * 内部扁平 ToolCall { id, name, arguments } → OpenAI/DeepSeek 线格式
+ * [{ id, type: "function", function: { name, arguments } }]；arguments 为 JSON 字符串原样透传。
+ * 纯函数可测。
+ */
+export function serializeToolCalls(toolCalls: ToolCall[]): SerializedToolCall[] {
+  return toolCalls.map((c) => ({
+    id: c.id,
+    type: "function",
+    function: { name: c.name, arguments: c.arguments },
+  }));
 }
 
 /** 默认再加工 hook：透传（返回 [toolResult]）。 */
@@ -198,8 +213,8 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
       return;
     }
 
-    // 回灌 assistant（带 tool_calls）
-    history.push({ role: "assistant", content: text, tool_calls: toolCalls });
+    // 回灌 assistant（带 tool_calls）——序列化为线格式（type:"function" + function 包裹，否则 DeepSeek 400）
+    history.push({ role: "assistant", content: text, tool_calls: serializeToolCalls(toolCalls) });
 
     // 工具执行：先按声明顺序 yield toolCall 事件（UI 顺序稳定），再经 scheduler.execute 并行执行
     for (const call of toolCalls) {

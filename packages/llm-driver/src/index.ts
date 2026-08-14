@@ -8,7 +8,7 @@ export { buildMessages, assembleWorkMemory, serializeToolDef } from "./assembler
 export { computeCost, computeHitRate } from "./metrics.js";
 export type { LLMMetricsEntry, LLMPrices } from "./metrics.js";
 export { parseSseLine, extractUsage, createDeepSeekProvider } from "./deepseek.js";
-export type { ChatMessage, ChatRole, ToolCall, ToolCallDelta, ToolDef, LLMRequest, LLMChunk, LLMUsage, LLMProvider } from "./types.js";
+export type { ChatMessage, ChatRole, ToolCall, SerializedToolCall, ToolCallDelta, ToolDef, LLMRequest, LLMChunk, LLMUsage, LLMProvider } from "./types.js";
 
 /** LLM 配置能力：apiKey / model / 默认参数 / 价格表（按模型区分，不写死默认） */
 interface LLMConfig {
