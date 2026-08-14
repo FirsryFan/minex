@@ -68,11 +68,16 @@ export function App({ problems }: { problems: string[] }) {
   const [instances, setInstances] = useState<InstanceState[]>(() => [makeInstance(1, "工作区 1")]);
   const [activeInstanceId, setActiveInstanceId] = useState(1);
   const [taskViewOpen, setTaskViewOpen] = useState(false);
-  // 2-3 浮窗子对话：聊天内框选 → minex:openChildChat → 外壳浮窗承载迷你 ChatView
+  // 2-3 浮窗子对话：聊天内框选 → minex:openChildChat → 外壳浮窗承载迷你 ChatView。
+  // 热修：x/y/w/h 入 state，onMove/onResize 真实更新——修复拖拽 no-op 导致拖不动。
   const [childChat, setChildChat] = useState<{
     childSession: SessionLike;
     contextItems: Array<{ ref: string; content: string }>;
     parentSession: SessionLike;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
   } | null>(null);
   const activeInstance = instances.find((i) => i.id === activeInstanceId) ?? instances[0];
 
@@ -120,10 +125,15 @@ export function App({ problems }: { problems: string[] }) {
     return kernel.events.on("minex:openChildChat", (payload) => {
       const p = payload as { childSession?: SessionLike; contextItems?: unknown[]; parentSession?: SessionLike } | undefined;
       if (!p?.childSession || !p.parentSession) return;
+      const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
       setChildChat({
         childSession: p.childSession,
         contextItems: (p.contextItems ?? []) as Array<{ ref: string; content: string }>,
         parentSession: p.parentSession,
+        x: Math.max(0, vw - 520),
+        y: 80,
+        w: 420,
+        h: 520,
       });
     });
   }, [kernel]);
@@ -236,16 +246,17 @@ export function App({ problems }: { problems: string[] }) {
         </div>
       )}
 
-      {/* 2-3 浮窗子对话（框选 → 与 AI 讨论这段）：复用会话模式 ChatView（contextItems + parentSession） */}
+      {/* 2-3 浮窗子对话（框选 → 与 AI 讨论这段）：复用会话模式 ChatView（contextItems + parentSession）。
+          热修：onMove/onResize 真实更新 state（拖拽/缩放生效），onDrop 位置已由 onMove 跟踪。 */}
       {childChat && (
         <FloatingPanel
           title="子对话"
-          x={Math.max(0, (typeof window !== "undefined" ? window.innerWidth : 1024) - 520)}
-          y={80}
-          w={420}
-          h={520}
-          onMove={() => {}}
-          onResize={() => {}}
+          x={childChat.x}
+          y={childChat.y}
+          w={childChat.w}
+          h={childChat.h}
+          onMove={(x, y, w, h) => setChildChat((c) => (c ? { ...c, x, y, w, h } : c))}
+          onResize={(w, h) => setChildChat((c) => (c ? { ...c, w, h } : c))}
           onDrop={() => {}}
           onClose={() => setChildChat(null)}
         >
