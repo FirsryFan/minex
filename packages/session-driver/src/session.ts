@@ -56,6 +56,10 @@ export interface SessionMeta {
   outlines?: OutlineEntry[];
   /** 会话级设置（2-2；可选，旧数据兼容） */
   settings?: SessionSettings;
+  /** 父会话 id（会话系图谱真相源，P3：子会话创建时写入；可选，旧数据兼容） */
+  parentSessionId?: string;
+  /** 会话采用的 persona id（P1：浮窗选择器选定写入；可选，旧数据兼容） */
+  personaId?: string;
 }
 
 export interface Session {
@@ -288,6 +292,9 @@ export function validateSession(data: unknown): data is Session {
     if (st.temperature !== undefined && typeof st.temperature !== "number") return false;
     if (st.contextStrategy !== undefined && st.contextStrategy !== "branch" && st.contextStrategy !== "full") return false;
   }
+  // 2-1 修订扩展：parentSessionId / personaId 可选（出现则必须 string，旧数据不出现即兼容）
+  if (meta.parentSessionId !== undefined && typeof meta.parentSessionId !== "string") return false;
+  if (meta.personaId !== undefined && typeof meta.personaId !== "string") return false;
   if (!Array.isArray(s.activeAgents) || (s.activeAgents as unknown[]).some((a) => typeof a !== "string")) return false;
   if (!Array.isArray(s.nodes) || !Array.isArray(s.links)) return false;
   for (const n of s.nodes as unknown[]) {

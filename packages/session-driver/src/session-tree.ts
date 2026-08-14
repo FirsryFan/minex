@@ -193,3 +193,114 @@ export function listOutlines(session: Session, kind?: OutlineEntry["kind"]): Out
   const outlines = session.meta.outlines ?? [];
   return kind ? outlines.filter((o) => o.kind === kind) : [...outlines];
 }
+
+/** 会话系图谱（P3 拍板：推导不存文件，权威数据 = 各会话 meta.parentSessionId） */
+export interface SessionGraphNode {
+  id: string;
+  title: string;
+  nodeCount: number;
+  /** 父会话 id（根节点无） */
+  parentId?: string;
+}
+
+export interface SessionGraph {
+  nodes: SessionGraphNode[];
+}
+
+/** 索引条目最小结构（buildSessionGraph 只读 id/title/nodeCount；数组序 = 创建序代理） */
+export interface SessionGraphSource {
+  id: string;
+  title: string;
+  nodeCount: number;
+}
+
+/** 会话 meta 最小结构（loadMeta 只读 parentSessionId） */
+export interface SessionMetaLike {
+  parentSessionId?: string;
+}
+
+/**
+ * 构建会话系图谱：扫描索引 + 读各会话 meta.parentSessionId 聚合。
+ * - parentId 指向不存在会话（父已删）/ 指向自己 → 不建边（孤立根）；
+ * - **环状防御**：parentId 成环时按创建序断环（数组序为创建序代理，断「较晚创建」节点的入边）→ 无无限循环。
+ */
+export function buildSessionGraph(
+  index: SessionGraphSource[],
+  loadMeta: (id: string) => SessionMetaLike | undefined,
+): SessionGraph {
+  const byId = new Set(index.map((e) => e.id));
+  const edges = new Map<string, string>(); // childId → parentId
+  for (const e of index) {
+    const pid = loadMeta(e.id)?.parentSessionId;
+    if (pid && pid !== e.id && byId.has(pid)) edges.set(e.id, pid);
+  }
+  breakCycles(edges, index);
+  return {
+    nodes: index.map((e) => {
+      const pid = edges.get(e.id);
+      return { id: e.id, title: e.title, nodeCount: e.nodeCount, ...(pid ? { parentId: pid } : {}) };
+    }),
+  };
+}
+
+/** 找环：沿 parent 链走，节点重复即环（返回环上节点序列，child 序） */
+function findCycle(edges: Map<string, string>): string[] | null {
+  for (const start of edges.keys()) {
+    const path: string[] = [];
+    const pos = new Map<string, number>();
+    let cur: string | undefined = start;
+    while (cur !== undefined && edges.has(cur)) {
+      if (pos.has(cur)) return path.slice(pos.get(cur)!);
+      pos.set(cur, path.length);
+      path.push(cur);
+      cur = edges.get(cur);
+    }
+  }
+  return null;
+}
+
+/** 反复断环：环上「数组序最晚」的节点入边删除（较晚创建的节点视为环的成因），直到无环 */
+function breakCycles(edges: Map<string, string>, index: SessionGraphSource[]): void {
+  const order = new Map(index.map((e, i) => [e.id, i]));
+  for (;;) {
+    const cycle = findCycle(edges);
+    if (!cycle) return;
+    const latest = cycle.reduce((a, b) => ((order.get(b) ?? 0) > (order.get(a) ?? 0) ? b : a));
+    edges.delete(latest);
+  }
+}
+
+/**
+ * 简单树布局：按 parentId 分层（根层 0、深度 +1），同层按数组序排列；
+ * 返回 nodeId → {x, y}（x = 同层索引 × STEP_X，y = 深度 × STEP_Y）。无环（buildSessionGraph 已断环）。
+ */
+export function layoutSessionGraph(graph: SessionGraph): Record<string, { x: number; y: number }> {
+  const order = new Map(graph.nodes.map((n, i) => [n.id, i]));
+  const depth = new Map<string, number>();
+  const computeDepth = (id: string): number => {
+    const cached = depth.get(id);
+    if (cached !== undefined) return cached;
+    const node = graph.nodes.find((n) => n.id === id);
+    if (!node || node.parentId === undefined) return 0;
+    const d = computeDepth(node.parentId) + 1;
+    depth.set(id, d);
+    return d;
+  };
+  const byDepth = new Map<number, string[]>();
+  for (const n of graph.nodes) {
+    const d = computeDepth(n.id);
+    const list = byDepth.get(d) ?? [];
+    list.push(n.id);
+    byDepth.set(d, list);
+  }
+  const STEP_X = 220;
+  const STEP_Y = 160;
+  const pos: Record<string, { x: number; y: number }> = {};
+  for (const [d, ids] of byDepth) {
+    ids.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+    ids.forEach((id, i) => {
+      pos[id] = { x: i * STEP_X, y: d * STEP_Y };
+    });
+  }
+  return pos;
+}

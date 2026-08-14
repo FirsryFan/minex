@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   addOutlineEntry,
   buildContext,
+  buildSessionGraph,
   checkout,
   deleteBranch,
   deriveBranches,
+  layoutSessionGraph,
   listOutlines,
   type OutlineEntry,
 } from "../src/session-tree.js";
@@ -324,5 +326,105 @@ describe("validateSession 扩展（2-1）", () => {
     (s.meta as { currentBranchId?: unknown }).currentBranchId = 123;
     expect(validateSession(s)).toBe(false);
     expect(validateSession(chain(["a"]))).toBe(true); // 旧数据无新字段仍通过
+  });
+
+  it("parentSessionId / personaId：string 通过、非 string 拒绝、旧数据无字段通过", () => {
+    const s = mk([{ id: "a", kind: "user", content: "a" }], [], {});
+    (s.meta as Record<string, unknown>).parentSessionId = "p1";
+    (s.meta as Record<string, unknown>).personaId = "minex.persona.researcher";
+    expect(validateSession(s)).toBe(true);
+    (s.meta as Record<string, unknown>).parentSessionId = 123;
+    expect(validateSession(s)).toBe(false);
+    (s.meta as Record<string, unknown>).parentSessionId = "p1";
+    (s.meta as Record<string, unknown>).personaId = 456;
+    expect(validateSession(s)).toBe(false);
+    expect(validateSession(chain(["a"]))).toBe(true); // 旧数据无新字段仍通过
+  });
+});
+
+describe("buildSessionGraph / layoutSessionGraph（2-1 修订：会话系图谱推导，P3）", () => {
+  it("单根：链式父子 → 节点带 parentId、根无；布局分层", () => {
+    const graph = buildSessionGraph(
+      [
+        { id: "a", title: "A", nodeCount: 3 },
+        { id: "b", title: "B", nodeCount: 2 },
+        { id: "c", title: "C", nodeCount: 1 },
+      ],
+      (id) => ({ parentSessionId: id === "a" ? undefined : id === "b" ? "a" : "b" }),
+    );
+    expect(graph.nodes).toEqual([
+      { id: "a", title: "A", nodeCount: 3 },
+      { id: "b", title: "B", nodeCount: 2, parentId: "a" },
+      { id: "c", title: "C", nodeCount: 1, parentId: "b" },
+    ]);
+    const pos = layoutSessionGraph(graph);
+    expect(pos.a.y).toBeLessThan(pos.b.y);
+    expect(pos.b.y).toBeLessThan(pos.c.y);
+    expect(pos.a.x).toBe(0);
+  });
+
+  it("多分支：两个根各自子树 → 同层同 y、根层最上", () => {
+    const graph = buildSessionGraph(
+      [
+        { id: "r1", title: "R1", nodeCount: 1 },
+        { id: "r2", title: "R2", nodeCount: 1 },
+        { id: "c1", title: "C1", nodeCount: 1 },
+        { id: "c2", title: "C2", nodeCount: 1 },
+      ],
+      (id) => ({ parentSessionId: id === "c1" ? "r1" : id === "c2" ? "r2" : undefined }),
+    );
+    const pos = layoutSessionGraph(graph);
+    expect(pos.r1.y).toBe(pos.r2.y);
+    expect(pos.c1.y).toBe(pos.c2.y);
+    expect(pos.r1.y).toBeLessThan(pos.c1.y);
+  });
+
+  it("环状数据防御：parentId 成环 → 按创建序断环（较晚创建者入边断开），无无限循环", () => {
+    // a←b←c←a 成环（a.parent=c, b.parent=a, c.parent=b）；数组序 = 创建序（c 最晚）→ 断 c 的入边
+    const graph = buildSessionGraph(
+      [
+        { id: "a", title: "A", nodeCount: 1 },
+        { id: "b", title: "B", nodeCount: 1 },
+        { id: "c", title: "C", nodeCount: 1 },
+      ],
+      (id) => ({ parentSessionId: id === "a" ? "c" : id === "b" ? "a" : "b" }),
+    );
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    expect(byId.get("c")!.parentId).toBeUndefined(); // 断环后 c 为根
+    expect(byId.get("a")!.parentId).toBe("c");
+    expect(byId.get("b")!.parentId).toBe("a");
+    // 布局也不死循环（y = 深度 × STEP_Y=160）
+    const pos = layoutSessionGraph(graph);
+    expect(pos.c.y).toBe(0);
+    expect(pos.a.y).toBe(160);
+    expect(pos.b.y).toBe(320);
+  });
+
+  it("parent 不存在 / 指向自己 → 不建边（孤立根）", () => {
+    const graph = buildSessionGraph(
+      [
+        { id: "a", title: "A", nodeCount: 1 },
+        { id: "b", title: "B", nodeCount: 1 },
+      ],
+      (id) => ({ parentSessionId: id === "a" ? "ghost" : id === "b" ? "b" : undefined }),
+    );
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    expect(byId.get("a")!.parentId).toBeUndefined(); // 父不存在
+    expect(byId.get("b")!.parentId).toBeUndefined(); // 自指
+  });
+
+  it("无 parentSessionId → 全为根；同层按索引序排列", () => {
+    const graph = buildSessionGraph(
+      [
+        { id: "a", title: "A", nodeCount: 1 },
+        { id: "b", title: "B", nodeCount: 1 },
+      ],
+      () => ({}),
+    );
+    expect(graph.nodes.every((n) => n.parentId === undefined)).toBe(true);
+    const pos = layoutSessionGraph(graph);
+    expect(pos.a.y).toBe(0);
+    expect(pos.b.y).toBe(0);
+    expect(pos.a.x).toBeLessThan(pos.b.x);
   });
 });
