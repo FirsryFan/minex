@@ -47,6 +47,7 @@ interface SessionStoreCap {
   hasRoot(): boolean;
   loadSession(id: string): Promise<SessionLike | undefined>;
   saveSession(s: SessionLike): Promise<void>;
+  loadIndex(): Promise<{ sessions: Array<{ id: string; title: string }> }>; // G-B 迁移面板来源列表
 }
 
 /** session.tree 能力子集（2-1 会话树纯函数，经能力桥接；形状与 session-tree.ts 导出一致） */
@@ -151,7 +152,8 @@ export default function ChatView({
   // 2-3：框选状态 / 子对话上下文 / 上下文面板 / 自动继承 / 已勾选
   const chatViewRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<SelectionState | null>(null);
-  const [extraContext, setExtraContext] = useState<ContextItemLike[]>(() => contextItems ?? []);
+  // G-B 反馈 7：extraContext 独立全新对象（复制，杜绝共享引用——多子对话互不影响）
+  const [extraContext, setExtraContext] = useState<ContextItemLike[]>(() => [...(contextItems ?? [])]);
   const [contextOpen, setContextOpen] = useState(false);
   const [autoInherit, setAutoInherit] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -170,11 +172,23 @@ export default function ChatView({
   // 2-R1 persona 选择器选项 = registry 全部 role 贡献（P1：浮窗左上角 agent 选择）
   //（原 2-3 的驱动下拉已由 persona 选择取代——用户反馈 1：应为 agent 选择而非驱动选择）
 
-  // 2-3 父对话（状态化：2-4 大纲生成后更新，供「添加上上下文」面板实时显示新条目）
+  // 2-3 父对话（状态化：2-4 大纲生成后更新）
   const [parent, setParent] = useState<SessionLike | null>(parentSession ?? null);
   const parentRef = useRef<SessionLike | null>(parent);
-  const parentOutlines = (parent?.meta.outlines ?? []) as OutlineLike[];
-  const parentFirstMessage = parent?.nodes.find((n) => n.kind === "user")?.content;
+
+  // G-B 反馈 7：迁移面板「来源会话」（任意会话，默认父会话）——大纲勾选加入 context / 自动继承候选
+  const [sourceId, setSourceId] = useState<string>(() => parentSession?.meta.id ?? "");
+  const [sourceSession, setSourceSession] = useState<SessionLike | null>(() => parentSession ?? null);
+  const [sessionEntries, setSessionEntries] = useState<Array<{ id: string; title: string }>>([]);
+  useEffect(() => {
+    void (async () => {
+      if (!store) return;
+      const index = await store.loadIndex();
+      setSessionEntries(index.sessions.map((e) => ({ id: e.id, title: e.title })));
+    })();
+  }, [store]);
+  const sourceOutlines = (sourceSession?.meta.outlines ?? []) as OutlineLike[];
+  const sourceFirstMessage = sourceSession?.nodes.find((n) => n.kind === "user")?.content;
 
   // P5 保存状态机：会话模式（打开的 .ses）初始已保存；子对话（有 parentSession，草稿优先）初始未保存
   const [saved, setSaved] = useState<boolean>(() => sessionProp !== undefined && parentSession === undefined);
@@ -328,7 +342,8 @@ export default function ChatView({
     ];
     // 2-R1 + R-A 反馈 8：基础 prompt 优先级 = 会话级 settings.systemPrompt ?? persona.systemPrompt ?? 默认常量
     const basePrompt = session.meta.settings?.systemPrompt ?? currentPersona?.systemPrompt ?? SYSTEM_PROMPT;
-    const systemPrompt = buildChildSystemPrompt(basePrompt, autoInherit, parentOutlines);
+    // G-B 反馈 7：自动继承候选 = 当前来源会话大纲（迁移面板可换来源）
+    const systemPrompt = buildChildSystemPrompt(basePrompt, autoInherit, sourceOutlines);
 
     // 2-4 大纲记忆：子对话 agent-loop 的 onContext hook → 提炼判定 + 生成条目 → 追加父会话大纲 + saveSession
     const onContext = parentRef.current
@@ -462,9 +477,17 @@ export default function ChatView({
     void send(text);
   }
 
-  // 2-R1：浮窗展开为新工作区（P6）——emit 后外壳 addInstance + 新实例会话模式打开
-  function expandToWorkspace(): void {
+  // 2-R1：浮窗展开为新工作区（P6）——emit 后外壳 addInstance + 新实例会话模式打开。
+  // G-B 反馈 1：展开前 saveIfNeeded（草稿先落盘，防「展开即丢」）；保存失败 → 提示且不展开。
+  async function expandToWorkspace(): Promise<void> {
     if (!session) return;
+    if (!savedRef.current) {
+      await saveCurrent().catch(() => {});
+      if (!savedRef.current) {
+        setSaveError("保存失败（可能未选择文件夹），未展开");
+        return;
+      }
+    }
     kernel.events.emit("minex:expandToWorkspace", {
       sessionId: session.meta.id,
       branchId: session.meta.currentBranchId ?? "main",
@@ -495,10 +518,10 @@ export default function ChatView({
     if (checked.size === 0) return;
     const added: ContextItemLike[] = [];
     for (const key of checked) {
-      if (key === "__parent_first__") {
-        if (parentFirstMessage !== undefined) added.push({ ref: "parent:first", content: parentFirstMessage });
+      if (key === "__source_first__") {
+        if (sourceFirstMessage !== undefined) added.push({ ref: `first:${sourceId}`, content: sourceFirstMessage });
       } else {
-        const o = parentOutlines.find((x) => x.id === key);
+        const o = sourceOutlines.find((x) => x.id === key);
         if (o) added.push({ ref: o.id, content: o.summary });
       }
     }
@@ -511,6 +534,15 @@ export default function ChatView({
     }
     setChecked(new Set());
     setContextOpen(false);
+  }
+
+  // G-B 反馈 7：迁移面板来源切换（任意会话；切换后勾选重置）
+  async function selectSource(id: string): Promise<void> {
+    setSourceId(id);
+    setChecked(new Set());
+    if (!store) return;
+    const s = await store.loadSession(id);
+    setSourceSession(s ?? null);
   }
 
   return (
@@ -541,7 +573,7 @@ export default function ChatView({
                 <button className="btn-ghost" onClick={() => setContextOpen((o) => !o)}>
                   添加上下文
                 </button>
-                <button className="chat-expand-btn" title="展开为新工作区" onClick={expandToWorkspace}>
+                <button className="chat-expand-btn" title="展开为新工作区" onClick={() => void expandToWorkspace()}>
                   ↗
                 </button>
               </>
@@ -559,29 +591,42 @@ export default function ChatView({
 
       {parentSession && contextOpen && (
         <div className="chat-context-panel">
-          <div className="section-title">父对话大纲</div>
-          {parentOutlines.length === 0 && parentFirstMessage === undefined && (
-            <div className="muted">（父对话暂无大纲或上下文）</div>
+          <div className="section-title">来源会话（任意会话，默认父会话）</div>
+          <select
+            className="chat-agent-select"
+            title="迁移面板来源会话"
+            value={sourceId}
+            onChange={(e) => void selectSource(e.target.value)}
+          >
+            {sessionEntries.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.title}
+              </option>
+            ))}
+          </select>
+          <div className="section-title">大纲</div>
+          {sourceOutlines.length === 0 && sourceFirstMessage === undefined && (
+            <div className="muted">（该会话暂无大纲或上下文）</div>
           )}
-          {parentOutlines.map((o) => (
+          {sourceOutlines.map((o) => (
             <label key={o.id} className="chat-context-item">
               <input type="checkbox" checked={checked.has(o.id)} onChange={() => toggleChecked(o.id)} />
               <span>{o.summary}</span>
             </label>
           ))}
-          {parentFirstMessage !== undefined && (
+          {sourceFirstMessage !== undefined && (
             <label className="chat-context-item">
               <input
                 type="checkbox"
-                checked={checked.has("__parent_first__")}
-                onChange={() => toggleChecked("__parent_first__")}
+                checked={checked.has("__source_first__")}
+                onChange={() => toggleChecked("__source_first__")}
               />
-              <span className="muted">初始上下文：{parentFirstMessage}</span>
+              <span className="muted">初始上下文：{sourceFirstMessage}</span>
             </label>
           )}
           <div className="chat-context-actions">
             <button className="btn" onClick={applyContext} disabled={checked.size === 0}>
-              应用
+              加入当前 context
             </button>
             <label className="chat-context-auto">
               <input

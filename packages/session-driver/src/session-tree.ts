@@ -171,7 +171,9 @@ export function buildContext(session: Session, branchId: string, opts: BuildCont
   }
 
   const tailCount = opts.tailCount ?? 10;
-  for (const id of branch.nodeIds.slice(-tailCount)) {
+  // G-B 反馈 7 真根因修复：slice(-0) === slice(0) 返回整个数组——0/负值必须显式分支为空 tail
+  const tail = tailCount > 0 ? branch.nodeIds.slice(-tailCount) : [];
+  for (const id of tail) {
     const n = byId.get(id);
     if (n) add("parent:tail", nodeContent(n));
   }

@@ -251,6 +251,27 @@ describe("buildContext", () => {
     expect(items.map((i) => i.content)).toEqual(["丙", "工具结果"]);
   });
 
+  it("G-B 反馈 7 回归：tailCount=0 → 无 tail（只返回显式引用）——slice(-0) 坑锁定", () => {
+    // slice(-0) === slice(0) 曾返回整个数组；修复后 0 → 空 tail
+    const items = buildContext(s, "main", { selectedNodeIds: ["c"], tailCount: 0 });
+    expect(items).toEqual([{ ref: "c", content: "丙" }]); // 无任何 parent:tail
+  });
+
+  it("G-B 反馈 7 回归：tailCount=5 → 尾部 5 条（超过链长取全部）", () => {
+    const items = buildContext(s, "main", { tailCount: 5 });
+    expect(items.map((i) => i.content)).toEqual(["甲", "乙", "丙", "工具结果"]);
+  });
+
+  it("G-B 反馈 7 回归：tailCount=-1 → 同 0（负值防御，空 tail）", () => {
+    const items = buildContext(s, "main", { tailCount: -1 });
+    expect(items.map((i) => i.content)).toEqual([]);
+  });
+
+  it("G-B 反馈 7 回归：默认 tailCount=10 语义不变（未传时尾部 10 条）", () => {
+    const items = buildContext(s, "main");
+    expect(items.map((i) => i.content)).toEqual(["甲", "乙", "丙", "工具结果"]);
+  });
+
   it("非法 branchId → 抛错", () => {
     expect(() => buildContext(s, "ghost")).toThrow(/分支不存在/);
   });
