@@ -41,6 +41,9 @@ interface InstanceState {
   floatingPos: Record<string, FloatingState>;
   /** 2-R1 浮窗展开：新实例以该会话为上下文打开（会话加载经 session-open 桥接，本字段为可查元数据） */
   pendingSession?: { sessionId: string; branchId?: string };
+  /** F-G 概念修正：打开的会话 id（minex:openSession 写入；agent 驱动主区 = 聊天会话模式，
+   *   否则 = 配置中心；切驱动清空） */
+  openSessionId?: string | null;
 }
 
 function makeInstance(
@@ -109,11 +112,12 @@ export function App({ problems }: { problems: string[] }) {
   }, [dark]);
 
   // 文件树点击 → 目标工作视图切到 markdown（openFile 定向到 targetInstanceId；缺省当前实例）
+  // F-G：切驱动统一清空 openSessionId（打开会话状态只由 minex:openSession 写）
   useEffect(() => {
     return kernel.events.on("filesystem:openFile", (payload) => {
       const p = payload as { targetInstanceId?: number } | undefined;
       const targetId = p?.targetInstanceId ?? activeInstanceId;
-      updateInstance(targetId, { activeDriverId: "minex.markdown" });
+      updateInstance(targetId, { activeDriverId: "minex.markdown", openSessionId: undefined });
       try {
         localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.markdown");
       } catch {
@@ -123,13 +127,14 @@ export function App({ problems }: { problems: string[] }) {
   }, [kernel, activeInstanceId]);
 
   // 会话总览「对话」点击 → 暂存会话 id（ChatView 挂载竞态桥接）+ 切到 Agent 驱动（2-2）
+  // F-G：写 openSessionId——agent 驱动主区 = 聊天会话模式（否则配置中心）
   useEffect(() => {
     return kernel.events.on("minex:openSession", (payload) => {
       const p = payload as { id?: string; targetInstanceId?: number } | undefined;
       if (!p?.id) return;
       setPendingOpenSessionId(p.id);
       const targetId = p.targetInstanceId ?? activeInstanceId;
-      updateInstance(targetId, { activeDriverId: "minex.agent" });
+      updateInstance(targetId, { activeDriverId: "minex.agent", openSessionId: p.id });
       try {
         localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.agent");
       } catch {
@@ -177,7 +182,7 @@ export function App({ problems }: { problems: string[] }) {
         ...prev,
         makeInstance(nextId, `工作区 ${prev.length + 1}`, { sessionId: p.sessionId!, branchId: p.branchId }),
       ]);
-      updateInstance(nextId, { activeDriverId: "minex.agent" });
+      updateInstance(nextId, { activeDriverId: "minex.agent", openSessionId: p.sessionId }); // F-G：新实例主区直接该会话聊天
       setActiveInstanceId(nextId);
       setChildChat(null); // 原浮窗关闭（内容已在新工作区）
       try {
@@ -218,7 +223,8 @@ export function App({ problems }: { problems: string[] }) {
     if (activeInstanceId === id) setActiveInstanceId(rest[rest.length - 1].id);
   }
   function selectDriver(id: string): void {
-    updateInstance(activeInstanceId, { activeDriverId: id });
+    // F-G：切驱动统一清空 openSessionId——切回 Agent 默认主区 = 配置中心（不自动回聊天）
+    updateInstance(activeInstanceId, { activeDriverId: id, openSessionId: undefined });
     try {
       localStorage.setItem(ACTIVE_DRIVER_KEY, id);
     } catch {
@@ -402,7 +408,15 @@ function WorkspaceInstance({
   // F-A 反馈 5：左栏按 activeDriverId 过滤（会话域面板仅 agent 驱动显示；右栏/浮窗已拆放面板不受影响）
   const leftPanels = panels.filter((p) => dockOf(p) === "left" && leftPanelVisible(p, instance.activeDriverId));
   const rightPanels = panels.filter((p) => dockOf(p) === "right");
-  const mainPanel = panels.find((p) => dockOf(p) === "main" && p.driverId === instance.activeDriverId);
+  // F-G 概念修正：agent 驱动主区 = 配置中心（默认）；打开会话（openSessionId）→ 主区 = 聊天（会话模式）
+  const mains = panels.filter((p) => dockOf(p) === "main" && p.driverId === instance.activeDriverId);
+  const mainPanel = (() => {
+    if (instance.activeDriverId === "minex.agent") {
+      if (instance.openSessionId) return mains.find((p) => p.id === "minex.agent.chat") ?? mains[0];
+      return mains.find((p) => p.id !== "minex.agent.chat") ?? mains[0];
+    }
+    return mains[0];
+  })();
   const floatingAll = panels.filter((p) => dockOf(p) === "floating");
   const leftPanel = leftPanels.find((p) => p.id === instance.activeLeftPanelId) ?? leftPanels[0];
 

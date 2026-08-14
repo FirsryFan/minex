@@ -179,12 +179,12 @@ export default {
       load: () => import("./chat-view.js"),
     });
 
-    // F-A 反馈 4：Agent 配置面板（persona 画廊 + 工具白名单 + 默认权限模式 + 默认 systemPrompt）
+    // F-A 反馈 4 + F-G 概念修正：Agent 配置中心 = agent 驱动主区（defaultDock main，不再缩左栏）
     ctx.register("panel", "minex.agent.config", {
       driverId: "minex.agent",
       id: "minex.agent.config",
       title: "Agent",
-      defaultDock: "left",
+      defaultDock: "main",
       load: () => import("./config-view.js"),
     });
 
