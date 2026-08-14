@@ -17,7 +17,7 @@ import type { AgentTool } from "./tool.js";
 export type AgentEvent =
   | { kind: "text"; delta: string }
   | { kind: "toolCall"; name: string; args: unknown }
-  | { kind: "done"; usage?: LLMUsage }
+  | { kind: "done"; usage?: LLMUsage; cost?: number } // 3-3：done 带 cost（用量 × 价格表）
   | { kind: "error"; message: string };
 
 export interface RunAgentOptions {
@@ -38,6 +38,8 @@ export interface RunAgentOptions {
    * 缺省不调用（全部放行，向后兼容）。
    */
   canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
+  /** 3-3 模型参数（temperature 等）透传给 stream req；缺省不传（用 llm 驱动默认参数） */
+  params?: Record<string, unknown>;
 }
 
 /** onContext 传入的 history 尾部条数（与 buildContext tailCount 默认一致） */
@@ -125,7 +127,13 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
     let first = true;
 
     try {
-      for await (const chunk of deps.stream({ model: deps.model, messages, tools, stream: true })) {
+      for await (const chunk of deps.stream({
+        model: deps.model,
+        messages,
+        tools,
+        stream: true,
+        ...(opts.params ? { params: opts.params } : {}), // 3-3：会话级参数透传
+      })) {
         if (first && (chunk.delta || chunk.toolCallDelta)) {
           ttftMs = Date.now() - started; // 首个分片（文本或工具调用）即计 ttft（审查 MINOR-1）
           first = false;
@@ -164,11 +172,11 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
       });
     }
 
-    // 无工具调用 → 结束（产出 done + usage）
+    // 无工具调用 → 结束（产出 done + usage + cost）
     if (toolCalls.length === 0) {
       // 回灌 assistant 文本
       history.push({ role: "assistant", content: text });
-      yield { kind: "done", usage: finalUsage };
+      yield { kind: "done", usage: finalUsage, cost: finalUsage ? computeCost(finalUsage, deps.prices) : undefined };
       return;
     }
 
@@ -227,5 +235,5 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
   }
 
   // 达 maxIterations 强制结束
-  yield { kind: "done", usage: finalUsage };
+  yield { kind: "done", usage: finalUsage, cost: finalUsage ? computeCost(finalUsage, deps.prices) : undefined };
 }

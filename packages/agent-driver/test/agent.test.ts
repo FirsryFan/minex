@@ -5,6 +5,7 @@ import {
   parseAssistantResponse,
   runAgent,
   type AgentDeps,
+  type AgentEvent,
 } from "../src/agent.js";
 import type { ChatMessage, LLMChunk, LLMMetricsEntry } from "minex-llm-driver";
 
@@ -267,6 +268,36 @@ describe("runAgent 权限裁决（3-2 canRun）", () => {
     await collect(events);
     expect(seen).toEqual([{ name: "echo", risk: "read" }]); // 缺省 risk = read
     expect(secondRoundMessages.find((m) => m.role === "tool")?.content).toBe("ok");
+  });
+});
+
+describe("runAgent 模型参数透传 + done 带 cost（3-3）", () => {
+  it("params 透传到 stream req；done 事件带 cost（finalUsage × prices）", async () => {
+    const seenReqs: Array<{ params?: Record<string, unknown> }> = [];
+    async function* stream(req: { params?: Record<string, unknown> }): AsyncIterable<LLMChunk> {
+      seenReqs.push(req);
+      yield { delta: "答", done: false };
+      yield { delta: "", done: true, usage: { promptTokens: 1_000_000, completionTokens: 1_000_000, cachedTokens: 400_000 } };
+    }
+    const events: AgentEvent[] = [];
+    for await (const e of runAgent(makeDeps(stream), { systemPrompt: "s", history: [], params: { temperature: 0.7 } })) {
+      events.push(e);
+    }
+    expect(seenReqs[0].params).toEqual({ temperature: 0.7 });
+    const done = events.find((e) => e.kind === "done");
+    expect(done).toMatchObject({ usage: { promptTokens: 1_000_000, completionTokens: 1_000_000 } });
+    expect((done as { cost?: number }).cost).toBeCloseTo(1.29, 10); // 与计量用例同价表
+  });
+
+  it("无 params → stream req 不带 params 字段", async () => {
+    const seenReqs: Array<Record<string, unknown>> = [];
+    async function* stream(req: Record<string, unknown>): AsyncIterable<LLMChunk> {
+      seenReqs.push(req);
+      yield { delta: "答", done: false };
+      yield { delta: "", done: true, usage: { promptTokens: 1, completionTokens: 0, cachedTokens: 0 } };
+    }
+    await collect(runAgent(makeDeps(stream), { systemPrompt: "s", history: [] }));
+    expect(seenReqs[0].params).toBeUndefined();
   });
 });
 

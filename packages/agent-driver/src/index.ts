@@ -13,6 +13,7 @@ import { registerRealTools } from "./real-tools.js";
 /** llm.config 结构类型子集（agent 用到的部分） */
 interface ConfigLike {
   getModel(): string;
+  getParams(): Record<string, unknown>;
   getPrices(): Record<string, LLMPrices>;
 }
 
@@ -21,13 +22,17 @@ interface MetricsLike {
   record(entry: LLMMetricsEntry): void;
 }
 
-/** agent.run 的 opts（3-1：toolWhitelist 工具白名单；3-2：canRun 权限裁决；后续 task 扩展） */
+/** agent.run 的 opts（3-1 toolWhitelist / 3-2 canRun / 3-3 model+params；后续 task 扩展） */
 interface RunOpts {
   onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
   /** 工具白名单（persona.tools 消费；缺省 = 全部工具） */
   toolWhitelist?: string[];
   /** 权限裁决 hook（3-2）：每个工具调用执行前调用；false → 拒绝文本回灌 */
   canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
+  /** 3-3：模型名覆盖（会话级 settings.model；缺省 = llm.config.getModel() 或 deepseek-chat） */
+  model?: string;
+  /** 3-3：模型参数覆盖（会话级 temperature 等；与 llm.config.getParams() 合并，本值优先） */
+  params?: Record<string, unknown>;
 }
 
 /**
@@ -78,7 +83,10 @@ export default {
         const whitelist = opts?.toolWhitelist;
         const tools =
           whitelist && whitelist.length > 0 ? allTools.filter((t) => whitelist.includes(t.name)) : allTools;
-        const model = config?.getModel() || "deepseek-chat";
+        // 3-3：模型 = 会话级覆盖 ?? 全局配置 ?? 默认；params = 全局默认 + 会话级覆盖
+        const model = opts?.model ?? (config?.getModel() || "deepseek-chat");
+        const defaultParams = config?.getParams() ?? {};
+        const params = { ...defaultParams, ...(opts?.params ?? {}) };
         const prices = config?.getPrices()[model] ?? { inputHit: 0, inputMiss: 0, output: 0 };
 
         return runAgent(
@@ -93,6 +101,7 @@ export default {
             systemPrompt,
             history,
             maxIterations,
+            params,
             ...(opts
               ? { onContext: opts.onContext, ...(opts.canRun ? { canRun: opts.canRun } : {}) }
               : {}),

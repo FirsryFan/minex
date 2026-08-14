@@ -8,13 +8,15 @@ interface PersonaLike {
   name: string;
 }
 
-/** 会话设置表单（R-A 反馈 8：标签 / 默认 agent / persona / systemPrompt；3-2：权限模式） */
+/** 会话设置表单（R-A 反馈 8：标签 / 默认 agent / persona / systemPrompt；3-2：权限模式；3-3：模型/温度） */
 interface SettingsForm {
   tags: string[];
   agent: string;
   personaId: string;
   systemPrompt: string;
   permissionMode: "auto" | "edit" | "manual";
+  model: string;
+  temperature: string;
 }
 
 /**
@@ -100,6 +102,8 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
       personaId: s.meta.personaId ?? "",
       systemPrompt: s.meta.settings?.systemPrompt ?? "",
       permissionMode: s.meta.settings?.permissionMode ?? "auto",
+      model: s.meta.settings?.model ?? "",
+      temperature: s.meta.settings?.temperature !== undefined ? String(s.meta.settings.temperature) : "",
     });
   }
 
@@ -119,6 +123,8 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
           ...(s.meta.settings ?? {}),
           ...(settingsForm.systemPrompt ? { systemPrompt: settingsForm.systemPrompt } : {}),
           permissionMode: settingsForm.permissionMode, // 3-2：恒写（下拉总有值，缺省 auto）
+          ...(settingsForm.model ? { model: settingsForm.model } : {}), // 3-3：空值不写
+          ...(settingsForm.temperature !== "" ? { temperature: Number(settingsForm.temperature) } : {}),
         },
         updatedAt: new Date().toISOString(),
       },
@@ -276,6 +282,30 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
                   <option value="edit">编辑（写自由，运行需许可）</option>
                   <option value="manual">手动（写入和运行需许可）</option>
                 </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>模型（3-3）</label>
+              <div className="field-control">
+                <input
+                  value={settingsForm.model}
+                  placeholder="留空 = 使用全局配置的模型"
+                  onChange={(e) => setSettingsForm((f) => (f ? { ...f, model: e.target.value } : f))}
+                />
+              </div>
+            </div>
+            <div className="field">
+              <label>温度（3-3，0-2）</label>
+              <div className="field-control">
+                <input
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={settingsForm.temperature}
+                  placeholder="留空 = 不覆盖"
+                  onChange={(e) => setSettingsForm((f) => (f ? { ...f, temperature: e.target.value } : f))}
+                />
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>

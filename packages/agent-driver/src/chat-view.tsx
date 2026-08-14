@@ -33,6 +33,9 @@ interface AgentCap {
       toolWhitelist?: string[];
       /** 3-2：权限裁决 hook（false → 拒绝文本回灌） */
       canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
+      /** 3-3：模型名 / 模型参数覆盖（会话级 settings 消费） */
+      model?: string;
+      params?: Record<string, unknown>;
     },
   ): AsyncIterable<AgentEvent>;
 }
@@ -43,6 +46,9 @@ interface AgentEvent {
   name?: string;
   args?: unknown;
   message?: string;
+  /** 3-3：done 事件带用量与费用 */
+  usage?: { promptTokens: number; completionTokens: number; cachedTokens: number };
+  cost?: number;
 }
 
 interface MarkdownCap {
@@ -163,7 +169,16 @@ export default function ChatView({
     risk: string;
     resolve: (ok: boolean) => void;
   } | null>(null);
+  // 3-3 计量：本轮回复用量（回复尾小字）+ 全局累计（metrics 读取节流用 tick）
+  const [replyUsage, setReplyUsage] = useState<{ tokens: number; cost: number } | null>(null);
+  const [metricsTick, setMetricsTick] = useState(0);
   const cancelledRef = useRef(false);
+  const metrics = kernel.registry.get<{ list(): Array<{ cost: number }> }>("llm.metrics", "default")?.value;
+  const totalCost = useMemo(
+    () => metrics?.list().reduce((s, e) => s + (e.cost ?? 0), 0) ?? 0,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [metrics, metricsTick],
+  );
   // 2-3：框选状态 / 子对话上下文 / 上下文面板 / 自动继承 / 已勾选
   const chatViewRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<SelectionState | null>(null);
@@ -348,6 +363,7 @@ export default function ChatView({
 
   async function sendDraft(text: string): Promise<void> {
     if (!agent) return;
+    setReplyUsage(null);
     const userMsg: ChatMessageView = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     // history = user/assistant 的 {role, content} 映射（含本轮新消息；error/tool 不进历史）
@@ -371,6 +387,14 @@ export default function ChatView({
         } else if (ev.kind === "error") {
           setMessages((prev) => [...prev, { role: "assistant", content: ev.message ?? "发生错误", error: true }]);
         } else if (ev.kind === "done") {
+          // 3-3：回复尾用量/费用小字 + 全局累计刷新
+          if (ev.usage) {
+            setReplyUsage({
+              tokens: ev.usage.promptTokens + ev.usage.completionTokens,
+              cost: ev.cost ?? 0,
+            });
+            setMetricsTick((t) => t + 1);
+          }
           break;
         }
       }
@@ -417,13 +441,17 @@ export default function ChatView({
     const deltas: string[] = [];
     const toolCalls: Array<{ name: string; args: unknown }> = [];
     let errorMsg: string | undefined;
-    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun
+    setReplyUsage(null);
+    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun；3-3：会话级 model/temperature
     const personaTools = currentPersona?.tools;
     const canRun = buildCanRun();
+    const settings = session.meta.settings;
     const runOpts = {
       ...(onContext ? { onContext } : {}),
       ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
       ...(canRun ? { canRun } : {}),
+      ...(settings?.model ? { model: settings.model } : {}),
+      ...(settings?.temperature !== undefined ? { params: { temperature: settings.temperature } } : {}),
     };
     try {
       for await (const ev of agent.run(systemPrompt, history, undefined, runOpts)) {
@@ -439,6 +467,14 @@ export default function ChatView({
           errorMsg = msg;
           setMessages((prev) => [...prev, { role: "assistant", content: msg, error: true }]);
         } else if (ev.kind === "done") {
+          // 3-3：回复尾用量/费用小字 + 全局累计刷新
+          if (ev.usage) {
+            setReplyUsage({
+              tokens: ev.usage.promptTokens + ev.usage.completionTokens,
+              cost: ev.cost ?? 0,
+            });
+            setMetricsTick((t) => t + 1);
+          }
           break;
         }
       }
@@ -731,6 +767,12 @@ export default function ChatView({
             </div>
           );
         })}
+        {/* 3-3：回复尾用量/费用小字（done 事件） */}
+        {replyUsage && (
+          <div className="chat-usage muted">
+            ↑ {replyUsage.tokens} tokens · ${replyUsage.cost.toFixed(4)}
+          </div>
+        )}
       </div>
 
       {/* 2-3/2-R1 框选浮钮菜单：会话模式 + 选中节点（user/assistant 卡）才出现——
@@ -749,6 +791,9 @@ export default function ChatView({
           </button>
         </div>
       )}
+
+      {/* 3-3：全局累计（全部会话，llm.metrics 求和） */}
+      <div className="chat-total muted">全局累计（全部会话）：${totalCost.toFixed(4)}</div>
 
       {compose ? (
         /* 2-R1/R-A quick phrase 槽位表单：{selection} 槽可编辑（框选自动填入，手动模板可自填），其余槽位输入 */
