@@ -1488,50 +1488,107 @@ button {
   background: var(--color-card);
   box-shadow: var(--shadow-card);
 }
-/* F-A 反馈 4：Agent 配置面板（persona 画廊 + 工具白名单 + 默认配置） */
-.agent-config {
+/* F-D 反馈 3：Agent 配置中心（两栏：左 profile 列表 + 右全字段表单） */
+.agent-config-center {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.agent-config-side {
+  flex: 0 0 150px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: var(--spacing-sm);
+  gap: 4px;
+  padding: 8px;
+  border-right: 1px solid var(--color-border);
   overflow-y: auto;
 }
-.agent-config-persona {
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-card);
+.agent-config-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
 }
-.agent-config-persona-head {
+.agent-config-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+}
+.agent-config-item:hover {
+  background: var(--color-hover);
+}
+.agent-config-item.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.agent-config-avatar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 12px;
+}
+.agent-config-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.agent-config-item-model {
+  font-size: 10px;
+}
+.agent-config-delete {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--color-danger);
+}
+.agent-config-form {
+  flex: 1;
+  min-width: 0;
+  padding: 10px;
+  overflow-y: auto;
+}
+.agent-config-form-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 10px;
 }
-.agent-config-persona-head .btn-ghost {
+.agent-config-form-head .btn {
   margin-left: auto;
+}
+.agent-config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-config-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.agent-config-pool-path {
+  margin: 2px 4px 2px 0;
   font-size: 11px;
   padding: 2px 6px;
 }
-.agent-config-desc {
-  font-size: 12px;
-}
-.agent-config-prompt summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-.agent-config-prompt pre {
-  margin: 4px 0 0;
-  padding: 6px;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: var(--color-hover);
-  border-radius: var(--radius-sm);
-}
-.agent-config-tools {
+.agent-config-code {
   margin-top: 6px;
-  font-size: 12px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
 }
 .agent-config-tool-grid {
   display: grid;

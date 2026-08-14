@@ -23,7 +23,7 @@ import { buildOutlineEntry, shouldOutline, type OutlineEntryLike } from "./outli
 import { takePendingOpenSessionId } from "./session-open.js";
 import { QUICK_PHRASES, fillTemplate, type QuickPhrase } from "./quick-phrase.js";
 import { checkPermission, type PermissionMode, type ToolRisk } from "./permission.js";
-import { loadAgentProfiles, type AgentProfile } from "./agent-profile.js";
+import { BUILTIN_SKILLS, loadAgentProfiles, type AgentProfile } from "./agent-profile.js";
 
 const SYSTEM_PROMPT = "你是一个乐于助人的 AI 助手，用中文回答。";
 
@@ -226,7 +226,7 @@ export default function ChatView({
   }
 
   /** F-C：工具白名单 = profile.tools（null=全部）?? persona 自带 tools（缺省 = 全部） */
-  function personaToolsOf(): string[] | undefined {
+  function toolWhitelistOf(): string[] | undefined {
     const t = profile?.tools;
     return t !== undefined ? (t ?? undefined) : currentPersona?.tools;
   }
@@ -443,12 +443,12 @@ export default function ChatView({
     const history = [...messages, userMsg]
       .filter((m) => (m.role === "user" || m.role === "assistant") && !m.error)
       .map((m) => ({ role: m.role, content: m.content }));
-    // 3-1 + F-A：persona 工具白名单（agentConfig.personaTools ?? persona.tools；缺省 = 全部工具）；
+    // 3-1 + F-C：工具白名单（profile.tools ?? persona.tools；缺省 = 全部工具）；
     // 3-2：权限裁决 canRun；3-4：signal + 插入指令
-    const personaTools = personaToolsOf();
+    const whitelist = toolWhitelistOf();
     const canRun = buildCanRun();
     const runOpts = {
-      ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
+      ...(whitelist && whitelist.length > 0 ? { toolWhitelist: whitelist } : {}),
       ...(canRun ? { canRun } : {}),
       ...(abortRef.current ? { signal: abortRef.current.signal } : {}),
       pendingMessages: (): Array<{ role: string; content: string }> => {
@@ -511,10 +511,20 @@ export default function ChatView({
       loadAgentConfig(kernel)?.defaultSystemPrompt ??
       SYSTEM_PROMPT;
     // G-B 反馈 7：自动继承候选 = 当前来源会话大纲（迁移面板可换来源）
-    const systemPrompt = buildChildSystemPrompt(basePrompt, autoInherit, sourceOutlines);
+    const systemPrompt =
+      buildChildSystemPrompt(basePrompt, autoInherit, sourceOutlines) +
+      // F-D：profile.skills 对应 promptBlock 拼接（v1 内置 skill 常量）
+      (() => {
+        const blocks = (profile?.skills ?? [])
+          .map((id) => BUILTIN_SKILLS.find((s) => s.id === id)?.promptBlock)
+          .filter((b): b is string => Boolean(b));
+        return blocks.length > 0 ? `\n\n${blocks.join("\n\n")}` : "";
+      })();
 
-    // 2-4 大纲记忆：子对话 agent-loop 的 onContext hook → 提炼判定 + 生成条目 → 追加父会话大纲 + saveSession
-    const onContext = parentRef.current
+    // 2-4 大纲记忆：子对话 agent-loop 的 onContext hook → 提炼判定 + 生成条目 → 追加父会话大纲 + saveSession。
+    // F-D：profile.memory.outlines === false 时禁用大纲生成（开关生效）
+    const outlineEnabled = profile?.memory?.outlines !== false;
+    const onContext = parentRef.current && outlineEnabled
       ? (ctxItems: Array<{ ref: string; content: string }>): void => {
           if (!shouldOutline(ctxItems)) return; // 空 context 不生成，不污染大纲
           const entry = buildOutlineEntry(ctxItems);
@@ -531,12 +541,12 @@ export default function ChatView({
     setReplyUsage(null);
     // 3-1 + F-A/F-C：persona 工具白名单（profile.tools ?? persona.tools）；3-2：canRun；
     // 3-3 + F-C：模型/参数 = settings ?? profile（缺省 = 全局）
-    const personaTools = personaToolsOf();
+    const whitelist = toolWhitelistOf();
     const canRun = buildCanRun();
     const settings = session.meta.settings;
     const runOpts = {
       ...(onContext ? { onContext } : {}),
-      ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
+      ...(whitelist && whitelist.length > 0 ? { toolWhitelist: whitelist } : {}),
       ...(canRun ? { canRun } : {}),
       ...(settings?.model ?? profile?.model ? { model: settings?.model ?? profile?.model } : {}),
       ...(settings?.temperature !== undefined || profile?.params?.temperature !== undefined

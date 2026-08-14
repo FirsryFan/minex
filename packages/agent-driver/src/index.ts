@@ -201,6 +201,11 @@ export default {
       BUILTIN_SKILLS,
     });
 
+    // F-D：内置 skill 注册（Harness skill 角色包概念映射；chat-view 按 profile.skills 拼接 systemPrompt）
+    for (const s of BUILTIN_SKILLS) {
+      ctx.register("skill", s.id, s);
+    }
+
     return () => {};
   },
 };

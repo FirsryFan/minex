@@ -84,13 +84,11 @@ export interface SessionStoreLike {
   saveSession(s: SessionLike): Promise<void>;
 }
 
-/** agent 配置（F-A 反馈 4，内核 storage `minex.agent/agentConfig`）：persona 工具白名单 + 默认权限/默认 prompt */
+/** agent 配置（F-A 反馈 4，内核 storage `minex.agent/agentConfig`）：默认权限/默认 prompt（全局缺省，F-C profile 可覆盖） */
 export interface AgentConfig {
-  /** personaId → 工具白名单；null = 全部工具；缺省（无条目）= 用 persona 自带 tools */
-  personaTools?: Record<string, string[] | null>;
-  /** 默认权限模式（会话 settings.permissionMode 缺省时回退；再回退 "auto"） */
+  /** 默认权限模式（会话 settings.permissionMode / profile.permissionMode 缺省时回退；再回退 "auto"） */
   defaultPermissionMode?: "auto" | "edit" | "manual";
-  /** 默认 systemPrompt（会话 settings.systemPrompt / persona.systemPrompt 均无时回退） */
+  /** 默认 systemPrompt（会话 settings.systemPrompt / profile.systemPrompt / persona.systemPrompt 均无时回退） */
   defaultSystemPrompt?: string;
 }
 
