@@ -22,6 +22,9 @@ export interface SessionLike {
       temperature?: number;
       contextStrategy?: string;
       systemPrompt?: string; // R-A 反馈 8：会话级自定义提示词
+      /** 3-2 权限模式（auto/edit/manual）与按工具覆盖 */
+      permissionMode?: "auto" | "edit" | "manual";
+      toolPermissions?: Record<string, "auto" | "edit" | "manual">;
     };
     parentSessionId?: string;
     personaId?: string;

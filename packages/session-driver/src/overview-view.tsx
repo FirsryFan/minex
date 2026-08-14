@@ -8,12 +8,13 @@ interface PersonaLike {
   name: string;
 }
 
-/** 会话设置表单（R-A 反馈 8：标签 / 默认 agent / persona / systemPrompt） */
+/** 会话设置表单（R-A 反馈 8：标签 / 默认 agent / persona / systemPrompt；3-2：权限模式） */
 interface SettingsForm {
   tags: string[];
   agent: string;
   personaId: string;
   systemPrompt: string;
+  permissionMode: "auto" | "edit" | "manual";
 }
 
 /**
@@ -98,6 +99,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
       agent: s.activeAgents[0] ?? "minex.agent",
       personaId: s.meta.personaId ?? "",
       systemPrompt: s.meta.settings?.systemPrompt ?? "",
+      permissionMode: s.meta.settings?.permissionMode ?? "auto",
     });
   }
 
@@ -116,6 +118,7 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
         settings: {
           ...(s.meta.settings ?? {}),
           ...(settingsForm.systemPrompt ? { systemPrompt: settingsForm.systemPrompt } : {}),
+          permissionMode: settingsForm.permissionMode, // 3-2：恒写（下拉总有值，缺省 auto）
         },
         updatedAt: new Date().toISOString(),
       },
@@ -256,6 +259,23 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
                   placeholder="留空 = 使用 persona 的默认提示词"
                   onChange={(e) => setSettingsForm((f) => (f ? { ...f, systemPrompt: e.target.value } : f))}
                 />
+              </div>
+            </div>
+            <div className="field">
+              <label>权限模式（3-2）</label>
+              <div className="field-control">
+                <select
+                  value={settingsForm.permissionMode}
+                  onChange={(e) =>
+                    setSettingsForm((f) =>
+                      f ? { ...f, permissionMode: e.target.value as SettingsForm["permissionMode"] } : f,
+                    )
+                  }
+                >
+                  <option value="auto">自动（完全自由）</option>
+                  <option value="edit">编辑（写自由，运行需许可）</option>
+                  <option value="manual">手动（写入和运行需许可）</option>
+                </select>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>

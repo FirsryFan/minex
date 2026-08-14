@@ -21,11 +21,13 @@ interface MetricsLike {
   record(entry: LLMMetricsEntry): void;
 }
 
-/** agent.run 的 opts（3-1：toolWhitelist 工具白名单；后续 task 扩展） */
+/** agent.run 的 opts（3-1：toolWhitelist 工具白名单；3-2：canRun 权限裁决；后续 task 扩展） */
 interface RunOpts {
   onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
   /** 工具白名单（persona.tools 消费；缺省 = 全部工具） */
   toolWhitelist?: string[];
+  /** 权限裁决 hook（3-2）：每个工具调用执行前调用；false → 拒绝文本回灌 */
+  canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
 }
 
 /**
@@ -87,7 +89,14 @@ export default {
             recordMetrics: (entry) => metrics?.record(entry),
             prices,
           },
-          { systemPrompt, history, maxIterations, ...(opts ? { onContext: opts.onContext } : {}) },
+          {
+            systemPrompt,
+            history,
+            maxIterations,
+            ...(opts
+              ? { onContext: opts.onContext, ...(opts.canRun ? { canRun: opts.canRun } : {}) }
+              : {}),
+          },
         );
       },
     });

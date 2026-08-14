@@ -17,6 +17,7 @@ import {
 import { buildOutlineEntry, shouldOutline, type OutlineEntryLike } from "./outline.js";
 import { takePendingOpenSessionId } from "./session-open.js";
 import { QUICK_PHRASES, fillTemplate, type QuickPhrase } from "./quick-phrase.js";
+import { checkPermission, type PermissionMode, type ToolRisk } from "./permission.js";
 
 const SYSTEM_PROMPT = "你是一个乐于助人的 AI 助手，用中文回答。";
 
@@ -30,6 +31,8 @@ interface AgentCap {
       onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
       /** 3-1：工具白名单（persona.tools 消费；缺省 = 全部） */
       toolWhitelist?: string[];
+      /** 3-2：权限裁决 hook（false → 拒绝文本回灌） */
+      canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
     },
   ): AsyncIterable<AgentEvent>;
 }
@@ -154,6 +157,12 @@ export default function ChatView({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // 3-2 权限确认弹窗：canRun 裁决为 ask 时挂起，等待用户 允许/拒绝/记住此工具
+  const [permissionPrompt, setPermissionPrompt] = useState<{
+    name: string;
+    risk: string;
+    resolve: (ok: boolean) => void;
+  } | null>(null);
   const cancelledRef = useRef(false);
   // 2-3：框选状态 / 子对话上下文 / 上下文面板 / 自动继承 / 已勾选
   const chatViewRef = useRef<HTMLDivElement>(null);
@@ -302,6 +311,41 @@ export default function ChatView({
     return [...prev, { role: "assistant", content: delta }];
   }
 
+  // —— 3-2 权限确认（Promise 桥接：canRun 为 ask 时挂起，等用户选择） ——
+  function askPermission(call: { name: string; risk: string }): Promise<boolean> {
+    return new Promise((resolve) => {
+      setPermissionPrompt({ name: call.name, risk: call.risk, resolve });
+    });
+  }
+
+  /** 3-2「记住此工具」：写 settings.toolPermissions[name]="auto" + saveSession（后续不再弹） */
+  async function rememberTool(name: string): Promise<void> {
+    if (!session || !store) return;
+    const next: SessionLike = {
+      ...session,
+      meta: {
+        ...session.meta,
+        settings: {
+          ...(session.meta.settings ?? {}),
+          toolPermissions: { ...(session.meta.settings?.toolPermissions ?? {}), [name]: "auto" },
+        },
+      },
+    };
+    setSession(next);
+    await store.saveSession(next).catch(() => {});
+  }
+
+  /** 3-2：按会话设置构建 canRun 裁决（auto 全放行；ask 弹确认；记住 = 写 toolPermissions） */
+  function buildCanRun(): ((call: { name: string; risk: string }) => Promise<boolean>) | undefined {
+    const settings = session?.meta.settings;
+    const mode: PermissionMode = settings?.permissionMode ?? "auto";
+    const overrides = settings?.toolPermissions;
+    return async (call) => {
+      if (checkPermission({ name: call.name, risk: call.risk as ToolRisk }, mode, overrides) === "allow") return true;
+      return await askPermission(call);
+    };
+  }
+
   async function sendDraft(text: string): Promise<void> {
     if (!agent) return;
     const userMsg: ChatMessageView = { role: "user", content: text };
@@ -310,9 +354,13 @@ export default function ChatView({
     const history = [...messages, userMsg]
       .filter((m) => (m.role === "user" || m.role === "assistant") && !m.error)
       .map((m) => ({ role: m.role, content: m.content }));
-    // 3-1：persona.tools 白名单（缺省 = 全部工具）
+    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun
     const personaTools = currentPersona?.tools;
-    const runOpts = personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : undefined;
+    const canRun = buildCanRun();
+    const runOpts = {
+      ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
+      ...(canRun ? { canRun } : {}),
+    };
     try {
       for await (const ev of agent.run(SYSTEM_PROMPT, history, undefined, runOpts)) {
         if (cancelledRef.current) break;
@@ -369,11 +417,13 @@ export default function ChatView({
     const deltas: string[] = [];
     const toolCalls: Array<{ name: string; args: unknown }> = [];
     let errorMsg: string | undefined;
-    // 3-1：persona.tools 白名单（缺省 = 全部工具）
+    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun
     const personaTools = currentPersona?.tools;
+    const canRun = buildCanRun();
     const runOpts = {
       ...(onContext ? { onContext } : {}),
       ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
+      ...(canRun ? { canRun } : {}),
     };
     try {
       for await (const ev of agent.run(systemPrompt, history, undefined, runOpts)) {
@@ -763,6 +813,54 @@ export default function ChatView({
           <button className="btn" onClick={() => void send()} disabled={streaming || input.trim() === ""}>
             发送
           </button>
+        </div>
+      )}
+
+      {/* 3-2 权限确认弹窗：工具执行需许可（manual 的 write/run 或 edit 的 run；点遮罩 = 拒绝） */}
+      {permissionPrompt && (
+        <div
+          className="floating-mask"
+          onClick={() => {
+            permissionPrompt.resolve(false);
+            setPermissionPrompt(null);
+          }}
+        >
+          <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+            <p>
+              工具 <strong>{permissionPrompt.name}</strong>（{permissionPrompt.risk}）需要你的许可才能执行。
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  permissionPrompt.resolve(false);
+                  setPermissionPrompt(null);
+                }}
+              >
+                拒绝
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  void rememberTool(permissionPrompt.name).then(() => {
+                    permissionPrompt.resolve(true);
+                    setPermissionPrompt(null);
+                  });
+                }}
+              >
+                记住此工具
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  permissionPrompt.resolve(true);
+                  setPermissionPrompt(null);
+                }}
+              >
+                允许
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

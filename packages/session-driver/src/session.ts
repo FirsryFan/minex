@@ -43,6 +43,10 @@ export interface SessionSettings {
   contextStrategy?: "branch" | "full";
   /** 会话级自定义 systemPrompt（R-A 反馈 8：优先于 persona 默认，可空） */
   systemPrompt?: string;
+  /** 3-2 权限模式（auto 全放行 / edit 写自由 run 需许可 / manual 写+run 需许可；缺省 auto） */
+  permissionMode?: "auto" | "edit" | "manual";
+  /** 3-2 按工具覆盖权限模式（工具名 → 模式，优先于 permissionMode） */
+  toolPermissions?: Record<string, "auto" | "edit" | "manual">;
 }
 
 export interface SessionMeta {
@@ -297,6 +301,21 @@ export function validateSession(data: unknown): data is Session {
     if (st.temperature !== undefined && typeof st.temperature !== "number") return false;
     if (st.contextStrategy !== undefined && st.contextStrategy !== "branch" && st.contextStrategy !== "full") return false;
     if (st.systemPrompt !== undefined && typeof st.systemPrompt !== "string") return false; // R-A 反馈 8
+    // 3-2 扩展：permissionMode 枚举 / toolPermissions 形状校验（旧数据不出现即兼容）
+    if (
+      st.permissionMode !== undefined &&
+      st.permissionMode !== "auto" &&
+      st.permissionMode !== "edit" &&
+      st.permissionMode !== "manual"
+    ) {
+      return false;
+    }
+    if (st.toolPermissions !== undefined) {
+      if (typeof st.toolPermissions !== "object" || st.toolPermissions === null) return false;
+      for (const v of Object.values(st.toolPermissions as Record<string, unknown>)) {
+        if (v !== "auto" && v !== "edit" && v !== "manual") return false;
+      }
+    }
   }
   // 2-1 修订扩展：parentSessionId / personaId 可选（出现则必须 string，旧数据不出现即兼容）
   if (meta.parentSessionId !== undefined && typeof meta.parentSessionId !== "string") return false;

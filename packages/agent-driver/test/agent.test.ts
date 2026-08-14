@@ -209,6 +209,67 @@ describe("runAgent 计量集成", () => {
   });
 });
 
+describe("runAgent 权限裁决（3-2 canRun）", () => {
+  it("canRun 传 {name, risk}；false → 结果 = 用户拒绝执行 <name>（不抛错、正常回灌）", async () => {
+    let secondRoundMessages: ChatMessage[] = [];
+    let calls = 0;
+    async function* stream(req: { messages: ChatMessage[] }): AsyncIterable<LLMChunk> {
+      calls++;
+      if (calls === 1) {
+        yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c1", name: "write_file", arguments: "{}" } };
+      } else {
+        secondRoundMessages = req.messages;
+        yield { delta: "结束", done: false };
+      }
+      yield { delta: "", done: true, usage: { promptTokens: 10, completionTokens: 1, cachedTokens: 0 } };
+    }
+    const writeTool = {
+      name: "write_file",
+      description: "d",
+      parameters: {},
+      risk: "write" as const,
+      execute: async () => "wrote",
+    };
+    const seen: Array<{ name: string; risk: string }> = [];
+    const canRun = async (call: { name: string; risk: string }): Promise<boolean> => {
+      seen.push(call);
+      return false;
+    };
+    const events = runAgent(makeDeps(stream, [writeTool]), { systemPrompt: "s", history: [], canRun });
+    await collect(events);
+    expect(seen).toEqual([{ name: "write_file", risk: "write" }]); // risk 表正确传递
+    const toolMsg = secondRoundMessages.find((m) => m.role === "tool");
+    expect(toolMsg?.content).toBe("用户拒绝执行 write_file");
+  });
+
+  it("canRun 返回 true → 工具正常执行；旧工具无 risk 字段 → 按 read 传", async () => {
+    let secondRoundMessages: ChatMessage[] = [];
+    let calls = 0;
+    async function* stream(req: { messages: ChatMessage[] }): AsyncIterable<LLMChunk> {
+      calls++;
+      if (calls === 1) {
+        yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c1", name: "echo", arguments: "{}" } };
+      } else {
+        secondRoundMessages = req.messages;
+        yield { delta: "结束", done: false };
+      }
+      yield { delta: "", done: true, usage: { promptTokens: 10, completionTokens: 1, cachedTokens: 0 } };
+    }
+    const seen: Array<{ name: string; risk: string }> = [];
+    const events = runAgent(makeDeps(stream), {
+      systemPrompt: "s",
+      history: [],
+      canRun: async (call) => {
+        seen.push(call);
+        return true;
+      },
+    });
+    await collect(events);
+    expect(seen).toEqual([{ name: "echo", risk: "read" }]); // 缺省 risk = read
+    expect(secondRoundMessages.find((m) => m.role === "tool")?.content).toBe("ok");
+  });
+});
+
 describe("runAgent 再加工 hook", () => {
   it("注入自定义 rework：工具结果按 hook 加工后回灌", async () => {
     let secondRoundMessages: ChatMessage[] = [];

@@ -33,6 +33,11 @@ export interface RunAgentOptions {
    * 把当前轮 history 尾部 context 传给它（供消费方提炼大纲记忆等）；默认不调用任何逻辑，向后兼容。
    */
   onContext?: (contextItems: Array<{ ref: string; content: string }>) => void;
+  /**
+   * 权限裁决 hook（3-2）：每个工具调用执行前调用；false → 结果文本「用户拒绝执行 <name>」（不抛错）。
+   * 缺省不调用（全部放行，向后兼容）。
+   */
+  canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
 }
 
 /** onContext 传入的 history 尾部条数（与 buildContext tailCount 默认一致） */
@@ -187,6 +192,8 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
       payload: call,
     }));
     const maxConcurrent = opts.maxConcurrent ?? 4;
+    // 3-2：工具 risk 表（缺省 read，兼容旧工具无 risk 字段）
+    const riskOf = new Map(deps.tools.map((t) => [t.name, t.risk ?? "read"]));
     const toolResults = await execute(toolTasks, async (task) => {
       const call = task.payload;
       let args: Record<string, unknown> = {};
@@ -197,6 +204,11 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
       }
       const tool = byName.get(call.name);
       if (!tool) return `Error: 未找到工具 ${call.name}`;
+      // 3-2 权限裁决：false → 拒绝文本（不抛错，结果照常回灌）
+      if (opts.canRun) {
+        const ok = await opts.canRun({ name: call.name, risk: riskOf.get(call.name) ?? "read" });
+        if (!ok) return `用户拒绝执行 ${call.name}`;
+      }
       try {
         return await tool.execute(args);
       } catch (err) {
