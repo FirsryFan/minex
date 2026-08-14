@@ -108,7 +108,6 @@ export default function ChatView({
   contextItems,
   parentSession,
   onStateChange,
-  pendingPhrase,
   selectionText,
 }: {
   kernel: MinexKernel;
@@ -118,9 +117,7 @@ export default function ChatView({
   parentSession?: SessionLike;
   /** P5 状态机句柄上报：dirty（未保存且消息非空）+ save（立即保存），供外壳关闭询问用 */
   onStateChange?: (h: { dirty: boolean; save: () => Promise<void> }) => void;
-  /** 2-R1 quick phrase：浮窗打开时待填模板（选中模板 → 槽位表单） */
-  pendingPhrase?: QuickPhrase;
-  /** 2-R1 框选文本（自动填入 {selection} 槽） */
+  /** 2-R1/R-A 框选文本（quick phrase 模板的 {selection} 槽预填） */
   selectionText?: string;
 }) {
   // .value 纪律：registry.get 返回 Contribution，能力值在 .value
@@ -139,20 +136,8 @@ export default function ChatView({
   );
   const currentPersona = personas.find((p) => p.id === personaId);
 
-  // 2-R1 quick phrase 槽位表单（compose 非空时输入行替换为槽位表单）
-  const [compose, setCompose] = useState<{ phrase: QuickPhrase; values: Record<string, string> } | null>(() =>
-    pendingPhrase
-      ? {
-          phrase: pendingPhrase,
-          values: {
-            selection: selectionText ?? "",
-            ...Object.fromEntries(
-              pendingPhrase.slots.filter((s) => s.key !== "selection").map((s) => [s.key, ""]),
-            ),
-          },
-        }
-      : null,
-  );
+  // 2-R1/R-A quick phrase 槽位表单（compose 非空时输入行替换为槽位表单；模板经输入区下拉选中展开）
+  const [compose, setCompose] = useState<{ phrase: QuickPhrase; values: Record<string, string> } | null>(null);
 
   const [session, setSession] = useState<SessionLike | null>(sessionProp ?? null);
   // 会话模式：历史来自 session；草稿模式：历史来自 localStorage（刷新不丢）
@@ -341,8 +326,8 @@ export default function ChatView({
       ...extraContext.map((c) => ({ role: "user" as const, content: c.content })),
       ...tree.buildContext(s2, branchId).map((c) => ({ role: "user" as const, content: c.content })),
     ];
-    // 2-R1：基础 prompt = 当前 persona 的 systemPrompt（替代默认常量）；自动继承（2-3）再注入父大纲
-    const basePrompt = currentPersona?.systemPrompt ?? SYSTEM_PROMPT;
+    // 2-R1 + R-A 反馈 8：基础 prompt 优先级 = 会话级 settings.systemPrompt ?? persona.systemPrompt ?? 默认常量
+    const basePrompt = session.meta.settings?.systemPrompt ?? currentPersona?.systemPrompt ?? SYSTEM_PROMPT;
     const systemPrompt = buildChildSystemPrompt(basePrompt, autoInherit, parentOutlines);
 
     // 2-4 大纲记忆：子对话 agent-loop 的 onContext hook → 提炼判定 + 生成条目 → 追加父会话大纲 + saveSession
@@ -432,13 +417,14 @@ export default function ChatView({
   }
 
   // 2-3/2-R1：框选 → 子对话草稿（P5 draft-first：不立即建 .ses，≥3 轮自动保存 / 关闭时询问）+ 父会话挂 branch 链接
-  // phrase 传入 → 浮窗以 quick phrase 槽位表单打开（{selection} 自动填框选内容）
-  async function openChildChat(text: string, nodeId: string, phrase?: QuickPhrase): Promise<void> {
+  // R-A 反馈 4：quick phrase 模板已移入浮窗输入区（不再经框选浮钮打开槽位表单）
+  async function openChildChat(text: string, nodeId: string): Promise<void> {
     if (!session || !tree || !store) return;
     setSel(null);
     try {
       const parentBranchId = session.meta.currentBranchId ?? "main";
-      const childContext = tree.buildContext(session, parentBranchId, { selectedNodeIds: [nodeId] });
+      // R-B 反馈 7：子对话默认只继承框选内容（tailCount=0，不复制父链 tail 全文——父链上下文按需经「添加上下文」补充）
+      const childContext = tree.buildContext(session, parentBranchId, { selectedNodeIds: [nodeId], tailCount: 0 });
       // 2-R1：子会话继承父 persona（P1）；子会话记父会话 id（P3）；父会话挂 branch 链接（from = 子会话 id，to = 框选节点）
       const created = tree.createSession({
         title: "子对话",
@@ -454,7 +440,7 @@ export default function ChatView({
         childSession,
         contextItems: childContext,
         parentSession: parent2,
-        ...(phrase ? { pendingPhrase: phrase, selectionText: text } : {}),
+        selectionText: text, // R-A 反馈 4：模板移入浮窗内，{selection} 槽预填框选文本
       });
     } catch {
       /* 打开失败静默，不崩 */
@@ -504,6 +490,7 @@ export default function ChatView({
   }
 
   // 2-3 人动模式：勾选的大纲条目 / 父初始上下文 → 追加进子对话 history（extraContext）
+  // R-B 反馈 7：按 ref 去重——同一节点/条目多次勾选只进一次
   function applyContext(): void {
     if (checked.size === 0) return;
     const added: ContextItemLike[] = [];
@@ -515,7 +502,13 @@ export default function ChatView({
         if (o) added.push({ ref: o.id, content: o.summary });
       }
     }
-    if (added.length > 0) setExtraContext((prev) => [...prev, ...added]);
+    if (added.length > 0) {
+      setExtraContext((prev) => {
+        const existing = new Set(prev.map((c) => c.ref));
+        const fresh = added.filter((c) => !existing.has(c.ref));
+        return fresh.length > 0 ? [...prev, ...fresh] : prev;
+      });
+    }
     setChecked(new Set());
     setContextOpen(false);
   }
@@ -632,6 +625,8 @@ export default function ChatView({
 
       {/* 2-3/2-R1 框选浮钮菜单：会话模式 + 选中节点（user/assistant 卡）才出现——
           「与 AI 讨论这段」+ 3 个 quick phrase 模板 */}
+      {/* 2-3/2-R1 框选浮钮：会话模式 + 选中节点（user/assistant 卡）才出现——R-A 反馈 4：只留「与 AI 讨论这段」，
+          quick phrase 模板已移入浮窗输入区（模板下拉） */}
       {sel && sel.nodeId && isSessionMode && (
         <div className="chat-discuss-menu" style={{ left: sel.x, top: sel.y }}>
           <button
@@ -642,40 +637,23 @@ export default function ChatView({
           >
             与 AI 讨论这段
           </button>
-          {QUICK_PHRASES.map((q) => (
-            <button
-              key={q.id}
-              className="chat-discuss-btn"
-              onClick={() => {
-                if (sel.nodeId) void openChildChat(sel.text, sel.nodeId, q);
-              }}
-            >
-              {q.title}
-            </button>
-          ))}
         </div>
       )}
 
       {compose ? (
-        /* 2-R1 quick phrase 槽位表单：{selection} 自动填框选内容，其余槽位输入 */
+        /* 2-R1/R-A quick phrase 槽位表单：{selection} 槽可编辑（框选自动填入，手动模板可自填），其余槽位输入 */
         <div className="chat-compose">
           <div className="chat-compose-title muted">模板：{compose.phrase.title}</div>
           {compose.phrase.slots.map((slot) => (
             <label key={slot.key} className="chat-compose-field">
               <span>{slot.label}</span>
-              {slot.key === "selection" ? (
-                <div className="chat-compose-selection" title="框选内容自动填入">
-                  {compose.values.selection}
-                </div>
-              ) : (
-                <input
-                  value={compose.values[slot.key] ?? ""}
-                  placeholder={slot.placeholder}
-                  onChange={(e) =>
-                    setCompose((c) => (c ? { ...c, values: { ...c.values, [slot.key]: e.target.value } } : c))
-                  }
-                />
-              )}
+              <input
+                value={compose.values[slot.key] ?? ""}
+                placeholder={slot.placeholder ?? (slot.key === "selection" ? "粘贴或输入内容" : undefined)}
+                onChange={(e) =>
+                  setCompose((c) => (c ? { ...c, values: { ...c.values, [slot.key]: e.target.value } } : c))
+                }
+              />
             </label>
           ))}
           <div className="chat-compose-actions">
@@ -689,6 +667,30 @@ export default function ChatView({
         </div>
       ) : (
         <div className="chat-input-row">
+          {/* R-A 反馈 4：quick phrase 模板下拉（选中展开槽位表单；不选 = 普通输入） */}
+          <select
+            className="chat-phrase-select"
+            title="quick phrase 模板"
+            value=""
+            onChange={(e) => {
+              const q = QUICK_PHRASES.find((x) => x.id === e.target.value);
+              if (!q) return;
+              setCompose({
+                phrase: q,
+                values: {
+                  selection: selectionText ?? "",
+                  ...Object.fromEntries(q.slots.filter((s) => s.key !== "selection").map((s) => [s.key, ""])),
+                },
+              });
+            }}
+          >
+            <option value="">+ 模板</option>
+            {QUICK_PHRASES.map((q) => (
+              <option key={q.id} value={q.id}>
+                {q.title}
+              </option>
+            ))}
+          </select>
           <input
             value={input}
             placeholder="输入消息…"

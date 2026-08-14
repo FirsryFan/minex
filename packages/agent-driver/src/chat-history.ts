@@ -17,7 +17,12 @@ export interface SessionLike {
     updatedAt: string;
     currentBranchId?: string;
     outlines?: unknown[];
-    settings?: unknown;
+    settings?: {
+      model?: string;
+      temperature?: number;
+      contextStrategy?: string;
+      systemPrompt?: string; // R-A 反馈 8：会话级自定义提示词
+    };
     parentSessionId?: string;
     personaId?: string;
   };
