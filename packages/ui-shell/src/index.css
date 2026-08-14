@@ -1635,7 +1635,7 @@ button {
   color: var(--color-text-muted);
   font-size: 12px;
 }
-/* R-A 反馈 3：图谱节点删除按钮 */
+/* R-A 反馈 3：图谱节点删除按钮（F4 反馈 4：仅 hover 显示，常态纯净） */
 .graph-node-del {
   position: absolute;
   right: 4px;
@@ -1650,8 +1650,7 @@ button {
   cursor: pointer;
   opacity: 0;
 }
-.graph-node:hover .graph-node-del,
-.graph-node.current .graph-node-del {
+.graph-node:hover .graph-node-del {
   opacity: 1;
 }
 .graph-node-del:hover {
@@ -1776,9 +1775,7 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: 50%; /* G-A 反馈 4：圆形节点 */
+  border-radius: 50%; /* G-A 反馈 4：圆形节点；F4：纯净圆（背景/边框/尺寸由 inline 编码样式给出） */
   box-shadow: var(--shadow-card); /* G-A 反馈 6 */
   color: var(--color-text);
   cursor: pointer;
@@ -1786,22 +1783,12 @@ button {
   transition: box-shadow 0.15s, transform 0.15s;
 }
 .graph-node:hover {
-  border-color: var(--color-primary);
   box-shadow: var(--shadow-hover);
   transform: translateY(-1px);
 }
 .graph-node.current {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-}
-.graph-node-char {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
-  max-width: 40px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  /* F4 反馈 4：当前会话高亮不占颜色通道——accent 外圈 ring（主题无 --color-accent，用 primary） */
+  box-shadow: 0 0 0 3px var(--color-primary);
 }
 .graph-info {
   position: absolute;
@@ -1842,6 +1829,19 @@ button {
 .graph-reset:hover {
   color: var(--color-primary);
   border-color: var(--color-primary);
+}
+/* F4 反馈 4：画布内图例（编码可读性兜底，左下角 muted 小字） */
+.graph-legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 5;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 .graph-outline {
   flex: 1;

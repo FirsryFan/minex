@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import { buildSessionGraph, layoutSessionGraph, type SessionGraph } from "./session-tree.js";
+import { encodeNodeVisual, MAX_RADIUS } from "./graph-encode.js"; // F4 反馈 4：纯净圆圈编码
 import type { Session } from "./session.js";
 import type { SessionStore } from "./store.js";
-
-const NODE_W = 56; // G-A 反馈 4：圆形节点（直径 56，中心 = +28）
-const NODE_H = 56;
 
 type Tab = "graph" | "outline";
 
@@ -76,8 +74,8 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
   const layout = useMemo(() => (graph ? layoutSessionGraph(graph) : {}), [graph]);
   const worldSize = useMemo(() => {
     if (!graph || graph.nodes.length === 0) return { w: 0, h: 0 };
-    const maxX = Math.max(...graph.nodes.map((n) => (layout[n.id]?.x ?? 0) + NODE_W));
-    const maxY = Math.max(...graph.nodes.map((n) => (layout[n.id]?.y ?? 0) + NODE_H));
+    const maxX = Math.max(...graph.nodes.map((n) => (layout[n.id]?.x ?? 0) + MAX_RADIUS * 2));
+    const maxY = Math.max(...graph.nodes.map((n) => (layout[n.id]?.y ?? 0) + MAX_RADIUS * 2));
     return { w: maxX + 40, h: maxY + 40 };
   }, [graph, layout]);
   const lines = useMemo(() => {
@@ -88,12 +86,12 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
       const p = layout[n.parentId];
       const c = layout[n.id];
       if (!p || !c) continue;
-      out.push({ x1: p.x + NODE_W / 2, y1: p.y + NODE_H / 2, x2: c.x + NODE_W / 2, y2: c.y + NODE_H / 2 });
+      out.push({ x1: p.x + MAX_RADIUS, y1: p.y + MAX_RADIUS, x2: c.x + MAX_RADIUS, y2: c.y + MAX_RADIUS });
     }
     return out;
   }, [graph, layout]);
 
-  /** 把节点置于画布中心（scale 指定）：屏幕 = 世界 × scale + translate */
+  /** 把节点置于画布中心（scale 指定）：屏幕 = 世界 × scale + translate（几何锚点 = 布局点 + MAX_RADIUS，见渲染处节点对齐） */
   function centerOn(id: string | null, scale: number): void {
     const box = containerRef.current;
     const vw = box?.clientWidth ?? 400;
@@ -101,8 +99,8 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
     const p = id ? layout[id] : undefined;
     setTransform({
       scale,
-      x: vw / 2 - ((p?.x ?? 0) + NODE_W / 2) * scale,
-      y: vh / 2 - ((p?.y ?? 0) + NODE_H / 2) * scale,
+      x: vw / 2 - ((p?.x ?? 0) + MAX_RADIUS) * scale,
+      y: vh / 2 - ((p?.y ?? 0) + MAX_RADIUS) * scale,
     });
   }
 
@@ -224,11 +222,29 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
               {graph?.nodes.map((n) => {
                 const p = layout[n.id];
                 if (!p) return null;
+                // F4 反馈 4：纯净圆圈编码（大小=消息数 / 颜色=活跃度 / 边框=子会话数）
+                const meta = sessions.find((s) => s.meta.id === n.id)?.meta;
+                const childCount = graph.nodes.filter((x) => x.parentId === n.id).length;
+                const v = encodeNodeVisual({
+                  nodeCount: n.nodeCount,
+                  updatedAt: meta?.updatedAt ?? "",
+                  childCount,
+                });
+                // 节点中心对齐布局锚点（p.x + MAX_RADIUS）：半径 < 30 时向左上偏移 (MAX_RADIUS - r)，
+                // 使 lines/centerOn 的 MAX_RADIUS 几何锚点 = 每个圆的真实视觉中心
+                const off = MAX_RADIUS - v.radius;
                 return (
                   <div
                     key={n.id}
                     className={`graph-node${n.id === currentSessionId ? " current" : ""}${hoverId === n.id ? " hover" : ""}`}
-                    style={{ left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
+                    style={{
+                      left: p.x - off,
+                      top: p.y - off,
+                      width: v.radius * 2,
+                      height: v.radius * 2,
+                      background: v.fill,
+                      border: `${v.borderWidth}px solid ${v.borderColor}`,
+                    }}
                     onClick={() => openSession(n.id)}
                     onMouseEnter={() => setHoverId(n.id)}
                     onMouseLeave={() => setHoverId(null)}
@@ -244,12 +260,13 @@ export default function GraphView({ kernel, instanceId }: { kernel: MinexKernel;
                     >
                       ✕
                     </button>
-                    <span className="graph-node-char">{n.title.slice(0, 1)}</span>
                   </div>
                 );
               })}
             </div>
           )}
+          {/* F4 反馈 4：画布内图例（编码可读性兜底；hover 信息栏是唯一文字出口） */}
+          <div className="graph-legend">○ 大小=消息数 · 颜色=活跃度 · 边框=子会话数</div>
           {graph && graph.nodes.length === 0 && <div className="muted graph-empty">（暂无会话）</div>}
           <button className="graph-reset" title="重置视角（100% + 当前会话居中）" onClick={resetView}>
             ⟳
