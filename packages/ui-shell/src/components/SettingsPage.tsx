@@ -4,6 +4,7 @@ import { useKernel } from "../kernel-context.js";
 import { planApply } from "../plan-apply.js";
 import { DriverDetail } from "./DriverDetail.js";
 import { DriverIcon } from "./DriverIcon.js";
+import { OverviewView } from "./OverviewView.js";
 
 type Section = "download" | "manage" | "overview";
 
@@ -90,7 +91,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         ) : section === "download" ? (
           <div className="card muted">驱动下载（暂未实现，留待后续）</div>
         ) : (
-          <div className="card muted">驱动总览（暂未实现，留待后续）</div>
+          <OverviewView kernel={kernel} onOpenDetail={setSelectedDriverId} />
         )}
       </div>
     </div>
