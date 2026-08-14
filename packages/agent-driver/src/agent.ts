@@ -40,6 +40,10 @@ export interface RunAgentOptions {
   canRun?: (call: { name: string; risk: string }) => Promise<boolean>;
   /** 3-3 模型参数（temperature 等）透传给 stream req；缺省不传（用 llm 驱动默认参数） */
   params?: Record<string, unknown>;
+  /** 3-4 真停止：AbortController 全链——abort → stream 抛 AbortError → 产 done（不产 error 不记 metrics） */
+  signal?: AbortSignal;
+  /** 3-4 插入指令：每轮 buildMessages 前调用，返回用户插入的消息（读后由消费方清空） */
+  pendingMessages?: () => ChatMessage[];
 }
 
 /** onContext 传入的 history 尾部条数（与 buildContext tailCount 默认一致） */
@@ -121,6 +125,10 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
         history.slice(-CONTEXT_TAIL).map((m, idx) => ({ ref: `h${idx}`, content: m.content ?? "" })),
       );
     }
+    // 3-4 插入指令：buildMessages 前注入（tool_call 结果回灌后，下一轮 LLM 优先处理用户插入）
+    if (opts.pendingMessages) {
+      history.push(...(opts.pendingMessages() ?? []));
+    }
     const messages = buildMessages({ systemPrompt: opts.systemPrompt, history, workMemory: [] });
     const acc: AccumulatedResponse = { content: "", toolCallDeltas: [] };
     let ttftMs = 0;
@@ -133,6 +141,7 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
         tools,
         stream: true,
         ...(opts.params ? { params: opts.params } : {}), // 3-3：会话级参数透传
+        ...(opts.signal ? { signal: opts.signal } : {}), // 3-4：真停止
       })) {
         if (first && (chunk.delta || chunk.toolCallDelta)) {
           ttftMs = Date.now() - started; // 首个分片（文本或工具调用）即计 ttft（审查 MINOR-1）
@@ -151,6 +160,15 @@ export async function* runAgent(deps: AgentDeps, opts: RunAgentOptions): AsyncIt
         }
       }
     } catch (err) {
+      // 3-4 真停止：abort 非失败——产 done（带已有 usage/cost），不产 error、不记 metrics
+      if (err instanceof DOMException && err.name === "AbortError") {
+        yield {
+          kind: "done",
+          usage: finalUsage,
+          cost: finalUsage ? computeCost(finalUsage, deps.prices) : undefined,
+        };
+        return;
+      }
       yield { kind: "error", message: err instanceof Error ? err.message : String(err) };
       return;
     }

@@ -4,7 +4,7 @@
  * 会话 = 交互场所（announcements 概念澄清）；大纲记忆 = 附在 session.meta 的短期记忆条目。
  */
 
-import type { Session, SessionLink, SessionNode } from "./session.js";
+import { addLink, addNode, type Session, type SessionLink, type SessionNode } from "./session.js";
 
 /** 分支：id = 分支入口节点 id（主链恒为 "main"）；沿 responds 链收集节点序列（chronological） */
 export interface Branch {
@@ -194,6 +194,45 @@ export function addOutlineEntry(session: Session, entry: OutlineEntry): Session 
 export function listOutlines(session: Session, kind?: OutlineEntry["kind"]): OutlineEntry[] {
   const outlines = session.meta.outlines ?? [];
   return kind ? outlines.filter((o) => o.kind === kind) : [...outlines];
+}
+
+/**
+ * 撤回（3-4，tool_call 级基元化，不整轮重跑）：删 nodeId 及其 responds 链全部后继节点（不可变）。
+ * responds 链接方向：from = 回应者（后发生），to = 被回应者（先发生）——后继 = 直接/间接回应 nodeId 的节点。
+ * removed 按 session.nodes 原序返回；nodeId 不存在 → 返回原对象 + removed: []。
+ */
+export function revertAt(session: Session, nodeId: string): { session: Session; removed: SessionNode[] } {
+  if (!session.nodes.some((n) => n.id === nodeId)) return { session, removed: [] };
+  const removedIds = new Set<string>([nodeId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const l of session.links) {
+      if (l.type === "responds" && removedIds.has(l.to) && !removedIds.has(l.from)) {
+        removedIds.add(l.from);
+        grew = true;
+      }
+    }
+  }
+  const removed = session.nodes.filter((n) => removedIds.has(n.id));
+  return {
+    session: {
+      ...session,
+      nodes: session.nodes.filter((n) => !removedIds.has(n.id)),
+      links: session.links.filter((l) => !removedIds.has(l.from) && !removedIds.has(l.to)),
+      meta: { ...session.meta, updatedAt: new Date().toISOString() },
+    },
+    removed,
+  };
+}
+
+/**
+ * 重做（3-4）：把工具重执行结果插回——插入 toolNode（responds 指向 afterNodeId，即撤前的链上前驱），
+ * 成为新链尾；不重新生成后续 thinking（用户可继续指令）。不可变，刷新 updatedAt。
+ */
+export function redoToolResult(session: Session, toolNode: SessionNode, afterNodeId: string): Session {
+  const s1 = addNode(session, toolNode);
+  return addLink(s1, { from: toolNode.id, to: afterNodeId, type: "responds" });
 }
 
 /** 会话系图谱（P3 拍板：推导不存文件，权威数据 = 各会话 meta.parentSessionId） */

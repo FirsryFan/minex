@@ -36,6 +36,10 @@ interface AgentCap {
       /** 3-3：模型名 / 模型参数覆盖（会话级 settings 消费） */
       model?: string;
       params?: Record<string, unknown>;
+      /** 3-4：真停止（AbortController） */
+      signal?: AbortSignal;
+      /** 3-4：插入指令（每轮 buildMessages 前读取；读后清空） */
+      pendingMessages?: () => Array<{ role: string; content: string }>;
     },
   ): AsyncIterable<AgentEvent>;
 }
@@ -75,6 +79,10 @@ interface SessionTreeCap {
   addLink(s: SessionLike, link: SessionLinkLike): SessionLike;
   createSession(input: { title?: string; activeAgents?: string[]; personaId?: string }): SessionLike;
   addOutlineEntry(s: SessionLike, entry: OutlineEntryLike): SessionLike;
+  /** 3-4：tool_call 级撤回（删 nodeId 及其 responds 后继） */
+  revertAt(s: SessionLike, nodeId: string): { session: SessionLike; removed: SessionNodeLike[] };
+  /** 3-4：工具重执行结果插回 */
+  redoToolResult(s: SessionLike, node: SessionNodeLike, afterNodeId: string): SessionLike;
 }
 
 /** persona 形状（role 贡献值，跨包零源码 import，结构类型） */
@@ -179,6 +187,13 @@ export default function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [metrics, metricsTick],
   );
+  // 3-4：真停止（AbortController）+ 插入指令（挂起队列）+ tool_call 级撤回/重做
+  const abortRef = useRef<AbortController | null>(null);
+  const pendingRef = useRef<Array<{ role: string; content: string }>>([]);
+  const [redoState, setRedoState] = useState<{
+    toolNode: SessionNodeLike;
+    afterNodeId: string;
+  } | null>(null);
   // 2-3：框选状态 / 子对话上下文 / 上下文面板 / 自动继承 / 已勾选
   const chatViewRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<SelectionState | null>(null);
@@ -370,12 +385,18 @@ export default function ChatView({
     const history = [...messages, userMsg]
       .filter((m) => (m.role === "user" || m.role === "assistant") && !m.error)
       .map((m) => ({ role: m.role, content: m.content }));
-    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun
+    // 3-1：persona.tools 白名单（缺省 = 全部工具）；3-2：权限裁决 canRun；3-4：signal + 插入指令
     const personaTools = currentPersona?.tools;
     const canRun = buildCanRun();
     const runOpts = {
       ...(personaTools && personaTools.length > 0 ? { toolWhitelist: personaTools } : {}),
       ...(canRun ? { canRun } : {}),
+      ...(abortRef.current ? { signal: abortRef.current.signal } : {}),
+      pendingMessages: (): Array<{ role: string; content: string }> => {
+        const p = pendingRef.current;
+        pendingRef.current = [];
+        return p;
+      },
     };
     try {
       for await (const ev of agent.run(SYSTEM_PROMPT, history, undefined, runOpts)) {
@@ -452,6 +473,12 @@ export default function ChatView({
       ...(canRun ? { canRun } : {}),
       ...(settings?.model ? { model: settings.model } : {}),
       ...(settings?.temperature !== undefined ? { params: { temperature: settings.temperature } } : {}),
+      ...(abortRef.current ? { signal: abortRef.current.signal } : {}),
+      pendingMessages: (): Array<{ role: string; content: string }> => {
+        const p = pendingRef.current;
+        pendingRef.current = [];
+        return p;
+      },
     };
     try {
       for await (const ev of agent.run(systemPrompt, history, undefined, runOpts)) {
@@ -513,12 +540,22 @@ export default function ChatView({
 
   async function send(textOverride?: string): Promise<void> {
     const text = (textOverride ?? input).trim();
-    if (!text || streaming || !agent) return;
+    if (!text || !agent) return;
     if (textOverride === undefined) setInput("");
+    // 3-4 插入指令：流式/工具执行期间发送不禁用——push 消息 + 挂起队列（不 abort），
+    // 工具结果回灌后下一轮 LLM 自动带上（「tool_call 结束后优先处理用户插入」）
+    if (streaming) {
+      const inserted: ChatMessageView = { role: "user", content: text };
+      setMessages((prev) => [...prev, inserted]);
+      pendingRef.current.push({ role: "user", content: text });
+      return;
+    }
     setStreaming(true);
     cancelledRef.current = false;
+    abortRef.current = new AbortController();
     if (isSessionMode) await sendSessionMode(text);
     else await sendDraft(text);
+    abortRef.current = null;
   }
 
   async function saveDraft(): Promise<void> {
@@ -601,6 +638,48 @@ export default function ChatView({
     if (!session || !store || session.activeAgents[0] === driverId) return;
     const s2 = { ...session, activeAgents: [driverId] };
     setSession(s2);
+    await store.saveSession(s2).catch(() => {});
+  }
+
+  // —— 3-4 tool_call 级撤回/重做（基元化，不整轮重跑） ——
+  /** 撤回：删该 tool 节点及其 responds 后继（含其后 thinking）；被撤 tool + 链上前驱存 redoState 供重做 */
+  async function revertTo(nodeId: string | undefined): Promise<void> {
+    if (!nodeId || !session || !tree || !store) return;
+    const orig = session;
+    const { session: s2, removed } = tree.revertAt(orig, nodeId);
+    if (removed.length === 0) return;
+    const toolNode = removed.find((n) => n.id === nodeId && n.kind === "tool");
+    const afterNodeId = toolNode
+      ? orig.links.find((l) => l.type === "responds" && l.from === toolNode.id)?.to
+      : undefined;
+    setRedoState(toolNode && afterNodeId ? { toolNode, afterNodeId } : null);
+    setSession(s2);
+    setMessages(sessionToChatMessages(s2));
+    await store.saveSession(s2).catch(() => {});
+  }
+
+  /** 重做：仅重跑该工具（走 3-2 权限裁决 + registry 工具能力重执行）→ redoToolResult 插回（不重新生成后续 thinking） */
+  async function redoTool(): Promise<void> {
+    if (!redoState || !session || !tree || !store) return;
+    const toolName = redoState.toolNode.toolName ?? "";
+    const tools = kernel.registry
+      .query<{ name: string; risk?: string; execute(args: Record<string, unknown>): Promise<string> }>("tool")
+      .map((c) => c.value);
+    const tool = tools.find((t) => t.name === toolName);
+    if (!tool) return;
+    const canRun = buildCanRun();
+    if (canRun && !(await canRun({ name: toolName, risk: tool.risk ?? "read" }))) return; // 拒绝 → 不重做
+    let output = "";
+    try {
+      output = await tool.execute((redoState.toolNode.input ?? {}) as Record<string, unknown>);
+    } catch (err) {
+      output = `Error: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    const updated: SessionNodeLike = { ...redoState.toolNode, output, error: undefined };
+    const s2 = tree.redoToolResult(session, updated, redoState.afterNodeId);
+    setRedoState(null);
+    setSession(s2);
+    setMessages(sessionToChatMessages(s2));
     await store.saveSession(s2).catch(() => {});
   }
 
@@ -745,8 +824,20 @@ export default function ChatView({
         {messages.map((m, i) => {
           if (m.role === "tool") {
             return (
-              <div key={i} className="chat-msg tool">
-                <div className="chat-tool-name">调用工具 {m.toolName ?? "?"}</div>
+              <div key={i} className="chat-msg tool" data-node-id={nodeIdByIndex[i]}>
+                <div className="chat-tool-name">
+                  <span>调用工具 {m.toolName ?? "?"}</span>
+                  {/* 3-4：tool_call 级撤回（删除该工具及其后节点，不整轮重跑） */}
+                  {isSessionMode && (
+                    <button
+                      className="chat-tool-revert"
+                      title="撤回到此（删除该工具及其后节点）"
+                      onClick={() => void revertTo(nodeIdByIndex[i])}
+                    >
+                      ↩
+                    </button>
+                  )}
+                </div>
                 {m.args !== undefined && <pre className="chat-tool-args">{JSON.stringify(m.args, null, 2)}</pre>}
               </div>
             );
@@ -774,6 +865,18 @@ export default function ChatView({
           </div>
         )}
       </div>
+
+      {/* 3-4：被撤区重做条（v1 redo 栈内存态，刷新即失）——仅重跑该工具，不重新生成后续 thinking */}
+      {redoState && (
+        <div className="chat-redo-bar">
+          <span className="muted">
+            已撤回工具调用 {redoState.toolNode.toolName ?? "?"}（其后节点已移除）
+          </span>
+          <button className="btn-ghost" onClick={() => void redoTool()}>
+            重做（仅重跑该工具）
+          </button>
+        </div>
+      )}
 
       {/* 2-3/2-R1 框选浮钮菜单：会话模式 + 选中节点（user/assistant 卡）才出现——
           「与 AI 讨论这段」+ 3 个 quick phrase 模板 */}
@@ -848,16 +951,29 @@ export default function ChatView({
           </select>
           <input
             value={input}
-            placeholder="输入消息…"
+            placeholder="输入消息…（流式中可插入指令，工具结果回灌后优先处理）"
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") void send();
             }}
-            disabled={streaming}
           />
-          <button className="btn" onClick={() => void send()} disabled={streaming || input.trim() === ""}>
-            发送
-          </button>
+          {/* 3-4：流式中发送按钮原位变「停止」（真停止：abort 全链，不报错） */}
+          {streaming ? (
+            <button
+              className="btn"
+              onClick={() => {
+                abortRef.current?.abort();
+                cancelledRef.current = true;
+                setStreaming(false);
+              }}
+            >
+              停止
+            </button>
+          ) : (
+            <button className="btn" onClick={() => void send()} disabled={input.trim() === ""}>
+              发送
+            </button>
+          )}
         </div>
       )}
 

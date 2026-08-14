@@ -32,6 +32,8 @@ export interface LLMRequest {
   tools?: ToolDef[];
   params?: Record<string, unknown>;
   stream?: boolean;
+  /** 3-4：真停止（AbortController 全链）——fetch 挂 signal，abort → reader.read() 抛 AbortError */
+  signal?: AbortSignal;
 }
 
 /** 流式工具调用分片（DeepSeek 按 index 分片返回，需累积重组） */

@@ -80,6 +80,7 @@ export function createDeepSeekProvider(apiKey: string): LLMProvider {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
+      ...(req.signal ? { signal: req.signal } : {}), // 3-4：abort → reader.read() 抛 AbortError
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");

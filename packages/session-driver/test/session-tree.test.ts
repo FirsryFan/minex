@@ -8,6 +8,8 @@ import {
   deriveBranches,
   layoutSessionGraph,
   listOutlines,
+  redoToolResult,
+  revertAt,
   type OutlineEntry,
 } from "../src/session-tree.js";
 import {
@@ -447,5 +449,56 @@ describe("buildSessionGraph / layoutSessionGraph（2-1 修订：会话系图谱�
     expect(pos.a.y).toBe(0);
     expect(pos.b.y).toBe(0);
     expect(pos.a.x).toBeLessThan(pos.b.x);
+  });
+});
+
+describe("revertAt / redoToolResult（3-4 tool_call 级撤回/重做）", () => {
+  it("撤中间 tool：删该节点及其 responds 链全部后继（含其后 thinking），removed 按原序返回", () => {
+    const s = mk(
+      [
+        { id: "u1", kind: "user", content: "问题" },
+        { id: "t1", kind: "tool", output: "结果" },
+        { id: "a1", kind: "assistant", content: "思考中" },
+        { id: "u2", kind: "user", content: "追问" },
+        { id: "a2", kind: "assistant", content: "总结" },
+      ],
+      [
+        { from: "t1", to: "u1", type: "responds" },
+        { from: "a1", to: "t1", type: "responds" },
+        { from: "u2", to: "a1", type: "responds" },
+        { from: "a2", to: "u2", type: "responds" },
+      ],
+    );
+    const { session: s2, removed } = revertAt(s, "t1");
+    expect(removed.map((n) => n.id)).toEqual(["t1", "a1", "u2", "a2"]); // 原序
+    expect(s2.nodes.map((n) => n.id)).toEqual(["u1"]);
+    expect(s2.links).toEqual([]); // 相关 responds 链接全清
+    expect(s2.meta.updatedAt).not.toBe(s.meta.updatedAt); // 不可变 + 刷新
+    expect(s.nodes).toHaveLength(5); // 原对象不变
+  });
+
+  it("撤链尾：只删最后一个节点", () => {
+    const s = chain(["a", "b", "c"]);
+    const { session: s2, removed } = revertAt(s, "c");
+    expect(removed.map((n) => n.id)).toEqual(["c"]);
+    expect(s2.nodes.map((n) => n.id)).toEqual(["a", "b"]);
+    expect(s2.links).toEqual([{ from: "b", to: "a", type: "responds" }]);
+  });
+
+  it("nodeId 不存在：返回原对象 + removed 空", () => {
+    const s = chain(["a", "b"]);
+    const r = revertAt(s, "zzz");
+    expect(r.session).toBe(s);
+    expect(r.removed).toEqual([]);
+  });
+
+  it("redoToolResult：工具结果插回（responds 指向 afterNodeId），成为新链尾", () => {
+    const s = chain(["u1", "a1"]);
+    const toolNode = { id: "t1", kind: "tool" as const, toolName: "read_file", input: { path: "x" }, output: "新结果", ts: "2026-01-02T00:00:00.000Z" };
+    const s2 = redoToolResult(s, toolNode, "a1");
+    expect(s2.nodes.map((n) => n.id)).toEqual(["u1", "a1", "t1"]);
+    expect(s2.links).toContainEqual({ from: "t1", to: "a1", type: "responds" });
+    expect(s2.nodes.find((n) => n.id === "t1")?.output).toBe("新结果");
+    expect(s.nodes).toHaveLength(2); // 原对象不变
   });
 });

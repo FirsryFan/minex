@@ -33,6 +33,10 @@ interface RunOpts {
   model?: string;
   /** 3-3：模型参数覆盖（会话级 temperature 等；与 llm.config.getParams() 合并，本值优先） */
   params?: Record<string, unknown>;
+  /** 3-4：真停止（AbortController 全链透传） */
+  signal?: AbortSignal;
+  /** 3-4：插入指令（每轮 buildMessages 前读取；读后清空） */
+  pendingMessages?: () => ChatMessage[];
 }
 
 /**
@@ -103,7 +107,12 @@ export default {
             maxIterations,
             params,
             ...(opts
-              ? { onContext: opts.onContext, ...(opts.canRun ? { canRun: opts.canRun } : {}) }
+              ? {
+                  onContext: opts.onContext,
+                  ...(opts.canRun ? { canRun: opts.canRun } : {}),
+                  ...(opts.signal ? { signal: opts.signal } : {}),
+                  ...(opts.pendingMessages ? { pendingMessages: opts.pendingMessages } : {}),
+                }
               : {}),
           },
         );

@@ -1,6 +1,6 @@
 import type { DriverContext } from "@minex/kernel";
 import { addLink, addNode, createSession, rebuildFromMarkdown, toMarkdown, validateSession, type Session } from "./session.js";
-import { addOutlineEntry, buildContext, deriveBranches } from "./session-tree.js";
+import { addOutlineEntry, buildContext, deriveBranches, redoToolResult, revertAt } from "./session-tree.js";
 import { createSessionStore, type SessionFsOps, type SessionStore } from "./store.js";
 
 /**
@@ -37,8 +37,17 @@ export default {
     };
     ctx.register("session", "default", store);
 
-    // 会话树纯函数（2-1/2-3/2-4）：buildContext / deriveBranches / addNode / addLink / createSession / addOutlineEntry
-    ctx.register("session.tree", "default", { buildContext, deriveBranches, addNode, addLink, createSession, addOutlineEntry });
+    // 会话树纯函数（2-1/2-3/2-4/3-4）：buildContext / deriveBranches / addNode / addLink / createSession / addOutlineEntry / revertAt / redoToolResult
+    ctx.register("session.tree", "default", {
+      buildContext,
+      deriveBranches,
+      addNode,
+      addLink,
+      createSession,
+      addOutlineEntry,
+      revertAt, // 3-4：tool_call 级撤回
+      redoToolResult, // 3-4：工具重执行结果插回
+    });
 
     // 面板：会话总览（左栏；搜索 / 标签筛选 / 列表 / 新建，点击打开 .ses 对话模式）——P2：总览归左栏
     ctx.register("panel", "mist.session.overview", {

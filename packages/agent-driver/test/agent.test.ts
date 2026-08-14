@@ -301,6 +301,78 @@ describe("runAgent 模型参数透传 + done 带 cost（3-3）", () => {
   });
 });
 
+describe("runAgent 插入指令 + 真停止（3-4）", () => {
+  it("pendingMessages：第二轮 buildMessages 前注入——位于工具结果后（优先处理用户插入）", async () => {
+    let secondRoundMessages: ChatMessage[] = [];
+    let calls = 0;
+    async function* stream(req: { messages: ChatMessage[] }): AsyncIterable<LLMChunk> {
+      calls++;
+      if (calls === 1) {
+        yield { delta: "", done: false, toolCallDelta: { index: 0, id: "c1", name: "echo", arguments: '{"text":"x"}' } };
+      } else {
+        secondRoundMessages = req.messages;
+        yield { delta: "答", done: false };
+      }
+      yield { delta: "", done: true, usage: { promptTokens: 10, completionTokens: 1, cachedTokens: 0 } };
+    }
+    // 用户「流式中插入指令」：在工具执行期间（迭代 1 结束、迭代 2 pendingMessages 之前）填入
+    const pending: ChatMessage[] = [];
+    const echoLike = {
+      name: "echo",
+      description: "d",
+      parameters: {},
+      execute: async () => {
+        pending.push({ role: "user" as const, content: "先停一下，别继续" });
+        return "ok";
+      },
+    };
+    const events = runAgent(makeDeps(stream, [echoLike]), {
+      systemPrompt: "s",
+      history: [{ role: "user", content: "hi" }],
+      pendingMessages: () => {
+        const p = [...pending];
+        pending.length = 0;
+        return p;
+      },
+    });
+    await collect(events);
+    // 第二轮 messages 序（buildMessages 前置 system）：user → assistant(tool_calls) → tool 结果 → user 插入指令
+    expect(secondRoundMessages.map((m) => m.role).filter((r) => r !== "system")).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "user",
+    ]);
+    expect(secondRoundMessages[secondRoundMessages.length - 1].content).toBe("先停一下，别继续");
+  });
+
+  it("signal 透传到 stream req", async () => {
+    const seen: Array<{ signal?: AbortSignal }> = [];
+    async function* stream(req: { signal?: AbortSignal }): AsyncIterable<LLMChunk> {
+      seen.push(req);
+      yield { delta: "答", done: false };
+      yield { delta: "", done: true, usage: { promptTokens: 1, completionTokens: 0, cachedTokens: 0 } };
+    }
+    const controller = new AbortController();
+    await collect(runAgent(makeDeps(stream), { systemPrompt: "s", history: [], signal: controller.signal }));
+    expect(seen[0].signal).toBe(controller.signal);
+  });
+
+  it("AbortError → done（不产 error、不记 metrics）", async () => {
+    const recorded: LLMMetricsEntry[] = [];
+    async function* stream(): AsyncIterable<LLMChunk> {
+      yield { delta: "部分", done: false };
+      throw new DOMException("aborted", "AbortError");
+    }
+    const deps = makeDeps(stream);
+    deps.recordMetrics = (e) => recorded.push(e);
+    const events: AgentEvent[] = [];
+    for await (const e of runAgent(deps, { systemPrompt: "s", history: [] })) events.push(e);
+    expect(events.map((e) => e.kind)).toEqual(["text", "done"]); // 无 error
+    expect(recorded).toHaveLength(0); // abort 非失败不记 metrics
+  });
+});
+
 describe("runAgent 再加工 hook", () => {
   it("注入自定义 rework：工具结果按 hook 加工后回灌", async () => {
     let secondRoundMessages: ChatMessage[] = [];
