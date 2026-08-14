@@ -1,6 +1,7 @@
 import { createInMemoryStorage, createKernel } from "@minex/kernel";
 import { describe, expect, it } from "vitest";
 import {
+  buildChildSystemPrompt,
   chatMessagesToSession,
   loadChatHistory,
   newId,
@@ -183,5 +184,29 @@ describe("saveAsSession（草稿 → 会话）", () => {
     const kernel = kernelWithStore({ hasRoot: () => true, saveSession: async (s) => { saved = s; } });
     await saveAsSession(kernel, [{ role: "user", content: "x" }], "我的会话");
     expect(saved!.meta.title).toBe("我的会话");
+  });
+});
+
+describe("buildChildSystemPrompt（2-3 自动继承）", () => {
+  const base = "基础 prompt";
+  const outlines = [
+    { summary: "用户希望用中文交流" },
+    { summary: "已讨论文件读取方案" },
+  ];
+
+  it("开关关 → 原样返回基础 prompt", () => {
+    expect(buildChildSystemPrompt(base, false, outlines)).toBe(base);
+  });
+
+  it("开关开但无大纲 → 原样返回基础 prompt", () => {
+    expect(buildChildSystemPrompt(base, true, [])).toBe(base);
+  });
+
+  it("开关开 + 有大纲 → 基础 prompt + 大纲文本补充（含每条 summary）", () => {
+    const out = buildChildSystemPrompt(base, true, outlines);
+    expect(out.startsWith(base)).toBe(true);
+    expect(out).toContain("大纲记忆");
+    expect(out).toContain("- 用户希望用中文交流");
+    expect(out).toContain("- 已讨论文件读取方案");
   });
 });

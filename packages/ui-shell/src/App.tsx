@@ -8,6 +8,8 @@ import { TopBar } from "./components/TopBar.js";
 import { useKernel } from "./kernel-context.js";
 import { queryPanels, type PanelContribution, type PanelDock } from "./panels.js";
 import { setPendingOpenSessionId } from "../../agent-driver/src/session-open.js";
+import ChatView from "../../agent-driver/src/chat-view.js";
+import type { SessionLike } from "../../agent-driver/src/chat-history.js";
 
 const ACTIVE_DRIVER_KEY = "minex.activeDriver";
 const THEME_KEY = "minex.theme";
@@ -66,6 +68,12 @@ export function App({ problems }: { problems: string[] }) {
   const [instances, setInstances] = useState<InstanceState[]>(() => [makeInstance(1, "工作区 1")]);
   const [activeInstanceId, setActiveInstanceId] = useState(1);
   const [taskViewOpen, setTaskViewOpen] = useState(false);
+  // 2-3 浮窗子对话：聊天内框选 → minex:openChildChat → 外壳浮窗承载迷你 ChatView
+  const [childChat, setChildChat] = useState<{
+    childSession: SessionLike;
+    contextItems: Array<{ ref: string; content: string }>;
+    parentSession: SessionLike;
+  } | null>(null);
   const activeInstance = instances.find((i) => i.id === activeInstanceId) ?? instances[0];
 
   useEffect(() => {
@@ -106,6 +114,19 @@ export function App({ problems }: { problems: string[] }) {
       }
     });
   }, [kernel, activeInstanceId]);
+
+  // 2-3 浮窗子对话：聊天内框选 → 打开子对话浮窗（复用会话模式 ChatView）
+  useEffect(() => {
+    return kernel.events.on("minex:openChildChat", (payload) => {
+      const p = payload as { childSession?: SessionLike; contextItems?: unknown[]; parentSession?: SessionLike } | undefined;
+      if (!p?.childSession || !p.parentSession) return;
+      setChildChat({
+        childSession: p.childSession,
+        contextItems: (p.contextItems ?? []) as Array<{ ref: string; content: string }>,
+        parentSession: p.parentSession,
+      });
+    });
+  }, [kernel]);
 
   // 任务视图弹窗：Esc 关闭
   useEffect(() => {
@@ -213,6 +234,28 @@ export function App({ problems }: { problems: string[] }) {
             <button className="taskview-add" onClick={addInstance}>＋ 新建工作区</button>
           </div>
         </div>
+      )}
+
+      {/* 2-3 浮窗子对话（框选 → 与 AI 讨论这段）：复用会话模式 ChatView（contextItems + parentSession） */}
+      {childChat && (
+        <FloatingPanel
+          title="子对话"
+          x={Math.max(0, (typeof window !== "undefined" ? window.innerWidth : 1024) - 520)}
+          y={80}
+          w={420}
+          h={520}
+          onMove={() => {}}
+          onResize={() => {}}
+          onDrop={() => {}}
+          onClose={() => setChildChat(null)}
+        >
+          <ChatView
+            kernel={kernel}
+            session={childChat.childSession}
+            contextItems={childChat.contextItems}
+            parentSession={childChat.parentSession}
+          />
+        </FloatingPanel>
       )}
     </div>
   );

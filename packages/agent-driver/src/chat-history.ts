@@ -81,6 +81,20 @@ export function newId(): string {
   return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * 子对话 systemPrompt（2-3 自动继承）：开关开且有父大纲 → 基础 prompt + 大纲文本补充
+ * （让 agent 自己从大纲选择相关信息，D10 3.4）；否则原样返回基础 prompt。
+ */
+export function buildChildSystemPrompt(
+  base: string,
+  autoInherit: boolean,
+  outlines: Array<{ summary: string }>,
+): string {
+  if (!autoInherit || outlines.length === 0) return base;
+  const list = outlines.map((o) => `- ${o.summary}`).join("\n");
+  return `${base}\n\n以下是父对话的大纲记忆，可从中选择与本次对话相关的信息：\n${list}`;
+}
+
 /** 读取聊天历史：JSON.parse，缺失/损坏返回 []（try/catch 不抛错）。 */
 export function loadChatHistory(kernel: ChatHistoryKernel, instanceId: number | undefined): ChatMessageView[] {
   try {
