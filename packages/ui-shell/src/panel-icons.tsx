@@ -6,6 +6,7 @@ import {
   MessagesSquare,
   SlidersHorizontal,
   Users,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -41,6 +42,7 @@ export const PANEL_ICONS: Record<string, ComponentType<{ size?: number | string 
   "minex.agent.chat": MessageCircle,
   "minex.agent.config": SlidersHorizontal, // F-A 反馈 4：Agent 配置面板
   "minex.agent.list": Users, // P0-3：Agent 列表面板
+  "minex.agent.workflows": Workflow, // W-C：workflow 列表面板
   "minex.markdown.workspace": FileText,
   "minex.graph.view": SessionTreeIcon, // 3-5：通用图谱面板 → 树形 icon（原 mist.session.graph 已迁移）
 };

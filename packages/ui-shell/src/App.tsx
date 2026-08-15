@@ -9,6 +9,7 @@ import { useKernel } from "./kernel-context.js";
 import { queryPanels, type PanelContribution, type PanelDock } from "./panels.js";
 import { panelIcon } from "./panel-icons.js";
 import { setPendingOpenSessionId } from "../../agent-driver/src/session-open.js";
+import { setPendingEditWorkflowId } from "../../agent-driver/src/workflow-open.js";
 import type { SessionLike } from "../../agent-driver/src/chat-history.js";
 // 3-6：ChatView 静态 import 改 lazy（消 vite 双 import 警告；使用处包 Suspense）
 const ChatView = lazy(() => import("../../agent-driver/src/chat-view.js"));
@@ -44,6 +45,8 @@ interface InstanceState {
   /** F-G 概念修正：打开的会话 id（minex:openSession 写入；agent 驱动主区 = 聊天会话模式，
    *   否则 = 配置中心；切驱动清空） */
   openSessionId?: string | null;
+  /** W-C：打开的 workflow 编辑 id（minex:editWorkflow 写入；agent 驱动主区 = workflow 编辑器；返回列表清空） */
+  editWorkflowId?: string | null;
 }
 
 function makeInstance(
@@ -116,12 +119,12 @@ export function App({ problems }: { problems: string[] }) {
   }, [dark]);
 
   // 文件树点击 → 目标工作视图切到 markdown（openFile 定向到 targetInstanceId；缺省当前实例）
-  // F-G：切驱动统一清空 openSessionId（打开会话状态只由 minex:openSession 写）
+  // F-G/W-C：切驱动统一清空 openSessionId/editWorkflowId（打开状态只由对应事件写）
   useEffect(() => {
     return kernel.events.on("filesystem:openFile", (payload) => {
       const p = payload as { targetInstanceId?: number } | undefined;
       const targetId = p?.targetInstanceId ?? activeInstanceId;
-      updateInstance(targetId, { activeDriverId: "minex.markdown", openSessionId: undefined });
+      updateInstance(targetId, { activeDriverId: "minex.markdown", openSessionId: undefined, editWorkflowId: undefined });
       try {
         localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.markdown");
       } catch {
@@ -131,19 +134,44 @@ export function App({ problems }: { problems: string[] }) {
   }, [kernel, activeInstanceId]);
 
   // 会话总览/图谱「打开会话」→ 暂存会话 id（ChatView 挂载竞态桥接）+ 切到会话驱动（2-2；F-H：mist.session）
-  // F-G：写 openSessionId——主区 = 聊天会话模式（驱动无关）
+  // F-G：写 openSessionId——主区 = 聊天会话模式（驱动无关）；同时清 editWorkflowId（编辑器与会话互斥）
   useEffect(() => {
     return kernel.events.on("minex:openSession", (payload) => {
       const p = payload as { id?: string; targetInstanceId?: number } | undefined;
       if (!p?.id) return;
       setPendingOpenSessionId(p.id);
       const targetId = p.targetInstanceId ?? activeInstanceId;
-      updateInstance(targetId, { activeDriverId: "mist.session", openSessionId: p.id });
+      updateInstance(targetId, { activeDriverId: "mist.session", openSessionId: p.id, editWorkflowId: undefined });
       try {
         localStorage.setItem(ACTIVE_DRIVER_KEY, "mist.session");
       } catch {
         /* localStorage 不可用 */
       }
+    });
+  }, [kernel, activeInstanceId]);
+
+  // W-C：workflow 列表单击 → 暂存 id + 切 agent 驱动 + 记 editWorkflowId（主区 = workflow 编辑器）
+  useEffect(() => {
+    return kernel.events.on("minex:editWorkflow", (payload) => {
+      const p = payload as { id?: string; targetInstanceId?: number } | undefined;
+      if (!p?.id) return;
+      setPendingEditWorkflowId(p.id);
+      const targetId = p.targetInstanceId ?? activeInstanceId;
+      updateInstance(targetId, { activeDriverId: "minex.agent", editWorkflowId: p.id, openSessionId: undefined });
+      try {
+        localStorage.setItem(ACTIVE_DRIVER_KEY, "minex.agent");
+      } catch {
+        /* localStorage 不可用 */
+      }
+    });
+  }, [kernel, activeInstanceId]);
+
+  // W-C：编辑器「返回列表」→ 清空 editWorkflowId（主区回配置中心，agent 驱动不变）
+  useEffect(() => {
+    return kernel.events.on("minex:closeWorkflowEditor", (payload) => {
+      const p = payload as { targetInstanceId?: number } | undefined;
+      const targetId = p?.targetInstanceId ?? activeInstanceId;
+      updateInstance(targetId, { editWorkflowId: undefined });
     });
   }, [kernel, activeInstanceId]);
 
@@ -227,8 +255,8 @@ export function App({ problems }: { problems: string[] }) {
     if (activeInstanceId === id) setActiveInstanceId(rest[rest.length - 1].id);
   }
   function selectDriver(id: string): void {
-    // F-G：切驱动统一清空 openSessionId——切回 Agent 默认主区 = 配置中心（不自动回聊天）
-    updateInstance(activeInstanceId, { activeDriverId: id, openSessionId: undefined });
+    // F-G/W-C：切驱动统一清空 openSessionId/editWorkflowId——切回 Agent 默认主区 = 配置中心
+    updateInstance(activeInstanceId, { activeDriverId: id, openSessionId: undefined, editWorkflowId: undefined });
     try {
       localStorage.setItem(ACTIVE_DRIVER_KEY, id);
     } catch {
@@ -412,8 +440,8 @@ function WorkspaceInstance({
   // F-H：左栏按归属驱动过滤（文件常驻 / 会话面板仅会话驱动 / agent 面板仅 agent 驱动）
   const leftPanels = panels.filter((p) => dockOf(p) === "left" && leftPanelVisible(p, instance.activeDriverId));
   const rightPanels = panels.filter((p) => dockOf(p) === "right");
-  // F-G/F-H 主区选择：打开会话（openSessionId）→ 主区 = 聊天（会话模式，驱动无关）；
-  // agent 驱动 → 配置中心（默认）；其余驱动 → 该驱动主面板
+  // F-G/F-H/W-C 主区选择：打开会话（openSessionId）→ 主区 = 聊天（驱动无关）；
+  // agent 驱动 → editWorkflowId ? workflow 编辑器 : 配置中心（默认）；其余驱动 → 该驱动主面板
   const mains = panels.filter((p) => dockOf(p) === "main" && p.driverId === instance.activeDriverId);
   // P1-5：聊天面板 dock 态——被用户拆放到右栏/浮窗后，openSessionId 分支不再落到 main
   const chatPanel = panels.find((p) => p.id === "minex.agent.chat");
@@ -424,7 +452,10 @@ function WorkspaceInstance({
       return undefined; // 聊天被拆放 → 主区占位提示（P1-5，v1 提示不挪动）
     }
     if (instance.activeDriverId === "minex.agent") {
-      return mains.find((p) => p.id !== "minex.agent.chat") ?? mains[0]; // 配置中心
+      if (instance.editWorkflowId) {
+        return panels.find((p) => p.id === "minex.agent.workflow-editor" && dockOf(p) === "main") ?? mains[0];
+      }
+      return mains.find((p) => p.id !== "minex.agent.chat" && p.id !== "minex.agent.workflow-editor") ?? mains[0]; // 配置中心
     }
     return mains[0];
   })();

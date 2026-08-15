@@ -1562,6 +1562,144 @@ button {
   left: 18px;
   background: var(--color-primary);
 }
+/* W-C：workflow 列表（左栏） */
+.workflow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+.workflow-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.workflow-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  cursor: pointer;
+}
+.workflow-item:hover {
+  border-color: var(--color-primary);
+}
+.workflow-item-id {
+  font-size: 12px;
+  font-weight: 600;
+}
+.workflow-item-summary {
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* W-C：workflow 大型 canvas 编辑器 */
+.wf-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.wf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.wf-toolbar .wf-back {
+  margin-left: auto;
+}
+.wf-error {
+  color: var(--color-danger);
+  font-size: 12px;
+}
+.wf-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+.wf-empty {
+  padding: 20px;
+}
+.wf-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.wf-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.wf-lines line {
+  stroke: var(--color-border);
+  stroke-width: 1.5;
+}
+.wf-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+.wf-node:hover {
+  border-color: var(--color-primary);
+}
+.wf-node.selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+.wf-node-id {
+  font-size: 11px;
+  font-weight: 600;
+}
+.wf-node-op {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.wf-node-editor {
+  width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  box-shadow: var(--shadow-floating);
+}
+.wf-del {
+  color: var(--color-danger);
+}
+.wf-results {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+}
+.wf-result-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+.wf-result-id {
+  font-weight: 600;
+  min-width: 60px;
+}
 /* P0-3：Agent 列表面板（左栏） */
 .agent-list {
   display: flex;

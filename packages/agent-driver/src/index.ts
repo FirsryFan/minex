@@ -10,6 +10,7 @@ import { validateWorkflow, type Workflow } from "./workflow.js";
 import { BUILTIN_PERSONAS } from "./persona.js";
 import { registerRealTools } from "./real-tools.js";
 import { BUILTIN_SKILLS, deleteAgentProfile, loadAgentProfiles, saveAgentProfile } from "./agent-profile.js";
+import { workflowsFromRaw } from "./workflow-store.js";
 
 /** llm.config 结构类型子集（agent 用到的部分） */
 interface ConfigLike {
@@ -76,12 +77,24 @@ export default {
       });
     }
 
-    // 3-5 + P1-7：workflow 执行方法图数据源（Graph↔agent）——真实工具调用链：
-    // 最近更新的会话 nodes 中 tool 节点按会话序 = 步骤，相邻 tool 之间连边（执行方法图，
-    // 非硬编码示例；无 workflow 存储库 → 方法图 = 会话工具调用链，Graph↔session 复用）
+    // 3-5 + P1-7 + W-C：workflow 执行方法图数据源（Graph↔agent）——优先读保存的 workflows（编辑器产物：
+    // 首条 workflow 结构图 nodes→步骤节点、deps→边）；无保存 → 回退最近会话工具调用链（Graph↔session 复用）
     ctx.register("graphSource", "workflow", {
       title: "工作流",
       getData: async () => {
+        const saved = workflowsFromRaw(ctx.storage.get("workflows"));
+        const first = Object.values(saved)[0];
+        if (first) {
+          return {
+            nodes: first.nodes.map((n) => ({
+              id: n.id,
+              label: `${n.id}（${n.op}）`,
+              group: "步骤",
+              meta: { op: n.op },
+            })),
+            edges: first.nodes.flatMap((n) => (n.deps ?? []).map((d) => ({ from: d, to: n.id }))),
+          };
+        }
         const store = ctx.get<{
           loadIndex(): Promise<{ sessions: Array<{ id: string; updatedAt: string }> }>;
           loadSession(id: string): Promise<
@@ -120,13 +133,16 @@ export default {
     // 消息池能力（manager 独占写；expert 申请→批准→写）
     ctx.register("pool", "default", createPool(ctx.storage, ctx));
 
-    // 代码插槽（S5g 接线）：白名单操作注册表 + workflow 解释执行能力
+    // 代码插槽（S5g 接线）：白名单操作注册表 + workflow 解释执行能力（W-C：加 validate 供编辑器保存校验）
     const registry = createBuiltinRegistry(ctx);
     ctx.register("workflow", "default", {
       run(wf: Workflow, opts?: { maxLoopIterations?: number }) {
         const maxLoopIterations = opts?.maxLoopIterations ?? 100;
         validateWorkflow(wf, registry, { maxLoopIterations });
         return executeWorkflow(wf, ctx, { registry, maxLoopIterations });
+      },
+      validate(wf: Workflow): void {
+        validateWorkflow(wf, registry, { maxLoopIterations: 100 }); // W-C：保存前校验（非法抛错）
       },
     });
 
@@ -204,6 +220,24 @@ export default {
       title: "Agents",
       defaultDock: "left",
       load: () => import("./agent-list-view.js"),
+    });
+
+    // W-C：workflow 列表面板（左栏，agent 驱动显示）——列表 + 新建/删除，单击 emit minex:editWorkflow
+    ctx.register("panel", "minex.agent.workflows", {
+      driverId: "minex.agent",
+      id: "minex.agent.workflows",
+      title: "工作流",
+      defaultDock: "left",
+      load: () => import("./workflow-list-view.js"),
+    });
+
+    // W-C：workflow 大型 canvas 编辑器（主区，agent 驱动 + editWorkflowId 时显示）
+    ctx.register("panel", "minex.agent.workflow-editor", {
+      driverId: "minex.agent",
+      id: "minex.agent.workflow-editor",
+      title: "Workflow 编辑器",
+      defaultDock: "main",
+      load: () => import("./workflow-editor-view.js"),
     });
 
     // 内置 persona（P1）：注册为 role 贡献，浮窗选择器 / agent 自主候选池（autoAdopt 阶段 3）消费
