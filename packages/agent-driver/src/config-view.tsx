@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { MinexKernel } from "@minex/kernel";
 import {
   BUILTIN_SKILLS,
+  deleteToolsetTag,
   loadAgentProfiles,
+  loadToolsetTags,
   saveAgentProfile,
+  saveToolsetTag,
   type AgentProfile,
+  type ToolsetTag,
 } from "./agent-profile.js";
 
 /** role 贡献形状（.value 纪律） */
@@ -54,6 +58,9 @@ export default function AgentConfigView({ kernel, instanceId }: { kernel: MinexK
   const [savedTick, setSavedTick] = useState(false);
   const [poolInput, setPoolInput] = useState("");
   const [preview, setPreview] = useState<{ path: string; raw: string } | null>(null);
+  // P3-A：工具集标签（tags + 编辑器 state）
+  const [tags, setTags] = useState<Record<string, ToolsetTag>>(() => loadToolsetTags(kernel));
+  const [tagEditor, setTagEditor] = useState<{ id?: string; name: string; toolIds: Set<string> } | null>(null);
 
   // P0-3：左栏列表选中 → 切换表单；dataChanged（列表新建/删除/保存）→ 刷新 profiles 并保持选中
   useEffect(() => {
@@ -70,6 +77,7 @@ export default function AgentConfigView({ kernel, instanceId }: { kernel: MinexK
     return kernel.events.on("minex:dataChanged", () => {
       const all = loadAgentProfiles(kernel);
       setProfiles(all);
+      setTags(loadToolsetTags(kernel)); // P3-A：标签变化同步
       // 保持当前选中：若仍存在则刷新 draft（外部保存/改名），否则清空
       setDraft((d) => {
         if (!d) return null;
@@ -93,21 +101,40 @@ export default function AgentConfigView({ kernel, instanceId }: { kernel: MinexK
     window.setTimeout(() => setSavedTick(false), 1200);
   }
 
-  /** 工具白名单切换（null=全部；点掉一个转自定义；全勾回 null） */
-  function toggleTool(name: string): void {
-    const cur = selected?.tools;
-    const next = new Set(cur ?? toolNames);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    patch({ tools: next.size === toolNames.length ? null : [...next] });
-  }
-
   /** skill 勾选切换 */
   function toggleSkill(id: string): void {
     const cur = new Set(selected?.skills ?? []);
     if (cur.has(id)) cur.delete(id);
     else cur.add(id);
     patch({ skills: [...cur] });
+  }
+
+  // —— P3-A 工具集标签管理 ——
+  function saveTag(): void {
+    if (!tagEditor) return;
+    saveToolsetTag(kernel, {
+      id: tagEditor.id ?? `tag.${Date.now()}`,
+      name: tagEditor.name.trim() || "未命名标签",
+      toolIds: [...tagEditor.toolIds],
+    });
+    setTags(loadToolsetTags(kernel));
+    kernel.events.emit("minex:dataChanged", { driverId: "minex.agent" });
+    setTagEditor(null);
+  }
+  function removeTag(id: string): void {
+    deleteToolsetTag(kernel, id);
+    setTags(loadToolsetTags(kernel));
+    if (selected?.toolsetTagId === id) patch({ toolsetTagId: undefined }); // 引用标签被删 → 回退全部
+    kernel.events.emit("minex:dataChanged", { driverId: "minex.agent" });
+  }
+  function toggleTagTool(name: string): void {
+    setTagEditor((e) => {
+      if (!e) return e;
+      const next = new Set(e.toolIds);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return { ...e, toolIds: next };
+    });
   }
 
   function addPoolPath(): void {
@@ -268,46 +295,101 @@ export default function AgentConfigView({ kernel, instanceId }: { kernel: MinexK
             <div className="field">
               <label>记忆模块：大纲记忆</label>
               <div className="field-control">
-                <label className="agent-config-check">
-                  <input
-                    type="checkbox"
-                    checked={selected.memory?.outlines !== false}
-                    onChange={(e) => patch({ memory: { outlines: e.target.checked } })}
+                <div
+                  className={`toggle-item${selected.memory?.outlines !== false ? " on" : ""}`}
+                  onClick={() => patch({ memory: { outlines: selected.memory?.outlines === false } })}
+                  role="button"
+                >
+                  <div className="toggle-item-main">
+                    <div className="toggle-item-name">生成大纲记忆</div>
+                    <div className="toggle-item-desc">2-4 大纲记忆 hook 开关</div>
+                  </div>
+                  <button
+                    className={`toggle${selected.memory?.outlines !== false ? " on" : ""}`}
+                    aria-label="生成大纲记忆"
                   />
-                  <span>生成大纲记忆（2-4 hook）</span>
-                </label>
+                </div>
               </div>
             </div>
             <div className="field">
-              <label>工具集（白名单）</label>
+              <label>工具集（标签）</label>
               <div className="field-control">
-                <div className="agent-config-tool-grid">
-                  {toolNames.map((t) => (
-                    <label key={t} className="agent-config-tool">
-                      <input
-                        type="checkbox"
-                        checked={selected.tools === null || selected.tools === undefined || selected.tools.includes(t)}
-                        onChange={() => toggleTool(t)}
-                      />
-                      <span>{t}</span>
-                    </label>
+                <select
+                  value={selected.toolsetTagId ?? ""}
+                  onChange={(e) => patch({ toolsetTagId: e.target.value || undefined })}
+                >
+                  <option value="">全部工具</option>
+                  {Object.values(tags).map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
-                </div>
+                </select>
+                <div className="muted">工具白名单 = 标签 toolIds（优先）；无标签 = profile.tools / persona.tools / 全部</div>
               </div>
             </div>
             <div className="field">
               <label>skill 集</label>
               <div className="field-control">
                 {BUILTIN_SKILLS.map((s) => (
-                  <label key={s.id} className="agent-config-check" title={s.description}>
-                    <input
-                      type="checkbox"
-                      checked={(selected.skills ?? []).includes(s.id)}
-                      onChange={() => toggleSkill(s.id)}
-                    />
-                    <span>{s.name}</span>
-                  </label>
+                  <div
+                    key={s.id}
+                    className={`toggle-item${(selected.skills ?? []).includes(s.id) ? " on" : ""}`}
+                    onClick={() => toggleSkill(s.id)}
+                    role="button"
+                  >
+                    <div className="toggle-item-main">
+                      <div className="toggle-item-name">{s.name}</div>
+                      <div className="toggle-item-desc">{s.description}</div>
+                    </div>
+                    <button className={`toggle${(selected.skills ?? []).includes(s.id) ? " on" : ""}`} aria-label={s.name} />
+                  </div>
                 ))}
+              </div>
+            </div>
+            <div className="field">
+              <label>工具集标签管理</label>
+              <div className="field-control">
+                {Object.values(tags).length === 0 && <span className="muted">（无标签）</span>}
+                {Object.values(tags).map((t) => (
+                  <div key={t.id} className="agent-tag-row">
+                    <span className="agent-tag-name">{t.name}</span>
+                    <span className="muted">{t.toolIds.length} 工具</span>
+                    <button className="btn-ghost" onClick={() => setTagEditor({ id: t.id, name: t.name, toolIds: new Set(t.toolIds) })}>
+                      编辑
+                    </button>
+                    <button className="agent-list-del" title="删除标签" onClick={() => removeTag(t.id)}>×</button>
+                  </div>
+                ))}
+                <button className="btn-ghost" onClick={() => setTagEditor({ name: "", toolIds: new Set() })}>
+                  ＋ 新建标签
+                </button>
+                {tagEditor && (
+                  <div className="agent-tag-editor">
+                    <input
+                      placeholder="标签名"
+                      value={tagEditor.name}
+                      onChange={(e) => setTagEditor((ed) => (ed ? { ...ed, name: e.target.value } : ed))}
+                    />
+                    <div>
+                      {toolNames.map((t) => (
+                        <div
+                          key={t}
+                          className={`toggle-item${tagEditor.toolIds.has(t) ? " on" : ""}`}
+                          onClick={() => toggleTagTool(t)}
+                          role="button"
+                        >
+                          <div className="toggle-item-main">
+                            <div className="toggle-item-name">{t}</div>
+                          </div>
+                          <button className={`toggle${tagEditor.toolIds.has(t) ? " on" : ""}`} aria-label={t} />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <button className="btn" onClick={saveTag}>保存标签</button>
+                      <button className="btn-ghost" onClick={() => setTagEditor(null)}>取消</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div className="field">

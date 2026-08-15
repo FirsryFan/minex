@@ -2097,29 +2097,67 @@ button {
   color: var(--color-text-muted);
   font-size: 11px;
 }
-/* 3-5 通用图谱画布：F-B 连通块 tab（一个会话系 = 一个连通块；单块不显示） */
-.graph-block-tabs {
+/* P3-A：图谱视图切换（会话树 / 方法图，字形零依赖）+ 焦点信息行 */
+.graph-view-tabs {
   display: flex;
   gap: 4px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--color-border);
 }
-.graph-block-tab {
-  padding: 3px 10px;
+.graph-view-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-card);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
 }
-.graph-block-tab:hover {
+.graph-view-tab:hover {
   border-color: var(--color-primary);
+  color: var(--color-primary);
 }
-.graph-block-tab.active {
+.graph-view-tab.active {
   background: var(--color-primary-soft);
   color: var(--color-primary);
   border-color: var(--color-primary);
+}
+.graph-focus-info {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+/* P3-A：工具集标签管理（配置中心） */
+.agent-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 0;
+}
+.agent-tag-name {
+  font-weight: 600;
+}
+.agent-tag-editor {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+}
+.agent-tag-editor > input {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 13px;
 }
 /* 3-5 §一：选中节点 = accent ring（主题无 --color-accent，用 primary） */
 .graph-node.selected {

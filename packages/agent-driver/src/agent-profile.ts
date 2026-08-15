@@ -14,6 +14,7 @@ export interface AgentProfile {
   personaId?: string; // 内嵌 persona 引用（persona 是 agent 设置的一部分）
   systemPrompt?: string; // 覆盖 persona.systemPrompt（缺省 = persona 的）
   tools?: string[] | null; // 工具白名单（null = 全部；覆盖 persona.tools）
+  toolsetTagId?: string; // P3-A：工具集标签引用（优先于 tools；缺省 = 全部工具）
   skills?: string[]; // skill 集（v1 = 内置 skill 常量 id 列表）
   memory?: { outlines?: boolean }; // 记忆模块（v1：大纲记忆开关，缺省开）
   model?: string; // 模型（缺省 = 全局）
@@ -21,6 +22,62 @@ export interface AgentProfile {
   params?: Record<string, unknown>; // 模型参数（temperature 等）
   filePool?: string[]; // 专属文件池（相对根目录路径列表）
   slots?: Record<string, unknown>; // 代码插槽（v1：{ code?: string }，F-D 预览写入）
+}
+
+/** 工具集标签（P3-A 反馈 1）：命名工具打包——agent 配置只选标签，不逐个勾选工具。 */
+export interface ToolsetTag {
+  id: string;
+  name: string;
+  toolIds: string[];
+}
+
+/** 内置 2 个示例标签（首次 load 无数据时写入） */
+export const BUILTIN_TOOLSET_TAGS: ToolsetTag[] = [
+  { id: "tag.files", name: "文件工具", toolIds: ["read_file", "list_dir", "write_file", "search_file"] },
+  { id: "tag.session", name: "会话工具", toolIds: ["list_sessions", "load_session", "save_session"] },
+];
+
+/** 校验工具集标签（P3-A）：id/name 必填、toolIds 字符串数组。 */
+export function validateToolsetTag(data: unknown): data is ToolsetTag {
+  if (typeof data !== "object" || data === null) return false;
+  const t = data as Record<string, unknown>;
+  if (typeof t.id !== "string" || typeof t.name !== "string") return false;
+  if (!Array.isArray(t.toolIds) || (t.toolIds as unknown[]).some((x) => typeof x !== "string")) return false;
+  return true;
+}
+
+/** 读取工具集标签：首次（key 未写）写入内置标签并返回；损坏 → {}；非法条目跳过。 */
+export function loadToolsetTags(kernel: ChatHistoryKernel): Record<string, ToolsetTag> {
+  const ns = kernel.storage.namespace("minex.agent");
+  try {
+    const raw = ns.get<Record<string, unknown>>("toolsetTags");
+    if (raw === undefined) {
+      const init: Record<string, ToolsetTag> = {};
+      for (const t of BUILTIN_TOOLSET_TAGS) init[t.id] = t;
+      ns.set("toolsetTags", init);
+      return init;
+    }
+    if (typeof raw !== "object" || raw === null) return {};
+    const out: Record<string, ToolsetTag> = {};
+    for (const [id, v] of Object.entries(raw)) {
+      if (validateToolsetTag(v)) out[id] = v as ToolsetTag;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function saveToolsetTag(kernel: ChatHistoryKernel, tag: ToolsetTag): void {
+  const all = loadToolsetTags(kernel);
+  all[tag.id] = tag;
+  kernel.storage.namespace("minex.agent").set("toolsetTags", all);
+}
+
+export function deleteToolsetTag(kernel: ChatHistoryKernel, id: string): void {
+  const all = loadToolsetTags(kernel);
+  delete all[id];
+  kernel.storage.namespace("minex.agent").set("toolsetTags", all);
 }
 
 /** 内置 skill（F-D 反馈 3，Harness skill 角色包概念映射）——每 skill 是提示词片段，经 systemPrompt 拼接消费 */
@@ -64,6 +121,7 @@ export function validateAgentProfile(data: unknown): data is AgentProfile {
   if (p.avatar !== undefined && typeof p.avatar !== "string") return false;
   if (p.description !== undefined && typeof p.description !== "string") return false;
   if (p.personaId !== undefined && typeof p.personaId !== "string") return false;
+  if (p.toolsetTagId !== undefined && typeof p.toolsetTagId !== "string") return false; // P3-A
   if (p.systemPrompt !== undefined && typeof p.systemPrompt !== "string") return false;
   if (
     p.tools !== undefined &&

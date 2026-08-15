@@ -24,7 +24,7 @@ import { takePendingOpenSessionId } from "./session-open.js";
 import { QUICK_PHRASES, fillTemplate, type QuickPhrase } from "./quick-phrase.js";
 import { checkPermission, type PermissionMode, type ToolRisk } from "./permission.js";
 import { resolveToolResult, type ToolExecLike } from "./real-tools.js";
-import { BUILTIN_SKILLS, loadAgentProfiles, type AgentProfile } from "./agent-profile.js";
+import { BUILTIN_SKILLS, loadAgentProfiles, loadToolsetTags, type AgentProfile } from "./agent-profile.js";
 
 const SYSTEM_PROMPT = "你是一个乐于助人的 AI 助手，用中文回答。";
 
@@ -231,8 +231,12 @@ export default function ChatView({
     return cls.kind === "tool" ? "🔧" : cls.kind === "code" ? "</>" : cls.kind === "think" ? "💭" : "💬";
   }
 
-  /** F-C：工具白名单 = profile.tools（null=全部）?? 生效 persona 自带 tools（缺省 = 全部） */
+  /** P3-A：工具白名单优先级 = toolsetTagId（标签 toolIds，无效/已删 → 全部）> profile.tools > persona.tools > 全部 */
   function toolWhitelistOf(): string[] | undefined {
+    if (profile?.toolsetTagId) {
+      const tag = loadToolsetTags(kernel)[profile.toolsetTagId];
+      return tag ? tag.toolIds : undefined;
+    }
     const t = profile?.tools;
     return t !== undefined ? (t ?? undefined) : effectivePersona?.tools;
   }
