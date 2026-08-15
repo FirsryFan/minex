@@ -87,10 +87,11 @@ export function SettingsForm({
           <div className="section-title">{g.title}</div>
           {Object.entries(g.properties).map(([key, p]) => (
             <div className="field" key={key}>
-              <label title={key}>{humanize(key)}</label>
+              {/* P3-B：boolean 由 Field 渲染完整 toggle-item（名+描述+pill），外层不再重复 label/hint */}
+              {p.type !== "boolean" && <label title={key}>{humanize(key)}</label>}
               <div className="field-control">
-                <Field prop={p} value={values[key]} onChange={(v) => setField(key, v)} />
-                {p.description && <div className="hint">{p.description}</div>}
+                <Field label={humanize(key)} prop={p} value={values[key]} onChange={(v) => setField(key, v)} />
+                {p.type !== "boolean" && p.description && <div className="hint">{p.description}</div>}
               </div>
             </div>
           ))}
@@ -101,17 +102,28 @@ export function SettingsForm({
 }
 
 function Field({
+  label,
   prop,
   value,
   onChange,
 }: {
+  label: string;
   prop: SchemaProp;
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
   const t = prop.type ?? "string";
   if (t === "boolean") {
-    return <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />;
+    const on = Boolean(value);
+    return (
+      <div className={`toggle-item${on ? " on" : ""}`} role="button" onClick={() => onChange(!on)}>
+        <div className="toggle-item-main">
+          <div className="toggle-item-name">{label}</div>
+          {prop.description && <div className="toggle-item-desc">{prop.description}</div>}
+        </div>
+        <button className={`toggle${on ? " on" : ""}`} aria-label={label} />
+      </div>
+    );
   }
   if (t === "color") {
     return (

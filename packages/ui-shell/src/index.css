@@ -1431,7 +1431,8 @@ button {
   color: var(--color-danger);
 }
 .chat-msg-card {
-  max-width: 560px;
+  min-width: 520px; /* P3-B 反馈 4：卡片加宽 */
+  max-width: 760px;
   max-height: 70vh;
   display: flex;
   flex-direction: column;
@@ -1491,6 +1492,75 @@ button {
   border-radius: var(--radius-md);
   background: var(--color-card);
   box-shadow: var(--shadow-card);
+}
+/* P3-B 反馈 5：过滤 popover（锚定漏斗按钮，扁宽 480×360 内部滚动，不遮罩） */
+.filter-popover {
+  position: fixed;
+  z-index: 120;
+  width: 480px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  box-shadow: var(--shadow-floating);
+}
+/* P3-B 反馈 3：开关按钮统一（条目名 + 描述 + 右侧 pill 开关，零依赖） */
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  cursor: pointer;
+}
+.toggle-item:hover {
+  border-color: var(--color-primary-soft);
+}
+.toggle-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.toggle-item-name {
+  font-size: 13px;
+  color: var(--color-text);
+}
+.toggle-item-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-hover);
+  cursor: pointer;
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  transition: left 0.15s, background 0.15s;
+}
+.toggle.on {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.toggle.on::after {
+  left: 18px;
+  background: var(--color-primary);
 }
 /* P0-3：Agent 列表面板（左栏） */
 .agent-list {

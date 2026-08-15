@@ -1,5 +1,5 @@
 import type { MinexKernel } from "@minex/kernel";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createSession, type Session, type SessionIndexEntry } from "./session.js";
 import type { SessionStore } from "./store.js";
 
@@ -29,8 +29,10 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
   const [settingsForm, setSettingsForm] = useState<SettingsForm | null>(null);
   // 3-5：大纲查看（原会话系面板大纲 tab 并入）——设置弹窗内只读大纲列表
   const [settingsOutlines, setSettingsOutlines] = useState<Array<{ id: string; kind: string; summary: string }>>([]);
-  // F-C：过滤栏重设计——标题搜索 + 漏斗 → 过滤卡片（标签多选/时间/大小/agent 四维 AND）
+  // F-C + P3-B：过滤栏——标题搜索 + 漏斗 → 锚定 popover（标签多选/时间/大小/agent 四维 AND）
   const [filterOpen, setFilterOpen] = useState(false);
+  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null);
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
   const [tagSel, setTagSel] = useState<Set<string>>(new Set());
   const [timeSel, setTimeSel] = useState("");
   const [sizeSel, setSizeSel] = useState("");
@@ -105,14 +107,41 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
 
   const shown = filteredExtra ?? filtered;
 
-  // F-C：过滤卡片 Esc 关闭
+  // P3-B：popover 打开/关闭（锚定过滤器按钮，外部点击/Esc 关闭，不遮罩）
+  function toggleFilter(): void {
+    const btn = filterBtnRef.current;
+    if (filterOpen) {
+      setFilterOpen(false);
+      setPopoverPos(null);
+      return;
+    }
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const left = Math.max(4, Math.min(r.right - 480, window.innerWidth - 484));
+    setPopoverPos({ left, top: r.bottom + 4 });
+    setFilterOpen(true);
+  }
   useEffect(() => {
     if (!filterOpen) return;
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") setFilterOpen(false);
+      if (e.key === "Escape") {
+        setFilterOpen(false);
+        setPopoverPos(null);
+      }
+    };
+    const onDown = (e: MouseEvent): void => {
+      const t = e.target as Element;
+      if (filterBtnRef.current?.contains(t)) return;
+      if (t.closest(".filter-popover")) return;
+      setFilterOpen(false);
+      setPopoverPos(null);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
   }, [filterOpen]);
 
   const hasFilter = tagSel.size > 0 || timeSel !== "" || sizeSel !== "" || agentSel !== "";
@@ -207,11 +236,12 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {/* F-C：漏斗过滤器（有任一过滤时高亮）——点击开/关过滤卡片 */}
+        {/* F-C + P3-B：漏斗过滤器（有任一过滤时高亮）——点击开/关锚定 popover */}
         <button
+          ref={filterBtnRef}
           className={`session-filter-btn${hasFilter ? " active" : ""}`}
           title="过滤（标签/时间/大小/agent）"
-          onClick={() => setFilterOpen((o) => !o)}
+          onClick={toggleFilter}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M3 5h18l-7 8v6l-4 2v-8L3 5z" />
@@ -220,11 +250,10 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
         <button className="btn session-new" title="新建会话" onClick={() => void createNew()}>＋</button>
       </div>
 
-      {/* F-C：过滤卡片（四维 AND；标签多选 OR 语义） */}
-      {filterOpen && (
-        <div className="floating-mask" onClick={() => setFilterOpen(false)}>
-          <div className="filter-card" onClick={(e) => e.stopPropagation()}>
-            <div className="section-title">过滤会话</div>
+      {/* F-C + P3-B：过滤 popover（锚定按钮、扁宽 480×360 内部滚动、外部点击/Esc 关、不遮罩） */}
+      {filterOpen && popoverPos && (
+        <div className="filter-popover" style={{ left: popoverPos.left, top: popoverPos.top }}>
+          <div className="section-title">过滤会话</div>
             <div className="field">
               <label>标签（多选）</label>
               <div className="field-control">
@@ -299,7 +328,6 @@ export default function OverviewView({ kernel, instanceId }: { kernel: MinexKern
                 清除过滤
               </button>
             </div>
-          </div>
         </div>
       )}
 

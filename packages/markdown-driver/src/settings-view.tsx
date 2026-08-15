@@ -64,13 +64,33 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
           <div className="field">
             <label>自动换行</label>
             <div className="field-control">
-              <input type="checkbox" checked={Boolean(values.codeWrap)} onChange={(e) => setField("codeWrap", e.target.checked)} />
+              <div
+                className={`toggle-item${Boolean(values.codeWrap) ? " on" : ""}`}
+                role="button"
+                onClick={() => setField("codeWrap", !values.codeWrap)}
+              >
+                <div className="toggle-item-main">
+                  <div className="toggle-item-name">代码自动换行</div>
+                  <div className="toggle-item-desc">超出宽度自动折行</div>
+                </div>
+                <button className={`toggle${Boolean(values.codeWrap) ? " on" : ""}`} aria-label="自动换行" />
+              </div>
             </div>
           </div>
           <div className="field">
             <label>语法高亮</label>
             <div className="field-control">
-              <input type="checkbox" checked={Boolean(values.codeHighlight)} onChange={(e) => setField("codeHighlight", e.target.checked)} />
+              <div
+                className={`toggle-item${Boolean(values.codeHighlight) ? " on" : ""}`}
+                role="button"
+                onClick={() => setField("codeHighlight", !values.codeHighlight)}
+              >
+                <div className="toggle-item-main">
+                  <div className="toggle-item-name">代码语法高亮</div>
+                  <div className="toggle-item-desc">按语言着色代码</div>
+                </div>
+                <button className={`toggle${Boolean(values.codeHighlight) ? " on" : ""}`} aria-label="语法高亮" />
+              </div>
             </div>
           </div>
 
@@ -78,7 +98,17 @@ export default function SettingsView({ kernel }: { kernel: MinexKernel }) {
           <div className="field">
             <label>KaTeX 渲染</label>
             <div className="field-control">
-              <input type="checkbox" checked={Boolean(values.katex)} onChange={(e) => setField("katex", e.target.checked)} />
+              <div
+                className={`toggle-item${Boolean(values.katex) ? " on" : ""}`}
+                role="button"
+                onClick={() => setField("katex", !values.katex)}
+              >
+                <div className="toggle-item-main">
+                  <div className="toggle-item-name">数学公式渲染</div>
+                  <div className="toggle-item-desc">LaTeX 公式显示</div>
+                </div>
+                <button className={`toggle${Boolean(values.katex) ? " on" : ""}`} aria-label="KaTeX 渲染" />
+              </div>
             </div>
           </div>
 

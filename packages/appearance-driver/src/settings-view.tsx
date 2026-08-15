@@ -440,13 +440,33 @@ function GlobalSettingsPanel({ kernel }: { kernel: MinexKernel }) {
       <div className="field">
         <label>动画效果</label>
         <div className="field-control">
-          <input type="checkbox" checked={g.animations !== false} onChange={(e) => setField("animations", e.target.checked)} />
+          <div
+            className={`toggle-item${g.animations !== false ? " on" : ""}`}
+            role="button"
+            onClick={() => setField("animations", g.animations === false)}
+          >
+            <div className="toggle-item-main">
+              <div className="toggle-item-name">启用动画</div>
+              <div className="toggle-item-desc">界面过渡与动效</div>
+            </div>
+            <button className={`toggle${g.animations !== false ? " on" : ""}`} aria-label="动画效果" />
+          </div>
         </div>
       </div>
       <div className="field">
         <label>亚克力效果</label>
         <div className="field-control">
-          <input type="checkbox" checked={g.acrylic === true} onChange={(e) => setField("acrylic", e.target.checked)} />
+          <div
+            className={`toggle-item${g.acrylic === true ? " on" : ""}`}
+            role="button"
+            onClick={() => setField("acrylic", g.acrylic !== true)}
+          >
+            <div className="toggle-item-main">
+              <div className="toggle-item-name">启用亚克力</div>
+              <div className="toggle-item-desc">面板半透明模糊背景</div>
+            </div>
+            <button className={`toggle${g.acrylic === true ? " on" : ""}`} aria-label="亚克力效果" />
+          </div>
         </div>
       </div>
       <NumberField label="亚克力透明度" value={Number(g.acrylicOpacity ?? 80)} min={0} max={100} onCommit={(v) => setField("acrylicOpacity", v)} />

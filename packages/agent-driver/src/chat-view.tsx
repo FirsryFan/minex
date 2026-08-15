@@ -913,33 +913,47 @@ export default function ChatView({
             <div className="muted">（该会话暂无大纲或上下文）</div>
           )}
           {sourceOutlines.map((o) => (
-            <label key={o.id} className="chat-context-item">
-              <input type="checkbox" checked={checked.has(o.id)} onChange={() => toggleChecked(o.id)} />
-              <span>{o.summary}</span>
-            </label>
+            <div
+              key={o.id}
+              className={`toggle-item${checked.has(o.id) ? " on" : ""}`}
+              role="button"
+              onClick={() => toggleChecked(o.id)}
+            >
+              <div className="toggle-item-main">
+                <div className="toggle-item-name">{o.summary}</div>
+                <div className="toggle-item-desc">大纲条目</div>
+              </div>
+              <button className={`toggle${checked.has(o.id) ? " on" : ""}`} aria-label="选择大纲条目" />
+            </div>
           ))}
           {sourceFirstMessage !== undefined && (
-            <label className="chat-context-item">
-              <input
-                type="checkbox"
-                checked={checked.has("__source_first__")}
-                onChange={() => toggleChecked("__source_first__")}
-              />
-              <span className="muted">初始上下文：{sourceFirstMessage}</span>
-            </label>
+            <div
+              className={`toggle-item${checked.has("__source_first__") ? " on" : ""}`}
+              role="button"
+              onClick={() => toggleChecked("__source_first__")}
+            >
+              <div className="toggle-item-main">
+                <div className="toggle-item-name">初始上下文：{sourceFirstMessage}</div>
+                <div className="toggle-item-desc">父会话首条用户消息</div>
+              </div>
+              <button className={`toggle${checked.has("__source_first__") ? " on" : ""}`} aria-label="初始上下文" />
+            </div>
           )}
           <div className="chat-context-actions">
             <button className="btn" onClick={applyContext} disabled={checked.size === 0}>
               加入当前 context
             </button>
-            <label className="chat-context-auto">
-              <input
-                type="checkbox"
-                checked={autoInherit}
-                onChange={(e) => setAutoInherit(e.target.checked)}
-              />
-              自动继承
-            </label>
+            <div
+              className={`toggle-item${autoInherit ? " on" : ""}`}
+              role="button"
+              onClick={() => setAutoInherit((v) => !v)}
+            >
+              <div className="toggle-item-main">
+                <div className="toggle-item-name">自动继承</div>
+                <div className="toggle-item-desc">大纲作为 systemPrompt 补充注入</div>
+              </div>
+              <button className={`toggle${autoInherit ? " on" : ""}`} aria-label="自动继承" />
+            </div>
           </div>
         </div>
       )}
@@ -973,15 +987,13 @@ export default function ChatView({
               </div>
             );
           }
-          // P0-1：user/assistant 全文渲染（user pre-wrap / assistant markdown）
+          // P0-1：user/assistant 全文渲染（user pre-wrap / assistant markdown）；P3-B：双击仅 tool 弹卡
           const html = m.role === "assistant" && md && m.content ? md.render(m.content) : null;
           return (
             <div
               key={i}
               className={`chat-msg ${m.role}${m.error ? " error" : ""}`}
               data-node-id={nodeIdByIndex[i]}
-              title="双击查看全文"
-              onDoubleClick={() => setDetailMsg(m)}
             >
               {html ? (
                 <div className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />
