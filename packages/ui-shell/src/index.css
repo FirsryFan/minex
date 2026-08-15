@@ -2167,35 +2167,7 @@ button {
   color: var(--color-text-muted);
   font-size: 11px;
 }
-/* P3-A：图谱视图切换（会话树 / 方法图，字形零依赖）+ 焦点信息行 */
-.graph-view-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--color-border);
-}
-.graph-view-tab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-card);
-  color: var(--color-text-muted);
-  font-size: 14px;
-  cursor: pointer;
-}
-.graph-view-tab:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-.graph-view-tab.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-}
+/* 图谱焦点信息行（focusId 所在会话系） */
 .graph-focus-info {
   padding: 4px 10px;
   font-size: 12px;

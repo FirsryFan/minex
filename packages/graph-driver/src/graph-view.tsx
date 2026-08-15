@@ -3,20 +3,13 @@ import type { MinexKernel } from "@minex/kernel";
 import { encodeNodeRadius, MAX_RADIUS } from "./graph-encode.js";
 import { layoutGraph, splitGraph, type GraphData, type GraphSource } from "./index.js";
 
-/** 会话最小结构（方法图直取，跨包零源码 import） */
-interface SessionLikeForGraph {
-  nodes?: Array<{ id: string; kind?: string; toolName?: string }>;
-}
-
-type View = "tree" | "method";
-
 /**
- * 通用可交互图谱画布（3-5 + F-B + P3-A）：
- * - 面板专属会话树 + 方法图双视图（icon tab：🕸 会话树 / ⚙ 方法图，字形零依赖）；
- * - 会话树：固定 graphSource「会话树」；splitGraph 连通块——focusId（选中会话）所在块自动显示，
+ * 通用可交互图谱画布（3-5 + F-B + P3-A + 用户修正）：
+ * - 面板专属会话树（方法图已按用户反馈删除——该区域只负责展示会话的匹配/会话系）；
+ * - 固定 graphSource「会话树」；splitGraph 连通块——focusId（选中会话）所在块自动显示，
  *   无「会话系 N」tab；focusId 三路来源：图谱点击 / minex:openSession 订阅 / 默认首会话；
- * - 方法图：focusId 会话的工具调用链（session 能力直取 tool 节点按序 + 相邻连边，与 graphSource
- *   workflow 同逻辑）；无工具调用 → 空态；
+ * - focusId → 所属连通块：splitGraph 按节点 id 无向并查集分组，findIndex 定位（语义有测试锁定）；
+ *   会话删除后 focusId 回落首会话（对应块自动切换）；focusId 变化 → 视图稳定居中该会话 + 选中 ring；
  * - 交互：wheel 缩放（鼠标锚点）+ pointer 拖拽平移 + reset（100% + 选中节点居中）；
  * - 视觉（§一）：无填充圆 + 主题色边框 2px + 大小编码；选中 = accent ring；hover 信息栏 + 图例。
  * 零依赖：SVG 线 + div 圆 + CSS transform。
@@ -30,12 +23,10 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
   );
   const source = sources.find((s) => s.title === "会话树") ?? null;
 
-  const [view, setView] = useState<View>("tree");
   const [graph, setGraph] = useState<GraphData | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(null); // P3-A：选中会话（决定显示哪个连通块/方法图）
+  const [focusId, setFocusId] = useState<string | null>(null); // 选中会话（决定显示哪个连通块）
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [methodGraph, setMethodGraph] = useState<GraphData | null>(null);
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -69,13 +60,13 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
     return () => offs.forEach((off) => off());
   }, [kernel, refresh]);
 
-  // P3-A：focusId 默认 = 图数据首会话；数据刷新后若 focusId 已不存在 → 回落首会话
+  // focusId 默认 = 图数据首会话；数据刷新后若 focusId 已不存在（会话被删）→ 回落首会话
   useEffect(() => {
     if (!graph || graph.nodes.length === 0) return;
     setFocusId((cur) => (cur && graph.nodes.some((n) => n.id === cur) ? cur : graph.nodes[0].id));
   }, [graph]);
 
-  // P3-A：外部打开会话（总览/图谱）→ 跟随
+  // 外部打开会话（总览/图谱）→ 跟随
   useEffect(() => {
     return kernel.events.on("minex:openSession", (payload) => {
       const p = payload as { id?: string } | undefined;
@@ -83,53 +74,21 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
     });
   }, [kernel]);
 
-  // P3-A：连通块 = focusId 所在块（未命中 → 第一块）
+  // 连通块 = focusId 所在块（splitGraph 按节点 id 并查集分组；未命中 → 第一块）
   const blocks = useMemo(() => (graph ? splitGraph(graph) : []), [graph]);
   const activeBlockIdx = blocks.findIndex((b) => b.nodes.some((n) => n.id === focusId));
   const activeBlock = blocks[activeBlockIdx >= 0 ? activeBlockIdx : 0] ?? null;
 
-  // P3-A：方法图数据 = focusId 会话工具调用链（session 能力直取）
-  useEffect(() => {
-    if (view !== "method") return;
-    let alive = true;
-    void (async () => {
-      const store = kernel.registry
-        .get<{ loadSession(id: string): Promise<SessionLikeForGraph | undefined> }>("session", "default")?.value;
-      if (!store || !focusId) {
-        if (alive) setMethodGraph(null);
-        return;
-      }
-      const s = await store.loadSession(focusId);
-      const toolNodes = (s?.nodes ?? []).filter((n) => n.kind === "tool");
-      if (!alive) return;
-      setMethodGraph({
-        nodes: toolNodes.map((n, i) => ({
-          id: n.id,
-          label: `工具 ${n.toolName ?? "?"}`,
-          group: "步骤",
-          meta: { nodeCount: i + 1 },
-        })),
-        edges: toolNodes.slice(1).map((n, i) => ({ from: toolNodes[i].id, to: n.id })),
-      });
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [view, focusId, kernel]);
-
-  // 当前视图数据（树 = focus 块；方法图 = 工具链）
-  const viewGraph: GraphData | null = view === "tree" ? activeBlock : methodGraph;
-
-  const layout = useMemo(() => (viewGraph ? layoutGraph(viewGraph) : {}), [viewGraph]);
+  const layout = useMemo(() => (activeBlock ? layoutGraph(activeBlock) : {}), [activeBlock]);
   const worldSize = useMemo(() => {
-    if (!viewGraph || viewGraph.nodes.length === 0) return { w: 0, h: 0 };
-    const maxX = Math.max(...viewGraph.nodes.map((n) => (layout[n.id]?.x ?? 0) + MAX_RADIUS * 2));
-    const maxY = Math.max(...viewGraph.nodes.map((n) => (layout[n.id]?.y ?? 0) + MAX_RADIUS * 2));
+    if (!activeBlock || activeBlock.nodes.length === 0) return { w: 0, h: 0 };
+    const maxX = Math.max(...activeBlock.nodes.map((n) => (layout[n.id]?.x ?? 0) + MAX_RADIUS * 2));
+    const maxY = Math.max(...activeBlock.nodes.map((n) => (layout[n.id]?.y ?? 0) + MAX_RADIUS * 2));
     return { w: maxX + 40, h: maxY + 40 };
-  }, [viewGraph, layout]);
+  }, [activeBlock, layout]);
   const lines = useMemo(() => {
-    if (!viewGraph) return [];
-    return viewGraph.edges
+    if (!activeBlock) return [];
+    return activeBlock.edges
       .map((e) => {
         const p = layout[e.from];
         const c = layout[e.to];
@@ -137,7 +96,7 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
         return { key: `${e.from}→${e.to}`, x1: p.x + MAX_RADIUS, y1: p.y + MAX_RADIUS, x2: c.x + MAX_RADIUS, y2: c.y + MAX_RADIUS };
       })
       .filter((l): l is NonNullable<typeof l> => l !== null);
-  }, [viewGraph, layout]);
+  }, [activeBlock, layout]);
 
   /** 把节点置于画布中心（scale 指定）：屏幕 = 世界 × scale + translate（几何锚点 = 布局点 + MAX_RADIUS） */
   function centerOn(id: string | null, scale: number): void {
@@ -154,20 +113,24 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
 
   // 首次数据加载居中 + 缩放适应（单节点 1.2 / 多节点 0.9）；空图重臂
   useEffect(() => {
-    if (viewGraph && viewGraph.nodes.length > 0 && !centeredRef.current) {
+    if (activeBlock && activeBlock.nodes.length > 0 && !centeredRef.current) {
       centeredRef.current = true;
-      centerOn(selectedId, viewGraph.nodes.length <= 1 ? 1.2 : 0.9);
-    } else if (viewGraph && viewGraph.nodes.length === 0) {
+      centerOn(selectedId, activeBlock.nodes.length <= 1 ? 1.2 : 0.9);
+    } else if (activeBlock && activeBlock.nodes.length === 0) {
       centeredRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewGraph]);
+  }, [activeBlock]);
 
-  // P3-A：切换视图 / 切换连通块 → 重新居中
+  // 用户修正：focusId 变化（点击/外部打开/删除回落）→ 视图稳定居中该会话 + 选中 ring 跟随，
+  // 不再被「块切换重置」清掉选中或跳回布局原点（修复 P3-A 的跟随不稳定）
   useEffect(() => {
-    centeredRef.current = false;
-    setSelectedId(null);
-  }, [view, activeBlockIdx]);
+    if (!focusId) return;
+    centeredRef.current = true; // 显式居中后不再触发默认首节点居中
+    setSelectedId(focusId);
+    centerOn(focusId, 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, activeBlockIdx]);
 
   useEffect(() => {
     const onMove = (e: PointerEvent): void => {
@@ -209,42 +172,21 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
     centerOn(selectedId, 1);
   }
 
-  /** 节点点击：选中（ring）+ focusId 跟随 + 树视图下打开会话钩子 */
+  /** 节点点击：选中（ring）+ focusId 跟随（显示其会话系）+ 打开会话钩子 */
   function clickNode(id: string, label: string): void {
     setSelectedId(id);
-    setFocusId(id); // P3-A：点击哪个会话就显示哪个会话系
+    setFocusId(id); // 点击哪个会话就显示哪个会话系
     centerOn(id, 1);
-    if (view === "tree") source?.onNodeClick?.({ id, label });
+    source?.onNodeClick?.({ id, label });
   }
 
-  const hovered = viewGraph?.nodes.find((n) => n.id === hoverId) ?? null;
-  const focusTitle = graph?.nodes.find((n) => n.id === focusId)?.label ?? "";
+  const hovered = activeBlock?.nodes.find((n) => n.id === hoverId) ?? null;
 
   return (
     <div className="graph-view">
-      {/* P3-A：视图切换（icon tab：会话树 / 方法图，字形零依赖） */}
-      <div className="graph-view-tabs">
-        <button
-          className={`graph-view-tab${view === "tree" ? " active" : ""}`}
-          title="会话树"
-          onClick={() => setView("tree")}
-        >
-          🕸
-        </button>
-        <button
-          className={`graph-view-tab${view === "method" ? " active" : ""}`}
-          title="方法图（当前会话工具调用链）"
-          onClick={() => setView("method")}
-        >
-          ⚙
-        </button>
-      </div>
-
-      {/* P3-A：信息行（树 = 当前会话系；方法图 = 当前会话） */}
+      {/* 信息行：当前会话系（focusId 所在连通块） */}
       <div className="graph-focus-info muted">
-        {view === "tree"
-          ? `当前会话系：${activeBlock?.nodes.length ?? 0} 个会话`
-          : `方法图：${focusTitle || "未选择会话"}`}
+        当前会话系：{activeBlock?.nodes.length ?? 0} 个会话
       </div>
 
       <div className="graph-canvas" ref={containerRef} onWheel={onWheel} onPointerDown={onPointerDown}>
@@ -277,7 +219,7 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
                 <line key={l.key} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
               ))}
             </svg>
-            {viewGraph?.nodes.map((n) => {
+            {activeBlock?.nodes.map((n) => {
               const p = layout[n.id];
               if (!p) return null;
               const nodeCount = typeof n.meta?.nodeCount === "number" ? n.meta.nodeCount : 0;
@@ -305,9 +247,6 @@ export default function GraphView({ kernel }: { kernel: MinexKernel }) {
           </div>
         )}
         {graph && graph.nodes.length === 0 && <div className="muted graph-empty">暂无会话</div>}
-        {view === "method" && methodGraph && methodGraph.nodes.length === 0 && (
-          <div className="muted graph-empty">该会话无工具调用</div>
-        )}
         {!source && <div className="muted graph-empty">暂无会话树数据源</div>}
         <div className="graph-legend">○ 大小 = 消息数</div>
         <button className="graph-reset" title="重置视角（100% + 选中节点居中）" onClick={resetView}>

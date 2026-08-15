@@ -161,4 +161,27 @@ describe("splitGraph（F-B 反馈 3 连通块）", () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0].edges).toEqual([]); // 未知节点边忽略
   });
+
+  it("focusId → 所属连通块定位（graph-view findIndex 语义）：多块时命中含 focusId 的块", () => {
+    // 两块：{a-b} 与 {c-d}；focusId = d → 应定位到 {c,d} 块
+    const data: GraphData = {
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C" },
+        { id: "d", label: "D" },
+      ],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "c", to: "d" },
+      ],
+    };
+    const blocks = splitGraph(data);
+    expect(blocks).toHaveLength(2);
+    const idx = blocks.findIndex((b) => b.nodes.some((n) => n.id === "d"));
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(blocks[idx].nodes.map((n) => n.id).sort()).toEqual(["c", "d"]);
+    // focusId 不存在的场景（会话已删）→ findIndex -1，graph-view 回退第一块（此处锁定 findIndex 语义）
+    expect(blocks.findIndex((b) => b.nodes.some((n) => n.id === "ghost"))).toBe(-1);
+  });
 });
